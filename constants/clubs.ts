@@ -1,0 +1,26 @@
+export const CLUB_OPTIONS = [
+  '60°',
+  '58°',
+  '56°',
+  '54°',
+  '52°',
+  '50°',
+  'PW',
+  '9i',
+  '8i',
+  '7i',
+  '6i',
+  '5i',
+  '4i',
+  '3i',
+  '4H',
+  '3H',
+  '2H',
+  '7W',
+  '5W',
+  '3W',
+  'Dr',
+  'Putter',
+] as const;
+
+export const OTHER_CLUB = 'Other';

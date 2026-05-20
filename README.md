@@ -1,50 +1,64 @@
-# Welcome to your Expo app 👋
+# Caddy Book
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A local-first golf caddy book for iOS and Android, built with Expo (SDK 54) + React Native + Expo Router.
 
-## Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Run it
 
 ```bash
-npm run reset-project
+npm install
+npm run ios        # iOS simulator (requires Xcode)
+npm run android    # Android emulator (requires Android Studio)
+npm run start      # Metro bundler — scan QR with Expo Go, or pick a target
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Stack
 
-## Learn more
+- **Expo (managed)** with TypeScript
+- **Expo Router** for file-based navigation
+- **expo-sqlite** for on-device persistence (schema in `db/schema.ts`)
+- Custom theme — offwhite/grey background with `#1B4D3E` accent (`constants/theme.ts`)
 
-To learn more about developing your project with Expo, look at the following resources:
+## Layout
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```
+app/                        # Screens (file-based routes)
+  _layout.tsx               # Root stack, runs DB init on boot
+  (tabs)/
+    _layout.tsx             # Bottom tabs: Rounds | Stats
+    index.tsx               # Rounds list
+    stats.tsx               # Lifetime stat trends
+  round/
+    new.tsx                 # Start a new round (modal)
+    [id]/
+      index.tsx             # Round overview / per-round summary
+      hole/[holeNumber].tsx # Per-hole stat entry
+      shots.tsx             # Shot dispersion tracker
+      review.tsx            # Post-round review
+components/
+  screen.tsx                # Safe-area screen wrapper
+  themed-text.tsx           # Typography primitive
+  themed-view.tsx           # Background primitive
+  haptic-tab.tsx            # Tab bar button with haptic feedback
+  ui/icon-symbol.{ios,}.tsx # Cross-platform icons
+constants/
+  theme.ts                  # Colors, spacing, radius, typography
+db/
+  client.ts                 # expo-sqlite open + init
+  schema.ts                 # CREATE TABLE statements
+  types.ts                  # TypeScript types for rows
+```
 
-## Join the community
+## Data model
 
-Join our community of developers creating universal apps.
+Stored in `caddy-book.db` on device. Four tables:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- `rounds` — one row per round (course, date)
+- `holes` — one row per hole per round (par, FIR, GIR, U&D, score, putts, approach distance/club, notes)
+- `shots` — driver and approach shot landings, normalized 0–1 coordinates so dispersion scales to any screen
+- `post_round_reviews` — tactical, technical, mental notes + went well / didn't go well / will work on
+
+Migrations are not yet wired in. When the schema changes, bump `SCHEMA_VERSION` and add migration logic in `db/client.ts`.
+
+## What's next
+
+This is the scaffold only — no feature logic yet. Screens render placeholder content. Wire up CRUD against `db/client.ts` to start logging real rounds.
