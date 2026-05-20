@@ -8,9 +8,13 @@ A local-first golf caddy book for iOS & Android. The product **focus is stat tra
 - **Expo Router** with file-based routing and typed routes
 - **expo-sqlite** for on-device persistence (no backend yet)
 - No UI library — custom theme + RN primitives
+- **`react-native-svg`** powers the hand-drawn visual language (targets, score glyphs, paper grain, card/button frames)
+- **Fraunces** serif (`@expo-google-fonts/fraunces`, loaded in `app/_layout.tsx`) is the display/label face
 - Native deps: `@react-native-community/datetimepicker`, `expo-crypto`, `react-native-safe-area-context`, `react-native-gesture-handler`
 
 Expo SDK 54 docs are authoritative — when in doubt see https://docs.expo.dev/versions/v54.0.0/.
+
+**The visual + interaction language is documented in [`DESIGN.md`](./DESIGN.md)** — read it before touching any UI. This file covers architecture and data flow; `DESIGN.md` covers how it should look and feel.
 
 ## App flow
 
@@ -40,10 +44,25 @@ The round screen's nav header is hidden (`headerShown: false`); a floating X (cl
 
 ### Visual + spatial design principles
 
+> Full treatment — palette, typography, the drawn-line system, and a per-PR
+> checklist — lives in [`DESIGN.md`](./DESIGN.md). Summary below.
+
 1. **Tap-first.** Pressables are the default; keyboard-driven `TextInput` is a fallback (notes only, and the new-round modal).
 2. **Shape encodes meaning.** A par-relative score gets a *circle* (under par) or *square* (over par); a drive gets a lane via x-position; an approach gets proximity via distance from a center point; a putt gets a column (distance) and a side (made/missed). The data model stores raw values; the UI re-derives the visualization on every render.
 3. **Position is data.** Shots store `(x_norm, y_norm)` in `[0, 1]` normalized to the target's bounding box, so dispersion overlays scale to any screen. Other drives in the round render as **muted** pins under the current hole's prominent accent pin (built-in per-round dispersion overlay).
 4. **Derived stats are first-class.** GIR auto-derives from `(score − putts) ≤ par − 2`; U&D auto-derives from `(missed GIR) ∧ (score ≤ par)`. Manual override is always possible by tapping the toggle (writes to the column directly). See `lib/stats.ts`.
+5. **Editorial print aesthetic.** Two colors only (deep green on warm paper), Fraunces serif numerals/labels, hand-drawn line work, registration marks, and a faint paper grain. Selected = filled green + sand grain; unselected = paper + a drawn outline.
+
+### The drawn-line toolbox
+
+Every hand-drawn shape is **deterministic** (seeded by a string so it looks sketched but never reflows between renders). Reuse these — do not hand-roll SVG paths:
+
+- `lib/sketch.ts` — seeded geometry: `roughCirclePath`, `roughRectPath`, `sketchDividerPath`, `bunkerPath`, `fairwayPath`, `wavyLines`, `stippleInEllipse`/`stippleInRect`, `topoRings`.
+- `components/sketch.tsx` — drawn React components:
+  - `Paper` — full-bleed grain + corner registration marks; mounted once in `Screen`, so every screen inherits it (density capped + memoized for perf).
+  - `SketchSurface` — **the workhorse**: a view framed by a `roughRectPath`. Reach for it instead of `borderWidth`/`borderColor` on any card, button, or input. Props: `fill`, `stroke`, `radius`, `grain`.
+  - `ScoreGlyph` — the shared circle/square score vocabulary (used by the score grid, rounds list, summary).
+  - `SketchDivider`, `CornerDots`, `Crosshair`, `PlusMark`, `TickPair`, `BunkerBlob`, `TopoChip` — ornaments; always `pointerEvents="none"`.
 
 ## Architecture
 
@@ -106,22 +125,25 @@ When you add a column: update **all four** of `db/schema.ts`, `db/types.ts`, `db
 
 ## Theme
 
-Single light palette in `constants/theme.ts`:
-- Background: `#F7F5F0` (warm offwhite), surface: `#FFFFFF`
-- Accent: `#1B4D3E` (deep green), accent muted: `#1B4D3E14`
-- Text: `#1A1A1A` primary, `#6B6B6B` secondary, `#9B9B9B` muted
+Single warm light palette in `constants/theme.ts` (see `DESIGN.md` §3 for the full table and usage rules):
+- Background `#F1EBDC` (warm paper), surface `#F7F1E2`, surfaceAlt `#EBE3CC` (recessed)
+- Borders: `#D9CFB5` (hairline), `#B7A98A` (drawn outlines, grain, registration marks)
+- Accent `#1B4D3E` (deep green — the ink), accentMuted `#1B4D3E14`, accentOn `#F1EBDC`
+- Text: `#1A1A1A` primary, `#5A5346` secondary, `#8E8674` muted
+- `danger`/`warning`/`info` exist **for chart categories only** — never for chrome
 
-No dark mode. The status bar is forced to `dark` content.
+Typography: **Fraunces** serif for display/labels/numerals (`fontFamily.serif` / `serifBold`), system sans for body, letter-spaced uppercase captions. No dark mode; the status bar is forced to `dark` content.
 
 ## Routing
 
 | Route | Notes |
 | --- | --- |
-| `/` (default tab) | Rounds list. Header has a + button → modal. |
+| `/` (default tab) | Rounds list. Header has a + button → modal. Tapping a round opens `/round/[id]` if in-progress, or `/round/[id]/summary` if completed; long-press to delete. |
 | `/(tabs)/stats` | Lifetime stats placeholder (not yet built out). |
 | `/round/new` | Modal: course name, date, 9/18. On submit: `createRound` → `router.replace('/round/[id]')`. |
-| `/round/[id]` | The whole round flow (5 vertically-paged sub-pages). Hidden nav header. |
-| `/round/[id]/review` | Post-round review placeholder. |
+| `/round/[id]` | The whole round flow (5 vertically-paged sub-pages). Hidden nav header. "Finish" → `/round/[id]/review`. |
+| `/round/[id]/review` | **Built.** 5-question post-round review (most costly / decision rating / common miss / range focus / overall rating), one vertically-paged question each. On submit: `upsertReview` + `setRoundCompletedAt` (first time only) → `/round/[id]/summary`. |
+| `/round/[id]/summary` | **Built.** Read-only round summary: score/to-par card, GIR/FIR/U&D + putting/penalty tiles, scoring-by-par, score distribution bars, drive & approach dispersion targets, putting-by-distance bars, post-round review answers, "Edit round" CTA. |
 
 ## Conventions
 
@@ -141,10 +163,15 @@ No dark mode. The status bar is forced to `dark` content.
 | Change ring proximity thresholds | `lib/shots.ts` (`APPROACH_RINGS`) — shared by `approach-target.tsx` visuals and `approachResult` math |
 | Tweak GIR / U&D derivation | `lib/stats.ts` (`deriveGir`, `resolveGir`, `deriveUpAndDown`, `resolveUpAndDown`) — both `computeRoundSummary` and the stats page rows consume these |
 | Adjust the sticky bottom nav | `components/sticky-hole-nav.tsx` (uses `useSafeAreaInsets` for the home indicator) |
+| Give a card/button/input the drawn border | Wrap it in `SketchSurface` (`components/sketch.tsx`) — don't add `borderWidth`/`borderColor` |
+| Add/adjust a new hand-drawn shape | `lib/sketch.ts` (seeded geometry) + a component in `components/sketch.tsx` |
+| Change the paper grain / registration marks | `Paper` in `components/sketch.tsx` (mounted in `components/screen.tsx`) |
+| Tune the post-round summary | `app/round/[id]/summary.tsx`; review question flow → `app/round/[id]/review.tsx` + `lib/review.ts` |
 
 ## What's not built yet
 
 - **Cross-round dispersion overlay** (e.g., all drives in last 10 rounds on one fairway). The data is captured; only a Stats-tab view is missing.
 - **Lifetime trends** (score / GIR% / FIR% / putts over time). The Stats tab is a placeholder.
-- **Post-round review** UI (table exists, route placeholder exists).
 - **Versioned migrations.** Acceptable while pre-launch; add a proper runner before the first ship.
+
+(The per-round summary and post-round review are now **built** — see the routing table.)
