@@ -282,14 +282,14 @@ export function BunkerBlob({
   const cy = height / 2;
   const rx = width * 0.42;
   const ry = height * 0.42;
-  const path = bunkerPath(cx, cy, rx, ry, seed, { rotation });
-  const grain = stippleInEllipse(cx, cy, rx, ry, 26, `${seed}-grain`);
+  const path = bunkerPath(cx, cy, rx, ry, seed, { rotation, lobe: 0.14, jitter: 0.02, points: 32 });
+  const grain = stippleInEllipse(cx, cy, rx * 0.9, ry * 0.9, 14, `${seed}-grain`, { minR: 0.4, maxR: 0.9 });
   return (
     <Svg width={width} height={height}>
       <Path d={path} fill={colors.surfaceAlt} stroke={colors.borderStrong} strokeWidth={1} />
       <G>
         {grain.map((dot, i) => (
-          <Circle key={i} cx={dot.x} cy={dot.y} r={dot.r} fill={colors.borderStrong} opacity={0.5} />
+          <Circle key={i} cx={dot.x} cy={dot.y} r={dot.r} fill={colors.borderStrong} opacity={0.4} />
         ))}
       </G>
     </Svg>

@@ -2,13 +2,28 @@ import type { Shot } from '@/db/types';
 
 export type DriverLane = 'LF' | 'CF' | 'RF';
 
+// Used only to lay out the LF / CF / RF labels along the bottom of the target.
 export const CF_LEFT_EDGE = 0.3;
 export const CF_RIGHT_EDGE = 0.7;
 
-export function driverLane(xNorm: number): DriverLane {
-  if (xNorm < CF_LEFT_EDGE) return 'LF';
-  if (xNorm < CF_RIGHT_EDGE) return 'CF';
-  return 'RF';
+// The fairway is drawn as an inset, gently tapered oval (see DriverTarget). Lane
+// is shape-based: a tap inside that oval is a fairway hit; otherwise it's left or
+// right of the fairway by which side of center it lands on.
+export const FAIRWAY_INSET = 0.72;
+
+export function fairwayContains(xNorm: number, yNorm: number): boolean {
+  const ry = 0.5 * FAIRWAY_INSET;
+  const sinT = (yNorm - 0.5) / ry;
+  if (Math.abs(sinT) >= 1) return false; // above or below the fairway oval
+  const cosT = Math.sqrt(1 - sinT * sinT);
+  const taper = 0.82 + 0.18 * Math.abs(sinT); // mirrors fairwayPath()
+  const halfWidth = cosT * (0.5 * FAIRWAY_INSET) * taper;
+  return Math.abs(xNorm - 0.5) <= halfWidth;
+}
+
+export function driverLane(xNorm: number, yNorm: number): DriverLane {
+  if (fairwayContains(xNorm, yNorm)) return 'CF';
+  return xNorm < 0.5 ? 'LF' : 'RF';
 }
 
 export function isFairwayHit(lane: DriverLane): boolean {
@@ -49,7 +64,7 @@ export function driverDispersionStats(shots: Shot[]): DriverDispersionStats {
   const laneCounts: Record<DriverLane, number> = { LF: 0, CF: 0, RF: 0 };
   let fairwayHits = 0;
   for (const shot of drives) {
-    const lane = driverLane(shot.xNorm);
+    const lane = driverLane(shot.xNorm, shot.yNorm);
     laneCounts[lane] += 1;
     if (isFairwayHit(lane)) fairwayHits += 1;
   }

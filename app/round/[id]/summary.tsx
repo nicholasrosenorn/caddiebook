@@ -177,23 +177,23 @@ export default function SummaryScreen() {
         </Section>
 
         <Section title="Drive dispersion">
-          <View style={styles.targetWrap}>
-            <DriverTarget pins={drivePins} width={200} height={300} />
+          <View style={[styles.targetWrap, { marginBottom: spacing.md }]}>
+            <DriverTarget pins={drivePins} width={233} height={350} />
           </View>
-          <ThemedText type="muted" style={styles.centerText}>
+          {/* <ThemedText type="muted" style={[styles.centerText, { marginTop: spacing.md }]}>
             {drivePins.length} drive{drivePins.length === 1 ? '' : 's'} ·
             {' '}FIR {formatPct(summary.firPct)}
-          </ThemedText>
+          </ThemedText> */}
         </Section>
 
         <Section title="Approach dispersion">
           <View style={styles.targetWrap}>
             <ApproachTarget pins={approachPins} size={240} />
           </View>
-          <ThemedText type="muted" style={styles.centerText}>
+          {/* <ThemedText type="muted" style={styles.centerText}>
             {approachPins.length} approach{approachPins.length === 1 ? '' : 'es'} ·
             {' '}GIR {formatPct(summary.girPct)}
-          </ThemedText>
+          </ThemedText> */}
         </Section>
 
         <Section title="Putting">

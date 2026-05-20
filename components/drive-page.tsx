@@ -20,7 +20,7 @@ type Props = {
 export function DrivePage({ roundId, hole, shotsForRound, onChange }: Props) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const targetWidth = Math.min(300, screenWidth - 60);
-  const targetHeight = Math.min(440, screenHeight * 0.5);
+  const targetHeight = Math.min(500, screenHeight * 0.56);
 
   const [position, setPosition] = useState<Position | null>(null);
 
@@ -41,7 +41,7 @@ export function DrivePage({ roundId, hole, shotsForRound, onChange }: Props) {
         xNorm: x,
         yNorm: y,
       });
-      const lane = driverLane(x);
+      const lane = driverLane(x, y);
       await updateHole(roundId, hole.holeNumber, { fir: isFairwayHit(lane) });
       await onChange();
     } catch (err) {
@@ -58,7 +58,7 @@ export function DrivePage({ roundId, hole, shotsForRound, onChange }: Props) {
     ? [...otherDrives, { xNorm: position.xNorm, yNorm: position.yNorm, key: 'current' }]
     : otherDrives;
 
-  const isFir = position != null && driverLane(position.xNorm) === 'CF';
+  const isFir = position != null && driverLane(position.xNorm, position.yNorm) === 'CF';
 
   return (
     <View style={styles.container}>
@@ -80,7 +80,7 @@ export function DrivePage({ roundId, hole, shotsForRound, onChange }: Props) {
       {position ? (
         <View style={[styles.badge, isFir && styles.badgePositive]}>
           <ThemedText style={[styles.badgeText, isFir && styles.badgeTextPositive]}>
-            {formatDriverResult(position.xNorm)}
+            {formatDriverResult(position.xNorm, position.yNorm)}
           </ThemedText>
         </View>
       ) : (
@@ -92,8 +92,8 @@ export function DrivePage({ roundId, hole, shotsForRound, onChange }: Props) {
   );
 }
 
-function formatDriverResult(xNorm: number): string {
-  const lane = driverLane(xNorm);
+function formatDriverResult(xNorm: number, yNorm: number): string {
+  const lane = driverLane(xNorm, yNorm);
   if (lane === 'CF') return 'Center fairway · FIR ✓';
   if (lane === 'LF') return 'Left of fairway';
   return 'Right of fairway';
@@ -125,6 +125,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderStrong,
     marginTop: spacing.sm,
+    marginVertical: spacing.sm,
   },
   badgePositive: {
     backgroundColor: colors.accentMuted,
@@ -141,5 +142,6 @@ const styles = StyleSheet.create({
   hint: {
     textAlign: 'center',
     paddingTop: spacing.sm,
+    marginVertical: spacing.sm,
   },
 });

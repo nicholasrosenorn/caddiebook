@@ -2,7 +2,7 @@ import { Pressable, StyleSheet, View, type GestureResponderEvent } from 'react-n
 import Svg, { Circle, G, Line, Path, Polygon } from 'react-native-svg';
 
 import type { TargetPin } from '@/components/driver-target';
-import { BunkerBlob, CornerDots, Crosshair } from '@/components/sketch';
+import { BunkerBlob } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { colors } from '@/constants/theme';
 import { APPROACH_RINGS } from '@/lib/shots';
@@ -10,6 +10,11 @@ import { roughCirclePath, stippleInEllipse } from '@/lib/sketch';
 
 const DEFAULT_SIZE = 280;
 const PIN_SIZE = 13;
+
+// Same palette as the driver target: light beige-green putting surface with a
+// slightly darker fringe band around it.
+const GREEN_FILL = '#E4E2CB';
+const FRINGE_GREEN = '#C0D0AC';
 
 type ApproachTargetProps = {
   pins?: TargetPin[];
@@ -26,83 +31,81 @@ export function ApproachTarget({ pins = [], onTap, size = DEFAULT_SIZE }: Approa
   };
 
   const c = size / 2;
-  const greenR = size * 0.205;
-  const grain = stippleInEllipse(c, c, greenR, greenR, 44, 'approach-green-grain');
+  // The putting surface fills all the way out to the outermost ring.
+  const surfaceR = APPROACH_RINGS[APPROACH_RINGS.length - 1].maxR * size;
+  const fringeR = surfaceR + size * 0.04;
+  const grain = stippleInEllipse(c, c, surfaceR, surfaceR, 70, 'approach-green-grain');
 
   return (
     <View style={[styles.wrap, { width: size, height: size }]}>
       <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
-        {/* Outer rings (on cream) */}
-        {APPROACH_RINGS.map((ring) => {
-          const r = ring.maxR * size;
-          if (r <= greenR) return null;
-          return (
-            <Path
-              key={`out-${ring.ft}`}
-              d={roughCirclePath(c, c, r, `approach-ring-${ring.ft}`, { jitter: 0.025 })}
-              stroke={colors.borderStrong}
-              strokeWidth={1.2}
-              fill="none"
-            />
-          );
-        })}
-
-        {/* The green */}
+        {/* Fringe — slightly darker green band ringing the whole surface */}
         <Path
-          d={roughCirclePath(c, c, greenR, 'approach-green', { jitter: 0.05 })}
-          fill={colors.accent}
+          d={roughCirclePath(c, c, fringeR, 'approach-fringe', { jitter: 0.022 })}
+          fill={FRINGE_GREEN}
+          stroke={colors.accent}
+          strokeWidth={1.6}
+          strokeOpacity={0.5}
+        />
+
+        {/* The green — light beige-green surface, out to the outermost ring */}
+        <Path
+          d={roughCirclePath(c, c, surfaceR, 'approach-green', { jitter: 0.024 })}
+          fill={GREEN_FILL}
+          stroke={colors.accent}
+          strokeWidth={1.4}
         />
         <G>
           {grain.map((dot, i) => (
-            <Circle key={i} cx={dot.x} cy={dot.y} r={dot.r} fill={colors.accentOn} opacity={0.18} />
+            <Circle key={i} cx={dot.x} cy={dot.y} r={dot.r} fill={colors.accent} opacity={0.1} />
           ))}
         </G>
 
-        {/* Inner contour rings (faint, drawn over the green) */}
+        {/* Contour rings drawn over the green (skip the outermost — it's the edge) */}
         {APPROACH_RINGS.map((ring) => {
           const r = ring.maxR * size;
-          if (r > greenR) return null;
+          if (r >= surfaceR) return null;
           return (
             <Path
               key={`in-${ring.ft}`}
-              d={roughCirclePath(c, c, r, `approach-ring-${ring.ft}`, { jitter: 0.04 })}
-              stroke={colors.accentOn}
+              d={roughCirclePath(c, c, r, `approach-ring-${ring.ft}`, { jitter: 0.018 })}
+              stroke={colors.accent}
               strokeWidth={1}
-              strokeOpacity={0.3}
+              strokeOpacity={0.22}
               fill="none"
             />
           );
         })}
 
         {/* Pin flag */}
-        <Line x1={c} y1={c} x2={c} y2={c - size * 0.14} stroke={colors.accentOn} strokeWidth={1.6} />
+        <Line x1={c} y1={c} x2={c} y2={c - size * 0.14} stroke={colors.accent} strokeWidth={1.6} />
         <Polygon
           points={`${c},${c - size * 0.14} ${c + size * 0.07},${c - size * 0.115} ${c},${c - size * 0.09}`}
-          fill={colors.accentOn}
+          fill={colors.accent}
         />
-        <Circle cx={c} cy={c} r={2} fill={colors.accentOn} />
+        <Circle cx={c} cy={c} r={2} fill={colors.accent} />
       </Svg>
 
       {/* Decorative chrome (taps fall through) */}
-      <View style={styles.cornerTL} pointerEvents="none">
+      {/* <View style={styles.cornerTL} pointerEvents="none">
         <CornerDots />
       </View>
       <View style={styles.cornerTR} pointerEvents="none">
         <Crosshair />
-      </View>
+      </View> */}
       <View style={styles.bunker} pointerEvents="none">
-        <BunkerBlob width={size * 0.2} height={size * 0.13} seed="approach-bunker" rotation={0.5} />
+        <BunkerBlob width={size * 0.2} height={size * 0.13} seed="approach-bunker" rotation={-0.5} />
       </View>
 
       {/* Ring labels */}
       {APPROACH_RINGS.map((ring) => {
         const r = ring.maxR * size;
-        const overGreen = r <= greenR;
+        const overGreen = r <= surfaceR;
         return (
           <View
             key={`label-${ring.ft}`}
             pointerEvents="none"
-            style={[styles.ringLabel, { top: c - r - 7, left: c - 18, width: 36 }]}>
+            style={[styles.ringLabel, { top: c + r - 7, left: c - 18, width: 36 }]}>
             <ThemedText
               type="label"
               style={[styles.ringLabelText, overGreen && styles.ringLabelOver]}>
@@ -181,8 +184,8 @@ const styles = StyleSheet.create({
   },
   bunker: {
     position: 'absolute',
-    bottom: '2%',
-    right: '0%',
+    bottom: '5%',
+    right: '2%',
   },
   ringLabel: {
     position: 'absolute',
@@ -193,7 +196,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   ringLabelOver: {
-    color: colors.accentOn,
+    color: colors.accent,
     opacity: 0.7,
   },
   pin: {
