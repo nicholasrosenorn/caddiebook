@@ -341,7 +341,7 @@ function StatsBody({ view, holeFilter }: { view: StatsView; holeFilter: HoleCoun
 
       {/* Review insights */}
       {review.count > 0 ? (
-        <Section title="What you’ve told yourself">
+        <Section title="Mental Game">
           <ReviewInsightsCard review={review} />
         </Section>
       ) : null}
@@ -906,7 +906,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   barCount: {
-    width: 28,
+    width: 32,
     textAlign: 'right',
   },
   splitCounts: {
