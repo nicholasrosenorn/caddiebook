@@ -29,6 +29,9 @@ type DriverTargetProps = {
   onTap?: (xNorm: number, yNorm: number) => void;
   width?: number;
   height?: number;
+  /** Pin diameter in px. Defaults to the interactive size; shrink for dense
+   *  multi-round dispersion overlays. */
+  pinSize?: number;
 };
 
 export function DriverTarget({
@@ -36,6 +39,7 @@ export function DriverTarget({
   onTap,
   width = DEFAULT_WIDTH,
   height = DEFAULT_HEIGHT,
+  pinSize = PIN_SIZE,
 }: DriverTargetProps) {
   const handlePress = (e: GestureResponderEvent) => {
     if (!onTap) return;
@@ -111,7 +115,7 @@ export function DriverTarget({
         {/* Inner beige line just inside the fairway edge */}
         <Path d={path} transform={tf(FAIRWAY_INSET - 0.03)} fill="none" stroke={colors.surface} strokeWidth={1.4} />
 
-        {/* Tee markers */}
+        {/* Tee box */}
         <Rect
           x={width / 2 - 6}
           y={teeY - 9}
@@ -180,6 +184,7 @@ export function DriverTarget({
             xNorm={pin.xNorm}
             yNorm={pin.yNorm}
             variant={pin.variant ?? 'primary'}
+            size={pinSize}
             containerWidth={width}
             containerHeight={height}
           />
@@ -193,12 +198,14 @@ function Pin({
   xNorm,
   yNorm,
   variant,
+  size,
   containerWidth,
   containerHeight,
 }: {
   xNorm: number;
   yNorm: number;
   variant: 'primary' | 'muted';
+  size: number;
   containerWidth: number;
   containerHeight: number;
 }) {
@@ -207,8 +214,12 @@ function Pin({
       style={[
         styles.pin,
         {
-          left: xNorm * containerWidth - PIN_SIZE / 2,
-          top: yNorm * containerHeight - PIN_SIZE / 2,
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderWidth: size <= 8 ? 1 : 2,
+          left: xNorm * containerWidth - size / 2,
+          top: yNorm * containerHeight - size / 2,
         },
         variant === 'muted' && styles.pinMuted,
       ]}

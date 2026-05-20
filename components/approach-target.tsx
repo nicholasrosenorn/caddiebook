@@ -20,9 +20,16 @@ type ApproachTargetProps = {
   pins?: TargetPin[];
   onTap?: (xNorm: number, yNorm: number) => void;
   size?: number;
+  /** Pin diameter in px. Shrink for dense multi-round dispersion overlays. */
+  pinSize?: number;
 };
 
-export function ApproachTarget({ pins = [], onTap, size = DEFAULT_SIZE }: ApproachTargetProps) {
+export function ApproachTarget({
+  pins = [],
+  onTap,
+  size = DEFAULT_SIZE,
+  pinSize = PIN_SIZE,
+}: ApproachTargetProps) {
   const handlePress = (e: GestureResponderEvent) => {
     if (!onTap) return;
     const x = e.nativeEvent.locationX / size;
@@ -105,7 +112,7 @@ export function ApproachTarget({ pins = [], onTap, size = DEFAULT_SIZE }: Approa
           <View
             key={`label-${ring.ft}`}
             pointerEvents="none"
-            style={[styles.ringLabel, { top: c + r - 7, left: c - 18, width: 36 }]}>
+            style={[styles.ringLabel, { top: c + r - 15, left: c - 18, width: 36 }]}>
             <ThemedText
               type="label"
               style={[styles.ringLabelText, overGreen && styles.ringLabelOver]}>
@@ -130,6 +137,7 @@ export function ApproachTarget({ pins = [], onTap, size = DEFAULT_SIZE }: Approa
             xNorm={pin.xNorm}
             yNorm={pin.yNorm}
             variant={pin.variant ?? 'primary'}
+            size={pinSize}
             containerSize={size}
           />
         ))}
@@ -142,11 +150,13 @@ function Pin({
   xNorm,
   yNorm,
   variant,
+  size,
   containerSize,
 }: {
   xNorm: number;
   yNorm: number;
   variant: 'primary' | 'muted';
+  size: number;
   containerSize: number;
 }) {
   return (
@@ -154,8 +164,12 @@ function Pin({
       style={[
         styles.pin,
         {
-          left: xNorm * containerSize - PIN_SIZE / 2,
-          top: yNorm * containerSize - PIN_SIZE / 2,
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderWidth: size <= 8 ? 1 : 2,
+          left: xNorm * containerSize - size / 2,
+          top: yNorm * containerSize - size / 2,
         },
         variant === 'muted' && styles.pinMuted,
       ]}

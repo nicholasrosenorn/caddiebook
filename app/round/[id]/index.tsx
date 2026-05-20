@@ -13,9 +13,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApproachPage } from '@/components/approach-page';
 import { DrivePage } from '@/components/drive-page';
 import { HoleStatsPage } from '@/components/hole-stats-page';
+import { HoleStepper } from '@/components/hole-stepper';
 import { ParPage } from '@/components/par-page';
 import { PuttingPage } from '@/components/putting-page';
 import { Screen } from '@/components/screen';
+import { ScrollHint } from '@/components/scroll-hint';
 import { StickyHoleNav } from '@/components/sticky-hole-nav';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { colors } from '@/constants/theme';
@@ -70,6 +72,7 @@ export default function RoundScreen() {
   const isFirstHole = holeNumber === 1;
   const isLastHole = round != null && holeNumber === round.holeCount;
   const totalPages = isPar3 ? 4 : 5;
+  const isStatsPage = currentPage === totalPages - 1;
 
   const goToHole = useCallback((n: number) => {
     setHoleNumber(n);
@@ -177,15 +180,31 @@ export default function RoundScreen() {
 
             <PageDots totalPages={totalPages} currentPage={currentPage} />
 
-            <StickyHoleNav
-              holeNumber={holeNumber}
-              par={currentHole.par}
-              isFirstHole={isFirstHole}
-              isLastHole={isLastHole}
-              onPrev={onPrevHole}
-              onNext={onNextHole}
-              onFinish={onFinish}
-            />
+            {isStatsPage ? (
+              <StickyHoleNav
+                holeNumber={holeNumber}
+                par={currentHole.par}
+                isFirstHole={isFirstHole}
+                isLastHole={isLastHole}
+                onPrev={onPrevHole}
+                onNext={onNextHole}
+                onFinish={onFinish}
+              />
+            ) : (
+              <>
+                <HoleStepper
+                  holeNumber={holeNumber}
+                  par={currentHole.par}
+                  isFirstHole={isFirstHole}
+                  isLastHole={isLastHole}
+                  onPrev={onPrevHole}
+                  onNext={onNextHole}
+                />
+                <ScrollHint
+                  onPress={() => scrollToPage(Math.min(totalPages - 1, currentPage + 1))}
+                />
+              </>
+            )}
           </>
         )}
         </View>

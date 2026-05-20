@@ -29,7 +29,7 @@ export function ParPage({ roundId, hole, onChange, onPicked }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <ThemedText type="caption">HOLE {hole.holeNumber}</ThemedText>
+        <ThemedText type="caption">PAR</ThemedText>
         <ThemedText type="title">Select par</ThemedText>
       </View>
 
@@ -105,8 +105,8 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   parNumber: {
-    fontFamily: fontFamily.serifBold,
-    fontSize: 56,
+    fontFamily: fontFamily.serif,
+    fontSize: 48,
     color: colors.textPrimary,
     lineHeight: 60,
   },

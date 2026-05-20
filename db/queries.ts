@@ -141,6 +141,21 @@ export async function getHolesForRound(roundId: string): Promise<Hole[]> {
   return rows.map(rowToHole);
 }
 
+// Whole-table fetch for the lifetime stats tab. Local SQLite + a pre-launch
+// data volume make a single SELECT cheaper than per-round round-trips; the
+// stats screen groups these by round_id in JS.
+export async function getAllHoles(): Promise<Hole[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<HoleRow>(
+    `SELECT id, round_id, hole_number, par, fir, gir, up_and_down,
+            approach_distance_yds, approach_club, score, putts,
+            chip_shots, sand_shots, penalties, notes
+     FROM holes
+     ORDER BY round_id ASC, hole_number ASC;`,
+  );
+  return rows.map(rowToHole);
+}
+
 export async function getHole(roundId: string, holeNumber: number): Promise<Hole | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<HoleRow>(
@@ -283,6 +298,17 @@ export async function getShotsForRound(roundId: string): Promise<Shot[]> {
   return rows.map(rowToShot);
 }
 
+export async function getAllShots(): Promise<Shot[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<ShotRow>(
+    `SELECT id, round_id, hole_number, shot_type, x_norm, y_norm,
+            intended_x_norm, intended_y_norm, notes
+     FROM shots
+     ORDER BY round_id ASC, hole_number ASC, shot_type ASC;`,
+  );
+  return rows.map(rowToShot);
+}
+
 export async function getShotsForHole(
   roundId: string,
   holeNumber: number,
@@ -377,6 +403,16 @@ export async function getPuttsForRound(roundId: string): Promise<Putt[]> {
   return rows.map(rowToPutt);
 }
 
+export async function getAllPutts(): Promise<Putt[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<PuttRow>(
+    `SELECT id, round_id, hole_number, distance_ft, made, created_at
+     FROM putts
+     ORDER BY round_id ASC, created_at ASC;`,
+  );
+  return rows.map(rowToPutt);
+}
+
 export async function getPuttsForHole(
   roundId: string,
   holeNumber: number,
@@ -430,6 +466,16 @@ export async function getReview(roundId: string): Promise<PostRoundReview | null
   return row ? rowToReview(row) : null;
 }
 
+export async function getAllReviews(): Promise<PostRoundReview[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<PostRoundReviewRow>(
+    `SELECT id, round_id, most_costly, decision_making_rating, common_miss,
+            range_focus, overall_rating, created_at
+     FROM post_round_reviews;`,
+  );
+  return rows.map(rowToReview);
+}
+
 export type UpsertReviewInput = {
   roundId: string;
   mostCostly: MostCostly;
@@ -478,4 +524,34 @@ export async function upsertReview(input: UpsertReviewInput): Promise<void> {
       ],
     );
   }
+}
+
+// --- App settings (global, not per-round) ---------------------------------
+
+const BAG_KEY = 'bag';
+
+// The player's club bag, stored as a JSON array of club names. Returns [] when
+// never set — callers treat an empty bag as "all clubs".
+export async function getBag(): Promise<string[]> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ value: string | null }>(
+    `SELECT value FROM app_settings WHERE key = ?;`,
+    [BAG_KEY],
+  );
+  if (!row?.value) return [];
+  try {
+    const parsed = JSON.parse(row.value);
+    return Array.isArray(parsed) ? parsed.filter((c): c is string => typeof c === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function setBag(clubs: string[]): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO app_settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
+    [BAG_KEY, JSON.stringify(clubs)],
+  );
 }

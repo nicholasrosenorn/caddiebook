@@ -37,7 +37,8 @@ const PUTT_BUCKETS = [
   { ft: 3, label: '<3 ft' },
   { ft: 10, label: '3–10 ft' },
   { ft: 15, label: '10–15 ft' },
-  { ft: 30, label: '15+ ft' },
+  { ft: 25, label: '15–25 ft' },
+  { ft: 50, label: '25+ ft' },
 ] as const;
 
 export default function SummaryScreen() {

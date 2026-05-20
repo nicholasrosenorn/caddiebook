@@ -64,10 +64,6 @@ export function DrivePage({ roundId, hole, shotsForRound, onChange }: Props) {
     <View style={styles.container}>
       <View style={styles.header}>
         <ThemedText type="caption">DRIVE</ThemedText>
-        <ThemedText type="title">
-          Hole {hole.holeNumber}
-          {hole.par != null ? ` · Par ${hole.par}` : ''}
-        </ThemedText>
       </View>
       <View style={styles.targetWrap}>
         <DriverTarget
@@ -103,7 +99,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
+    paddingTop: 60,
     paddingBottom: 100,
   },
   header: {

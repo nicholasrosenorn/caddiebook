@@ -116,16 +116,6 @@ export function Paper({
           </G>
         </Svg>
       )}
-      {marks && size.w > 0 && (
-        <>
-          <View style={paperStyles.markTL}>
-            <CornerDots />
-          </View>
-          <View style={paperStyles.markTR}>
-            <Crosshair />
-          </View>
-        </>
-      )}
     </View>
   );
 }

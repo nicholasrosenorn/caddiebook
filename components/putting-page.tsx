@@ -1,26 +1,30 @@
-import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import Svg, { Path } from 'react-native-svg';
+import { useMemo, useState } from 'react';
+import { Pressable, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
+import Svg, { Circle, G, Line, Path, Polygon } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import { createPutt, deletePutt } from '@/db/queries';
 import type { Hole, Putt } from '@/db/types';
-import { roughCirclePath } from '@/lib/sketch';
+import { roughCirclePath, roughRectPath, stippleInRect } from '@/lib/sketch';
 
-type Bucket = { value: number; label: string };
+// Same beige-green / fringe palette as the approach + driver targets.
+const GREEN_FILL = '#E4E2CB';
+const FRINGE_GREEN = '#C0D0AC';
+const GLYPH_SIZE = 18;
+const LABEL_W = 52;
+const FRINGE = 8; // width of the darker fringe band around the board
 
-const BUCKETS: Bucket[] = [
-  { value: 3, label: '<3 ft' },
-  { value: 10, label: '3-10' },
-  { value: 15, label: '10-15' },
-  { value: 30, label: '15+' },
+// Distance bands, ordered far → near so the cup sits at the bottom and you read
+// down the line toward the hole. `value` is the stored `distance_ft` bucket.
+type Band = { value: number; label: string };
+const BANDS: Band[] = [
+  { value: 50, label: '25+' },
+  { value: 25, label: '15–25' },
+  { value: 15, label: '10–15' },
+  { value: 10, label: '3–10' },
+  { value: 3, label: '<3' },
 ];
-
-const MIN_ROWS = 8;
-const SLOT_SIZE = 22;
-const SIDE_LABEL_WIDTH = 24;
-const ROTATED_TEXT_WIDTH = 80;
 
 type Props = {
   roundId: string;
@@ -30,36 +34,17 @@ type Props = {
 };
 
 export function PuttingPage({ roundId, hole, putts, onChange }: Props) {
-  const makesByBucket = useMemo(() => groupByBucket(putts, true), [putts]);
-  const missesByBucket = useMemo(() => groupByBucket(putts, false), [putts]);
+  const { width: screenWidth } = useWindowDimensions();
+  const boardWidth = Math.min(340, screenWidth - 32);
 
   const totals = useMemo(
-    () => ({
-      made: putts.filter((p) => p.made).length,
-      total: putts.length,
-    }),
+    () => ({ made: putts.filter((p) => p.made).length, total: putts.length }),
     [putts],
   );
 
-  const maxMakes = Math.max(
-    0,
-    ...BUCKETS.map((b) => makesByBucket.get(b.value)?.length ?? 0),
-  );
-  const maxMisses = Math.max(
-    0,
-    ...BUCKETS.map((b) => missesByBucket.get(b.value)?.length ?? 0),
-  );
-  const makeRows = Math.max(MIN_ROWS, maxMakes + 1);
-  const missRows = Math.max(MIN_ROWS, maxMisses + 1);
-
   const addPutt = async (distance: number, made: boolean) => {
     try {
-      await createPutt({
-        roundId,
-        holeNumber: hole.holeNumber,
-        distanceFt: distance,
-        made,
-      });
+      await createPutt({ roundId, holeNumber: hole.holeNumber, distanceFt: distance, made });
       await onChange();
     } catch (err) {
       console.error(err);
@@ -79,164 +64,204 @@ export function PuttingPage({ roundId, hole, putts, onChange }: Props) {
     <View style={styles.container}>
       <View style={styles.header}>
         <ThemedText type="caption">PUTTING</ThemedText>
-        <ThemedText type="title">
-          Hole {hole.holeNumber}
-          {hole.par != null ? ` · Par ${hole.par}` : ''}
-        </ThemedText>
         <ThemedText type="muted" style={styles.totals}>
           {totals.made}/{totals.total} made this round
         </ThemedText>
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        nestedScrollEnabled
-        showsVerticalScrollIndicator={false}>
-        <View style={styles.section}>
-          <VerticalLabel label="MAKES" />
-          <View style={styles.gridArea}>
-            <PuttingGrid
-              rows={makeRows}
-              byBucket={makesByBucket}
-              variant="make"
-              fillFromBottom
-              onAdd={(d) => addPutt(d, true)}
-              onRemove={removePutt}
-            />
-          </View>
-        </View>
+      <View style={styles.boardWrap}>
+        <Board
+          width={boardWidth}
+          putts={putts}
+          holeNumber={hole.holeNumber}
+          onAdd={addPutt}
+          onRemove={removePutt}
+        />
+      </View>
 
-        <View style={styles.headerRow}>
-          <View style={styles.sideLabelSpacer} />
-          <View style={styles.headerCells}>
-            {BUCKETS.map((b) => (
-              <View key={b.value} style={styles.cell}>
-                <ThemedText style={styles.bucketHeader}>{b.label}</ThemedText>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <VerticalLabel label="MISSES" />
-          <View style={styles.gridArea}>
-            <PuttingGrid
-              rows={missRows}
-              byBucket={missesByBucket}
-              variant="miss"
-              fillFromBottom={false}
-              onAdd={(d) => addPutt(d, false)}
-              onRemove={removePutt}
-            />
-          </View>
-        </View>
-      </ScrollView>
+      <ThemedText type="muted" style={styles.hint}>
+        Tap the made or miss side of a distance to log a putt · tap a putt to remove it.
+      </ThemedText>
     </View>
   );
 }
 
-function VerticalLabel({ label }: { label: string }) {
-  return (
-    <View style={styles.verticalLabel}>
-      <ThemedText style={styles.verticalLabelText}>{label}</ThemedText>
-    </View>
-  );
-}
-
-function PuttingGrid({
-  rows,
-  byBucket,
-  variant,
-  fillFromBottom,
+function Board({
+  width,
+  putts,
+  holeNumber,
   onAdd,
   onRemove,
 }: {
-  rows: number;
-  byBucket: Map<number, Putt[]>;
-  variant: 'make' | 'miss';
-  fillFromBottom: boolean;
-  onAdd: (distance: number) => void;
+  width: number;
+  putts: Putt[];
+  holeNumber: number;
+  onAdd: (distance: number, made: boolean) => void;
   onRemove: (id: string) => void;
 }) {
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  const onLayout = (e: LayoutChangeEvent) => {
+    const { width: w, height: h } = e.nativeEvent.layout;
+    if (w !== size.w || h !== size.h) setSize({ w, h });
+  };
+
+  const bg = useMemo(() => {
+    if (size.w === 0 || size.h === 0) return null;
+    const gw = size.w - FRINGE * 2;
+    const gh = size.h - FRINGE * 2;
+    return {
+      fringe: roughRectPath(size.w, size.h, 18, 'putt-board-fringe'),
+      green: roughRectPath(gw, gh, 14, 'putt-board-green'),
+      gw,
+      gh,
+      stipple: stippleInRect(gw, gh, Math.round((gw * gh) / 1400), 'putt-board-grain'),
+    };
+  }, [size.w, size.h]);
+
   return (
-    <View style={styles.grid}>
-      {Array.from({ length: rows }).map((_, rowIdx) => (
-        <View key={rowIdx} style={styles.gridRow}>
-          {BUCKETS.map((b) => {
-            const putts = byBucket.get(b.value) ?? [];
-            const dataIdx = fillFromBottom ? rows - 1 - rowIdx : rowIdx;
-            const putt = putts[dataIdx];
-            if (putt) {
-              return (
-                <View key={b.value} style={styles.cell}>
-                  <Pressable
-                    onPress={() => onRemove(putt.id)}
-                    hitSlop={6}
-                    style={({ pressed }) => [styles.slot, pressed && styles.slotPressed]}>
-                    <PuttGlyph kind={variant} seed={putt.id} />
-                  </Pressable>
-                </View>
-              );
-            }
-            return (
-              <View key={b.value} style={styles.cell}>
-                <Pressable
-                  onPress={() => onAdd(b.value)}
-                  hitSlop={6}
-                  style={({ pressed }) => [styles.slot, pressed && styles.slotPressed]}>
-                  <PuttGlyph kind="empty" seed={`empty-${variant}-${b.value}-${rowIdx}`} />
-                </Pressable>
-              </View>
-            );
-          })}
+    <View style={[styles.board, { width }]} onLayout={onLayout}>
+      {bg && (
+        <Svg width={size.w} height={size.h} style={StyleSheet.absoluteFill}>
+          <Path d={bg.fringe} fill={FRINGE_GREEN} stroke={colors.accent} strokeWidth={1.4} strokeOpacity={0.5} />
+          <G x={FRINGE} y={FRINGE}>
+            <Path d={bg.green} fill={GREEN_FILL} stroke={colors.accent} strokeWidth={1.2} />
+            {bg.stipple.map((d, i) => (
+              <Circle key={i} cx={d.x} cy={d.y} r={d.r} fill={colors.accent} opacity={0.08} />
+            ))}
+          </G>
+        </Svg>
+      )}
+
+      <View style={styles.boardInner}>
+        {/* Column headers */}
+        <View style={styles.headerRow}>
+          <View style={styles.labelCol} />
+          <View style={styles.headerCell}>
+            <PuttGlyph kind="make" seed="hdr-make" />
+            <ThemedText style={styles.headerText}>MADE</ThemedText>
+          </View>
+          <View style={styles.vRule} />
+          <View style={styles.headerCell}>
+            <PuttGlyph kind="miss" seed="hdr-miss" />
+            <ThemedText style={styles.headerText}>MISS</ThemedText>
+          </View>
         </View>
-      ))}
+
+        {/* One lane per distance band. Other holes' putts show muted and locked;
+            only the current hole's putts are tappable to remove. */}
+        {BANDS.map((band, i) => {
+          const inBand = (made: boolean) =>
+            putts.filter((p) => p.distanceFt === band.value && p.made === made);
+          const isCurrent = (p: Putt) => p.holeNumber === holeNumber;
+          const made = inBand(true);
+          const missed = inBand(false);
+          return (
+            <View key={band.value} style={[styles.lane, i > 0 && styles.laneDivider]}>
+              <View style={styles.labelCol}>
+                <ThemedText style={styles.laneLabel}>{band.label}</ThemedText>
+                <ThemedText style={styles.laneUnit}>ft</ThemedText>
+              </View>
+              <PuttZone
+                kind="make"
+                editable={made.filter(isCurrent)}
+                muted={made.filter((p) => !isCurrent(p))}
+                onAdd={() => onAdd(band.value, true)}
+                onRemove={onRemove}
+              />
+              <View style={styles.vRule} />
+              <PuttZone
+                kind="miss"
+                editable={missed.filter(isCurrent)}
+                muted={missed.filter((p) => !isCurrent(p))}
+                onAdd={() => onAdd(band.value, false)}
+                onRemove={onRemove}
+              />
+            </View>
+          );
+        })}
+
+        {/* The cup, nearest the <3 band
+        <View style={styles.cupRow}>
+          <Cup />
+        </View> */}
+      </View>
     </View>
   );
 }
 
-function PuttGlyph({ kind, seed }: { kind: 'make' | 'miss' | 'empty'; seed: string }) {
-  const c = SLOT_SIZE / 2;
-  const r = SLOT_SIZE * 0.38;
-  const path = roughCirclePath(c, c, r, seed, { jitter: 0.06, points: 14 });
-  if (kind === 'make') {
-    return (
-      <Svg width={SLOT_SIZE} height={SLOT_SIZE}>
-        <Path d={path} fill={colors.accent} stroke={colors.accent} strokeWidth={1.2} />
-      </Svg>
-    );
-  }
-  if (kind === 'miss') {
-    return (
-      <Svg width={SLOT_SIZE} height={SLOT_SIZE}>
-        <Path d={path} fill="none" stroke={colors.accent} strokeWidth={2} />
-      </Svg>
-    );
-  }
+function PuttZone({
+  kind,
+  editable,
+  muted,
+  onAdd,
+  onRemove,
+}: {
+  kind: 'make' | 'miss';
+  editable: Putt[];
+  muted: Putt[];
+  onAdd: () => void;
+  onRemove: (id: string) => void;
+}) {
+  const total = editable.length + muted.length;
   return (
-    <Svg width={SLOT_SIZE} height={SLOT_SIZE}>
-      <Path d={path} fill="none" stroke={colors.borderStrong} strokeWidth={1.2} strokeOpacity={0.6} />
+    <Pressable onPress={onAdd} style={({ pressed }) => [styles.zone, pressed && styles.zonePressed]}>
+      {total === 0 ? null : (
+        <View style={styles.glyphWrap}>
+          {/* Other holes — shown for context, but locked */}
+          {muted.map((p) => (
+            <View key={p.id} pointerEvents="none">
+              <PuttGlyph kind={kind} seed={p.id} opacity={0.4} />
+            </View>
+          ))}
+          {/* Current hole — tappable to remove */}
+          {editable.map((p) => (
+            <Pressable
+              key={p.id}
+              hitSlop={4}
+              onPress={() => onRemove(p.id)}
+              style={({ pressed }) => pressed && styles.glyphPressed}>
+              <PuttGlyph kind={kind} seed={p.id} />
+            </Pressable>
+          ))}
+        </View>
+      )}
+      {total > 0 && <ThemedText style={styles.zoneCount}>{total}</ThemedText>}
+    </Pressable>
+  );
+}
+
+function PuttGlyph({ kind, seed, opacity = 1 }: { kind: 'make' | 'miss'; seed: string; opacity?: number }) {
+  const c = GLYPH_SIZE / 2;
+  const r = GLYPH_SIZE * 0.4;
+  const path = roughCirclePath(c, c, r, seed, { jitter: 0.06, points: 14 });
+  return (
+    <Svg width={GLYPH_SIZE} height={GLYPH_SIZE} opacity={opacity}>
+      {kind === 'make' ? (
+        <Path d={path} fill={colors.accent} stroke={colors.accent} strokeWidth={1.2} />
+      ) : (
+        <Path d={path} fill="none" stroke={colors.accent} strokeWidth={2} />
+      )}
     </Svg>
   );
 }
 
-function groupByBucket(putts: Putt[], made: boolean): Map<number, Putt[]> {
-  const map = new Map<number, Putt[]>();
-  for (const putt of putts) {
-    if (putt.made !== made) continue;
-    const list = map.get(putt.distanceFt) ?? [];
-    list.push(putt);
-    map.set(putt.distanceFt, list);
-  }
-  return map;
+function Cup() {
+  return (
+    <Svg width={36} height={30}>
+      {/* flagstick rising out of the <3 band into the cup */}
+      <Line x1={18} y1={26} x2={18} y2={4} stroke={colors.accent} strokeWidth={1.4} />
+      <Polygon points="18,4 30,8 18,12" fill={colors.accent} />
+      {/* the hole */}
+      <Path d={roughCirclePath(18, 26, 4, 'putt-cup', { jitter: 0.05 })} fill={colors.accent} />
+    </Svg>
+  );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
+    paddingTop: 60,
     paddingBottom: 100,
   },
   header: {
@@ -248,72 +273,108 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
   },
-  scroll: {
+  boardWrap: {
     flex: 1,
-    minHeight: 0,
-  },
-  scrollContent: {
-    paddingBottom: spacing.md,
-  },
-  section: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  verticalLabel: {
-    width: SIDE_LABEL_WIDTH,
-    minHeight: 96,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'visible',
   },
-  verticalLabelText: {
-    width: ROTATED_TEXT_WIDTH,
-    textAlign: 'center',
-    fontFamily: fontFamily.serif,
-    fontSize: 12,
-    color: colors.textMuted,
-    letterSpacing: 2,
-    transform: [{ rotate: '-90deg' }],
+  board: {
+    alignSelf: 'center',
+    position: 'relative',
   },
-  gridArea: {
-    flex: 1,
+  boardInner: {
+    paddingHorizontal: FRINGE + 6,
+    paddingTop: FRINGE + 4,
+    paddingBottom: FRINGE,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
+    paddingBottom: 4,
   },
-  sideLabelSpacer: {
-    width: SIDE_LABEL_WIDTH,
-  },
-  headerCells: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  bucketHeader: {
-    fontFamily: fontFamily.serif,
-    fontSize: 13,
-    color: colors.textSecondary,
-  },
-  grid: {
-    gap: 6,
-  },
-  gridRow: {
-    flexDirection: 'row',
-  },
-  cell: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  slot: {
-    width: SLOT_SIZE,
-    height: SLOT_SIZE,
+  labelCol: {
+    width: LABEL_W,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  slotPressed: {
-    opacity: 0.5,
+  headerCell: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 4,
+  },
+  headerText: {
+    fontFamily: fontFamily.serif,
+    fontSize: 11,
+    letterSpacing: 1.5,
+    color: colors.textSecondary,
+  },
+  lane: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 60,
+  },
+  laneDivider: {
+    // faint mowing-stripe line between bands
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  laneLabel: {
+    fontFamily: fontFamily.serif,
+    fontSize: 18,
+    color: colors.accent,
+  },
+  laneUnit: {
+    fontFamily: fontFamily.serif,
+    fontSize: 10,
+    color: colors.textMuted,
+    marginTop: -2,
+  },
+  vRule: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: colors.accent,
+    opacity: 0.15,
+    marginVertical: 6,
+  },
+  zone: {
+    flex: 1,
+    minHeight: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+  },
+  zonePressed: {
+    opacity: 0.6,
+  },
+  glyphWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  glyphPressed: {
+    opacity: 0.4,
+  },
+  zoneCount: {
+    position: 'absolute',
+    top: 2,
+    right: 6,
+    fontFamily: fontFamily.serif,
+    fontSize: 11,
+    color: colors.accent,
+    opacity: 0.45,
+  },
+  cupRow: {
+    alignItems: 'center',
+    paddingTop: 4,
+  },
+  hint: {
+    textAlign: 'center',
+    paddingTop: spacing.sm,
   },
 });

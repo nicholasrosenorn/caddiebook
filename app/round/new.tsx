@@ -1,6 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -11,11 +11,13 @@ import {
   View,
 } from 'react-native';
 
+import { BagPicker } from '@/components/bag-picker';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
+import { CLUB_OPTIONS } from '@/constants/clubs';
 import { colors, fontFamily, spacing } from '@/constants/theme';
-import { createRound } from '@/db/queries';
+import { createRound, getBag, setBag } from '@/db/queries';
 
 const HOLE_OPTIONS = [9, 18] as const;
 
@@ -25,6 +27,19 @@ export default function NewRoundScreen() {
   const [holeCount, setHoleCount] = useState<9 | 18>(18);
   const [submitting, setSubmitting] = useState(false);
   const [androidPickerOpen, setAndroidPickerOpen] = useState(false);
+  // Brand-new bag is pre-filled with every club; the player trims it.
+  const [bag, setBagState] = useState<string[]>([...CLUB_OPTIONS]);
+
+  useEffect(() => {
+    getBag().then((stored) => {
+      if (stored.length > 0) setBagState(stored);
+    });
+  }, []);
+
+  const onBagChange = (next: string[]) => {
+    setBagState(next);
+    setBag(next).catch((err) => console.error(err));
+  };
 
   const canSubmit = courseName.trim().length > 0 && !submitting;
 
@@ -127,6 +142,11 @@ export default function NewRoundScreen() {
               );
             })}
           </View>
+        </View>
+
+        <View style={styles.field}>
+          <ThemedText type="caption">YOUR BAG</ThemedText>
+          <BagPicker value={bag} onChange={onBagChange} />
         </View>
 
         <Pressable

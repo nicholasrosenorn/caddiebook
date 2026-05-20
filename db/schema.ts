@@ -64,6 +64,11 @@ export const SCHEMA_STATEMENTS = [
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );`,
 
+  `CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY NOT NULL,
+    value TEXT
+  );`,
+
   `CREATE INDEX IF NOT EXISTS idx_holes_round_id ON holes(round_id);`,
   `CREATE INDEX IF NOT EXISTS idx_shots_round_id ON shots(round_id);`,
   `CREATE INDEX IF NOT EXISTS idx_shots_round_hole ON shots(round_id, hole_number);`,

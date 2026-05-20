@@ -14,6 +14,11 @@ export const colors = {
   accentMuted: '#1B4D3E14',
   accentSoft: '#D7DFD3',
   accentOn: '#F1EBDC',
+  // Soft "course" palette — the beige-greens of the driver/approach targets.
+  // Use for warm card/track washes that tie chrome back to the play surfaces.
+  fairway: '#E4E2CB',
+  rough: '#C0D0AC',
+  roughDeep: '#A6BC90',
   danger: '#9B3B2E',
   warning: '#B58A2A',
   info: '#4A6B7A',

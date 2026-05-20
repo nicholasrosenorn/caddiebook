@@ -38,8 +38,8 @@ The round screen's nav header is hidden (`headerShown: false`); a floating X (cl
 | --- | --- | --- |
 | Par | `components/par-page.tsx` | Three big tap buttons (Par 3 / 4 / 5). Auto-advances to next page on selection. |
 | Drive | `components/drive-page.tsx` | Tall fairway "oval" with **LF / CF / RF** lanes. Tap to place the drive. CF zone is the inner 40% (0.3–0.7 x-normalized). Tap → `upsertShot('driver')` + write-through `hole.fir = isFairwayHit(lane)`. |
-| Approach | `components/approach-page.tsx` | Concentric ring target (3 / 5 / 10 / 20 / 30 ft) with a pin at center. Tap places shot; computes `onGreen` + `proximityFt`. Tap → `upsertShot('approach')` + write-through `hole.gir`. Below the target: club picker + yards-in input. |
-| Putting | `components/putting-page.tsx` | 4 distance buckets (`<3 / 3-10 / 10-15 / 15+ ft`) × 2 sides (MAKES / MISSES). Vertical 2D grid: columns = distance, rows = putts. MAKES grid fills **bottom-up**, MISSES grid fills **top-down** — both grow toward the central distance-label row. Each tap inserts a `putts` row and auto-syncs `hole.putts` count. |
+| Approach | `components/approach-page.tsx` | Concentric ring target (3 / 5 / 10 / 20 / 30 ft) with a pin at center. Tap places shot; computes `onGreen` + `proximityFt`. Tap → `upsertShot('approach')` + write-through `hole.gir`. Below the target: an inline **club chip row** (`ClubChips`, fed from the player's bag via `getBag()`, falling back to all clubs) + a tap-first **yardage ruler** (`YardageRuler`, snaps to 5 yds, parks at 125). |
+| Putting | `components/putting-page.tsx` | A drawn beige-green **putt board** (fringe + stipple, same palette as the targets): five horizontal distance lanes `25+ / 15–25 / 10–15 / 3–10 / <3 ft` ordered far→near with the cup + flag at the bottom. Each lane is split into a **MADE** and a **MISS** tap column; tapping a column appends a putt glyph there (filled disc = made, open ring = miss) with a live count. Tap a glyph to remove it. Distance + made/miss is all that's stored — no putt coordinates. Each tap inserts/deletes a `putts` row and auto-syncs `hole.putts` count. |
 | Stats | `components/hole-stats-page.tsx` | Tap-first form: score grid (3×3, par-relative indicators — single/double circle for birdie/eagle, "Par" label, single/double/triple square for bogey/double/triple), count rows for Putts/Chip Shots/Greenside Sand/Penalties, ✓/✗ toggles for FIR/GIR/U&D, notes. Round-wide summary bar at top. |
 
 ### Visual + spatial design principles
@@ -107,8 +107,9 @@ The **stats page is the only one that scrolls internally** (its content is talle
 | `rounds` | `id`, `course_name`, `date_played`, `hole_count`, `created_at` | One row per round. |
 | `holes` | `id`, `round_id` FK, `hole_number`, `par`, `score`, `putts`, `fir`, `gir`, `up_and_down`, `approach_distance_yds`, `approach_club`, `chip_shots`, `sand_shots`, `penalties`, `notes` | Pre-created on round insert (1 row per hole). `fir/gir/up_and_down` are nullable booleans (0/1, NULL = unset → use derived). |
 | `shots` | `id`, `round_id` FK, `hole_number`, `shot_type` (`'driver'` \| `'approach'`), `x_norm`, `y_norm`, `intended_x_norm`, `intended_y_norm`, `notes` | One drive + one approach per hole (replaced via `upsertShot`). |
-| `putts` | `id`, `round_id` FK, `hole_number`, `distance_ft`, `made`, `created_at` | Many per hole. `distance_ft` is the bucket upper bound: `3, 10, 15, 30`. |
+| `putts` | `id`, `round_id` FK, `hole_number`, `distance_ft`, `made`, `created_at` | Many per hole. `distance_ft` is the bucket upper bound: `3, 10, 15, 25, 50` (the `50` bucket is the open-ended `25+ ft`). The bucket set lives in `components/putting-page.tsx` (`BANDS`) and `app/round/[id]/summary.tsx` (`PUTT_BUCKETS`) — keep them in sync. |
 | `post_round_reviews` | `id`, `round_id` FK, `tactical/technical/mental`, `went_well`, `didnt_go_well`, `will_work_on` | Schema in place; no UI yet. |
+| `app_settings` | `key` PK, `value` | Global key/value store (not per-round). Currently holds the player's **bag** under key `bag` (JSON array of club names). `getBag()`/`setBag()` in `db/queries.ts`; empty/unset = treat as all clubs. |
 
 ### Migration strategy
 
@@ -139,8 +140,8 @@ Typography: **Fraunces** serif for display/labels/numerals (`fontFamily.serif` /
 | Route | Notes |
 | --- | --- |
 | `/` (default tab) | Rounds list. Header has a + button → modal. Tapping a round opens `/round/[id]` if in-progress, or `/round/[id]/summary` if completed; long-press to delete. |
-| `/(tabs)/stats` | Lifetime stats placeholder (not yet built out). |
-| `/round/new` | Modal: course name, date, 9/18. On submit: `createRound` → `router.replace('/round/[id]')`. |
+| `/(tabs)/stats` | **Built.** Lifetime stats across **completed** rounds. Two **dropdown** filters (`components/dropdown-select.tsx`): hole count (All / 18 / 9, **defaults to 18**) and recency (last 20 / 40 / 60 / All). A muted sample-size caption (`N rounds · N holes`) replaces the old corpus card. Sections: scoring (adapts to filter — real scoring avg when a single hole count is selected, fair per-18 to-par when mixed), per-par averages, GIR/FIR/U&D + putting trio, over-time trend sparklines (scoring, GIR%, putts), score distribution, aggregate driver & approach dispersion (small muted pins), approach-distance histogram (bars split by green-hit/missed via GIR), putting make% by distance, trouble/short-game (**per-round** penalties/chips/sand), and post-round review insights. Logic in `lib/lifetime-stats.ts`; batch reads via `getAll*` in `db/queries.ts`; sparkline in `components/trend-chart.tsx`. |
+| `/round/new` | Modal: course name, date, 9/18, **your bag** (`BagPicker` multi-select; persists globally via `setBag`, pre-filled with all clubs first time). On submit: `createRound` → `router.replace('/round/[id]')`. |
 | `/round/[id]` | The whole round flow (5 vertically-paged sub-pages). Hidden nav header. "Finish" → `/round/[id]/review`. |
 | `/round/[id]/review` | **Built.** 5-question post-round review (most costly / decision rating / common miss / range focus / overall rating), one vertically-paged question each. On submit: `upsertReview` + `setRoundCompletedAt` (first time only) → `/round/[id]/summary`. |
 | `/round/[id]/summary` | **Built.** Read-only round summary: score/to-par card, GIR/FIR/U&D + putting/penalty tiles, scoring-by-par, score distribution bars, drive & approach dispersion targets, putting-by-distance bars, post-round review answers, "Edit round" CTA. |
@@ -170,8 +171,6 @@ Typography: **Fraunces** serif for display/labels/numerals (`fontFamily.serif` /
 
 ## What's not built yet
 
-- **Cross-round dispersion overlay** (e.g., all drives in last 10 rounds on one fairway). The data is captured; only a Stats-tab view is missing.
-- **Lifetime trends** (score / GIR% / FIR% / putts over time). The Stats tab is a placeholder.
 - **Versioned migrations.** Acceptable while pre-launch; add a proper runner before the first ship.
 
-(The per-round summary and post-round review are now **built** — see the routing table.)
+(The per-round summary, post-round review, and the lifetime Stats tab — including cross-round dispersion and over-time trends — are now **built**; see the routing table.)

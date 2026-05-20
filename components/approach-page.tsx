@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { ApproachTarget } from '@/components/approach-target';
-import { ClubPicker } from '@/components/club-picker';
+import { ClubChips } from '@/components/club-chips';
 import type { TargetPin } from '@/components/driver-target';
-import { NumericField } from '@/components/numeric-field';
 import { ThemedText } from '@/components/themed-text';
+import { YardageRuler } from '@/components/yardage-ruler';
+import { CLUB_OPTIONS } from '@/constants/clubs';
 import { colors, radius, spacing } from '@/constants/theme';
-import { updateHole, upsertShot } from '@/db/queries';
+import { getBag, updateHole, upsertShot } from '@/db/queries';
 import type { Hole, Shot } from '@/db/types';
 import { approachResult } from '@/lib/shots';
 
@@ -24,6 +25,13 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) 
   const { width, height } = useWindowDimensions();
   const targetSize = Math.min(320, width - 32, height * 0.5);
   const [position, setPosition] = useState<Position | null>(null);
+  const [bag, setBag] = useState<readonly string[]>(CLUB_OPTIONS);
+
+  useEffect(() => {
+    getBag().then((clubs) => {
+      if (clubs.length > 0) setBag(clubs);
+    });
+  }, []);
 
   useEffect(() => {
     const approach = shotsForRound.find(
@@ -84,10 +92,6 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) 
     <View style={styles.container}>
       <View style={styles.header}>
         <ThemedText type="caption">APPROACH</ThemedText>
-        <ThemedText type="title">
-          Hole {hole.holeNumber}
-          {hole.par != null ? ` · Par ${hole.par}` : ''}
-        </ThemedText>
       </View>
       <View style={styles.targetWrap}>
         <ApproachTarget pins={pins} onTap={handleTap} size={targetSize} />
@@ -106,17 +110,11 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) 
       <View style={styles.form}>
         <View style={styles.formField}>
           <ThemedText type="caption">CLUB</ThemedText>
-          <ClubPicker value={hole.approachClub} onChange={onClubChange} />
+          <ClubChips value={hole.approachClub} onChange={onClubChange} clubs={bag} />
         </View>
         <View style={styles.formField}>
           <ThemedText type="caption">YARDS IN</ThemedText>
-          <NumericField
-            value={hole.approachDistanceYds}
-            onCommit={onYardsCommit}
-            min={0}
-            max={400}
-            placeholder="–"
-          />
+          <YardageRuler value={hole.approachDistanceYds} onCommit={onYardsCommit} max={350} />
         </View>
       </View>
     </View>
@@ -133,7 +131,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
+    paddingTop: 60,
     paddingBottom: 100,
   },
   header: {
@@ -172,11 +170,9 @@ const styles = StyleSheet.create({
     color: colors.accent,
   },
   form: {
-    flexDirection: 'row',
     gap: spacing.md,
   },
   formField: {
-    flex: 1,
     gap: spacing.xs,
   },
 });
