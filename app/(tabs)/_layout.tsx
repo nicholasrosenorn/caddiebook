@@ -3,20 +3,30 @@ import { Pressable } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { colors, spacing } from '@/constants/theme';
+import { colors, fontFamily, spacing } from '@/constants/theme';
 
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.textSecondary,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: {
           backgroundColor: colors.surface,
-          borderTopColor: colors.border,
+          borderTopColor: colors.borderStrong,
+          borderTopWidth: 1,
+        },
+        tabBarLabelStyle: {
+          fontFamily: fontFamily.serif,
+          fontSize: 11,
+          letterSpacing: 0.5,
         },
         headerStyle: { backgroundColor: colors.background },
-        headerTitleStyle: { color: colors.textPrimary, fontWeight: '700' },
+        headerTitleStyle: {
+          color: colors.textPrimary,
+          fontFamily: fontFamily.serifBold,
+          fontSize: 22,
+        },
         headerShadowVisible: false,
         tabBarButton: HapticTab,
       }}>

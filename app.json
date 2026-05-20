@@ -1,20 +1,23 @@
 {
   "expo": {
     "name": "caddy-book",
-    "slug": "caddy-book",
+    "slug": "caddiebook",
     "owner": "nicholasrosenorn",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "caddybook",
+    "scheme": "caddiebook",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.caddybook.app"
+      "bundleIdentifier": "com.caddiebook.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
-      "package": "com.caddybook.app",
+      "package": "com.caddiebook.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -43,11 +46,24 @@
         }
       ],
       "expo-sqlite",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a35af476-a832-4112-ae0c-dc46f9de24ff"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a35af476-a832-4112-ae0c-dc46f9de24ff"
     }
   }
 }

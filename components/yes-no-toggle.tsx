@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, radius, spacing } from '@/constants/theme';
+import { colors, spacing } from '@/constants/theme';
 
 type Value = boolean | null;
 
@@ -31,14 +32,18 @@ export function YesNoToggle({ value, onChange, allowClear = true }: YesNoToggleP
                 onChange(option.value);
               }
             }}
-            style={({ pressed }) => [
-              styles.pill,
-              selected && styles.pillSelected,
-              pressed && !selected && styles.pillPressed,
-            ]}>
-            <ThemedText style={[styles.label, selected && styles.labelSelected]}>
-              {option.label}
-            </ThemedText>
+            style={({ pressed }) => [styles.pill, pressed && !selected && styles.pillPressed]}>
+            <SketchSurface
+              seed={`ynt-${String(option.value)}`}
+              radius={999}
+              fill={selected ? colors.accent : colors.surface}
+              stroke={selected ? colors.accent : colors.borderStrong}
+              grain={selected}
+              style={styles.pillSurface}>
+              <ThemedText style={[styles.label, selected && styles.labelSelected]}>
+                {option.label}
+              </ThemedText>
+            </SketchSurface>
           </Pressable>
         );
       })}
@@ -52,21 +57,17 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   pill: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    minWidth: 64,
-    alignItems: 'center',
+    minWidth: 72,
+    height: 40,
   },
-  pillSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
+  pillSurface: {
+    flex: 1,
+    minWidth: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pillPressed: {
-    backgroundColor: colors.accentMuted,
+    opacity: 0.6,
   },
   label: {
     color: colors.textPrimary,

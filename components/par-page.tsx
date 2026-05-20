@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, radius, spacing } from '@/constants/theme';
+import { colors, fontFamily, spacing } from '@/constants/theme';
 import { updateHole } from '@/db/queries';
 import type { Hole } from '@/db/types';
 
@@ -41,16 +42,23 @@ export function ParPage({ roundId, hole, onChange, onPicked }: Props) {
               onPress={() => handlePick(p)}
               style={({ pressed }) => [
                 styles.parButton,
-                selected && styles.parButtonSelected,
                 pressed && !selected && styles.parButtonPressed,
               ]}>
-              <ThemedText
-                style={[styles.parNumber, selected && styles.parNumberSelected]}>
-                {p}
-              </ThemedText>
-              <ThemedText style={[styles.parWord, selected && styles.parWordSelected]}>
-                Par
-              </ThemedText>
+              <SketchSurface
+                seed={`par-${p}`}
+                radius={16}
+                fill={selected ? colors.accent : colors.surface}
+                stroke={selected ? colors.accent : colors.borderStrong}
+                grain={selected}
+                style={styles.parSurface}>
+                <ThemedText
+                  style={[styles.parNumber, selected && styles.parNumberSelected]}>
+                  {p}
+                </ThemedText>
+                <ThemedText style={[styles.parWord, selected && styles.parWordSelected]}>
+                  Par
+                </ThemedText>
+              </SketchSurface>
             </Pressable>
           );
         })}
@@ -86,24 +94,19 @@ const styles = StyleSheet.create({
   parButton: {
     flex: 1,
     aspectRatio: 1,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+  },
+  parSurface: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
   },
-  parButtonSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
   parButtonPressed: {
-    backgroundColor: colors.accentMuted,
+    opacity: 0.6,
   },
   parNumber: {
+    fontFamily: fontFamily.serifBold,
     fontSize: 56,
-    fontWeight: '700',
     color: colors.textPrimary,
     lineHeight: 60,
   },

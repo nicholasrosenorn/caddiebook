@@ -1,23 +1,16 @@
-import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { ScoreGlyph, type ScoreIndicator } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, radius, spacing } from '@/constants/theme';
-
-type Indicator =
-  | 'doubleCircle'
-  | 'circle'
-  | 'par'
-  | 'square'
-  | 'doubleSquare'
-  | 'tripleSquare'
-  | 'none';
+import { colors, spacing } from '@/constants/theme';
 
 const ROWS: number[][] = [
   [1, 2, 3],
   [4, 5, 6],
   [7, 8, 9],
 ];
+
+const GLYPH = 46;
 
 type Props = {
   par: number | null;
@@ -28,7 +21,7 @@ type Props = {
 export function ScoreGrid({ par, value, onChange }: Props) {
   return (
     <View style={styles.container}>
-      <ThemedText style={styles.label}>Score</ThemedText>
+      <ThemedText type="label" style={styles.label}>Score</ThemedText>
       <View style={styles.grid}>
         {ROWS.map((row, rowIdx) => (
           <View key={rowIdx} style={styles.row}>
@@ -59,7 +52,8 @@ function ScoreCell({
   selected: boolean;
   onPress: () => void;
 }) {
-  const indicator: Indicator = par != null ? getIndicator(n, par) : 'none';
+  const indicator: ScoreIndicator = par != null ? getIndicator(n, par) : 'none';
+  const shapeColor = selected ? colors.accentOn : colors.borderStrong;
   return (
     <Pressable
       onPress={onPress}
@@ -68,15 +62,20 @@ function ScoreCell({
         selected && styles.cellSelected,
         pressed && !selected && styles.cellPressed,
       ]}>
-      <ScoreShape kind={indicator} selected={selected}>
-        <ThemedText
-          style={[styles.scoreNumber, selected && styles.scoreNumberSelected]}>
+      <View style={styles.glyphWrap}>
+        {indicator !== 'none' && indicator !== 'par' && (
+          <View style={StyleSheet.absoluteFill}>
+            <View style={styles.glyphCenter}>
+              <ScoreGlyph kind={indicator} size={GLYPH} color={shapeColor} />
+            </View>
+          </View>
+        )}
+        <ThemedText style={[styles.scoreNumber, selected && styles.scoreNumberSelected]}>
           {n}
         </ThemedText>
-      </ScoreShape>
+      </View>
       {indicator === 'par' && (
-        <ThemedText
-          style={[styles.parLabel, selected && styles.parLabelSelected]}>
+        <ThemedText type="label" style={[styles.parLabel, selected && styles.parLabelSelected]}>
           Par
         </ThemedText>
       )}
@@ -84,7 +83,7 @@ function ScoreCell({
   );
 }
 
-function getIndicator(score: number, par: number): Indicator {
+function getIndicator(score: number, par: number): ScoreIndicator {
   const delta = score - par;
   if (delta <= -2) return 'doubleCircle';
   if (delta === -1) return 'circle';
@@ -94,107 +93,56 @@ function getIndicator(score: number, par: number): Indicator {
   return 'tripleSquare';
 }
 
-function ScoreShape({
-  kind,
-  selected,
-  children,
-}: {
-  kind: Indicator;
-  selected: boolean;
-  children: ReactNode;
-}) {
-  const borderColor = selected ? colors.accentOn : colors.borderStrong;
-
-  const circle = (size: number, inner: ReactNode) => (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        borderWidth: 1.5,
-        borderColor,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
-      {inner}
-    </View>
-  );
-  const square = (size: number, inner: ReactNode) => (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderWidth: 1.5,
-        borderColor,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
-      {inner}
-    </View>
-  );
-
-  switch (kind) {
-    case 'doubleCircle':
-      return circle(40, circle(30, children));
-    case 'circle':
-      return circle(36, children);
-    case 'square':
-      return square(34, children);
-    case 'doubleSquare':
-      return square(40, square(30, children));
-    case 'tripleSquare':
-      return square(44, square(34, square(24, children)));
-    default:
-      return <>{children}</>;
-  }
-}
-
 const styles = StyleSheet.create({
   container: {
     gap: spacing.sm,
   },
   label: {
     fontSize: 15,
-    fontWeight: '500',
     color: colors.textPrimary,
   },
   grid: {
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   row: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: spacing.xs,
   },
   cell: {
     flex: 1,
-    height: 72,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    height: 68,
+    borderRadius: 4,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 1,
   },
   cellSelected: {
     backgroundColor: colors.accent,
-    borderColor: colors.accent,
   },
   cellPressed: {
     backgroundColor: colors.accentMuted,
   },
+  glyphWrap: {
+    width: GLYPH,
+    height: GLYPH,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  glyphCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   scoreNumber: {
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 18,
     color: colors.textPrimary,
-    lineHeight: 20,
+    fontWeight: '600',
   },
   scoreNumberSelected: {
     color: colors.accentOn,
   },
   parLabel: {
     fontSize: 10,
-    fontWeight: '500',
     color: colors.textSecondary,
     lineHeight: 12,
   },

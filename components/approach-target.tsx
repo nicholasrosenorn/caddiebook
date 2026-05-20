@@ -1,15 +1,15 @@
 import { Pressable, StyleSheet, View, type GestureResponderEvent } from 'react-native';
+import Svg, { Circle, G, Line, Path, Polygon } from 'react-native-svg';
 
-import { ThemedText } from '@/components/themed-text';
-import { colors, spacing } from '@/constants/theme';
-import { APPROACH_RINGS } from '@/lib/shots';
 import type { TargetPin } from '@/components/driver-target';
+import { BunkerBlob, CornerDots, Crosshair } from '@/components/sketch';
+import { ThemedText } from '@/components/themed-text';
+import { colors } from '@/constants/theme';
+import { APPROACH_RINGS } from '@/lib/shots';
+import { roughCirclePath, stippleInEllipse } from '@/lib/sketch';
 
 const DEFAULT_SIZE = 280;
-const PIN_SIZE = 14;
-const FLAG_SIZE = 10;
-
-const RING_FILLS = ['#F8FAFC', '#F1F5F9', '#E2E8F0', '#CBD5E1'];
+const PIN_SIZE = 13;
 
 type ApproachTargetProps = {
   pins?: TargetPin[];
@@ -25,75 +25,101 @@ export function ApproachTarget({ pins = [], onTap, size = DEFAULT_SIZE }: Approa
     onTap(clamp(x), clamp(y));
   };
 
-  const ringsLargestFirst = [...APPROACH_RINGS].reverse();
+  const c = size / 2;
+  const greenR = size * 0.205;
+  const grain = stippleInEllipse(c, c, greenR, greenR, 44, 'approach-green-grain');
 
   return (
     <View style={[styles.wrap, { width: size, height: size }]}>
-      <Pressable
-        disabled={!onTap}
-        onPress={handlePress}
-        style={[
-          styles.outer,
-          { width: size, height: size, borderRadius: size / 2 },
-        ]}>
-        {ringsLargestFirst.map((ring, idx) => {
-          const fillIndex = RING_FILLS.length - 1 - idx;
-          const diameter = ring.maxR * 2 * size;
+      <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+        {/* Outer rings (on cream) */}
+        {APPROACH_RINGS.map((ring) => {
+          const r = ring.maxR * size;
+          if (r <= greenR) return null;
           return (
-            <View
-              key={ring.ft}
-              pointerEvents="none"
-              style={[
-                styles.ring,
-                {
-                  width: diameter,
-                  height: diameter,
-                  borderRadius: diameter / 2,
-                  left: size / 2 - diameter / 2,
-                  top: size / 2 - diameter / 2,
-                  backgroundColor: RING_FILLS[fillIndex],
-                },
-              ]}
+            <Path
+              key={`out-${ring.ft}`}
+              d={roughCirclePath(c, c, r, `approach-ring-${ring.ft}`, { jitter: 0.025 })}
+              stroke={colors.borderStrong}
+              strokeWidth={1.2}
+              fill="none"
             />
           );
         })}
 
+        {/* The green */}
+        <Path
+          d={roughCirclePath(c, c, greenR, 'approach-green', { jitter: 0.05 })}
+          fill={colors.accent}
+        />
+        <G>
+          {grain.map((dot, i) => (
+            <Circle key={i} cx={dot.x} cy={dot.y} r={dot.r} fill={colors.accentOn} opacity={0.18} />
+          ))}
+        </G>
+
+        {/* Inner contour rings (faint, drawn over the green) */}
         {APPROACH_RINGS.map((ring) => {
-          const diameter = ring.maxR * 2 * size;
+          const r = ring.maxR * size;
+          if (r > greenR) return null;
           return (
-            <View
-              key={`label-${ring.ft}`}
-              pointerEvents="none"
-              style={[
-                styles.ringLabel,
-                {
-                  left: size / 2 - 18,
-                  top: size / 2 - diameter / 2 - 2,
-                  width: 36,
-                },
-              ]}>
-              <ThemedText type="caption" style={styles.ringLabelText}>
-                {ring.ft} ft
-              </ThemedText>
-            </View>
+            <Path
+              key={`in-${ring.ft}`}
+              d={roughCirclePath(c, c, r, `approach-ring-${ring.ft}`, { jitter: 0.04 })}
+              stroke={colors.accentOn}
+              strokeWidth={1}
+              strokeOpacity={0.3}
+              fill="none"
+            />
           );
         })}
 
-        <View
-          pointerEvents="none"
-          style={[
-            styles.flag,
-            {
-              left: size / 2 - FLAG_SIZE / 2,
-              top: size / 2 - FLAG_SIZE / 2,
-              width: FLAG_SIZE,
-              height: FLAG_SIZE,
-              borderRadius: FLAG_SIZE / 2,
-            },
-          ]}
+        {/* Pin flag */}
+        <Line x1={c} y1={c} x2={c} y2={c - size * 0.14} stroke={colors.accentOn} strokeWidth={1.6} />
+        <Polygon
+          points={`${c},${c - size * 0.14} ${c + size * 0.07},${c - size * 0.115} ${c},${c - size * 0.09}`}
+          fill={colors.accentOn}
         />
-      </Pressable>
+        <Circle cx={c} cy={c} r={2} fill={colors.accentOn} />
+      </Svg>
 
+      {/* Decorative chrome (taps fall through) */}
+      <View style={styles.cornerTL} pointerEvents="none">
+        <CornerDots />
+      </View>
+      <View style={styles.cornerTR} pointerEvents="none">
+        <Crosshair />
+      </View>
+      <View style={styles.bunker} pointerEvents="none">
+        <BunkerBlob width={size * 0.2} height={size * 0.13} seed="approach-bunker" rotation={0.5} />
+      </View>
+
+      {/* Ring labels */}
+      {APPROACH_RINGS.map((ring) => {
+        const r = ring.maxR * size;
+        const overGreen = r <= greenR;
+        return (
+          <View
+            key={`label-${ring.ft}`}
+            pointerEvents="none"
+            style={[styles.ringLabel, { top: c - r - 7, left: c - 18, width: 36 }]}>
+            <ThemedText
+              type="label"
+              style={[styles.ringLabelText, overGreen && styles.ringLabelOver]}>
+              {ring.ft}
+            </ThemedText>
+          </View>
+        );
+      })}
+
+      {/* Tap surface */}
+      <Pressable
+        disabled={!onTap}
+        onPress={handlePress}
+        style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
+      />
+
+      {/* Shot pins */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         {pins.map((pin, i) => (
           <Pin
@@ -141,42 +167,45 @@ function clamp(v: number): number {
 const styles = StyleSheet.create({
   wrap: {
     alignSelf: 'center',
-  },
-  outer: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-    overflow: 'hidden',
     position: 'relative',
   },
-  ring: {
+  cornerTL: {
     position: 'absolute',
+    top: 2,
+    left: 2,
+  },
+  cornerTR: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+  },
+  bunker: {
+    position: 'absolute',
+    bottom: '2%',
+    right: '0%',
   },
   ringLabel: {
     position: 'absolute',
     alignItems: 'center',
-    paddingTop: spacing.xs,
   },
   ringLabelText: {
+    fontSize: 11,
     color: colors.textSecondary,
-    fontWeight: '600',
   },
-  flag: {
-    position: 'absolute',
-    backgroundColor: colors.accent,
-    borderWidth: 2,
-    borderColor: colors.surface,
+  ringLabelOver: {
+    color: colors.accentOn,
+    opacity: 0.7,
   },
   pin: {
     position: 'absolute',
     width: PIN_SIZE,
     height: PIN_SIZE,
     borderRadius: PIN_SIZE / 2,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.accentPressed,
     borderWidth: 2,
-    borderColor: colors.surface,
+    borderColor: colors.accentOn,
   },
   pinMuted: {
-    opacity: 0.55,
+    opacity: 0.45,
   },
 });

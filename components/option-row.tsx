@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, radius, spacing } from '@/constants/theme';
+import { colors, fontFamily, spacing } from '@/constants/theme';
 
 export type OptionRowOption = { value: number; label: string };
 
@@ -33,13 +34,19 @@ export function OptionRow({ label, value, options = COUNT_OPTIONS, onChange }: P
               onPress={() => onChange(selected ? null : opt.value)}
               style={({ pressed }) => [
                 styles.button,
-                selected && styles.buttonSelected,
                 pressed && !selected && styles.buttonPressed,
               ]}>
-              <ThemedText
-                style={[styles.buttonLabel, selected && styles.buttonLabelSelected]}>
-                {opt.label}
-              </ThemedText>
+              <SketchSurface
+                seed={`opt-${label}-${opt.value}`}
+                fill={selected ? colors.accent : colors.surface}
+                stroke={selected ? colors.accent : colors.borderStrong}
+                grain={selected}
+                style={styles.surface}>
+                <ThemedText
+                  style={[styles.buttonLabel, selected && styles.buttonLabelSelected]}>
+                  {opt.label}
+                </ThemedText>
+              </SketchSurface>
             </Pressable>
           );
         })}
@@ -53,8 +60,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   label: {
+    fontFamily: fontFamily.serif,
     fontSize: 15,
-    fontWeight: '500',
     color: colors.textPrimary,
   },
   row: {
@@ -64,19 +71,15 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
     minHeight: 56,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+  },
+  surface: {
+    flex: 1,
+    minHeight: 56,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  buttonSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
   buttonPressed: {
-    backgroundColor: colors.accentMuted,
+    opacity: 0.6,
   },
   buttonLabel: {
     fontSize: 16,

@@ -3,8 +3,9 @@ import { useCallback, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
+import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, radius, spacing } from '@/constants/theme';
+import { colors, fontFamily, spacing } from '@/constants/theme';
 import { deleteRound, getHolesForRound, listRounds } from '@/db/queries';
 import type { Round, RoundSummary } from '@/db/types';
 import { computeRoundSummary, formatPct } from '@/lib/stats';
@@ -58,7 +59,7 @@ export default function RoundsScreen() {
 
   if (rounds.length === 0) {
     return (
-      <Screen>
+      <Screen marks>
         <View style={styles.emptyState}>
           <ThemedText type="subtitle">No rounds yet</ThemedText>
           <ThemedText type="muted" style={styles.emptyCopy}>
@@ -66,8 +67,15 @@ export default function RoundsScreen() {
           </ThemedText>
           <Pressable
             onPress={() => router.push('/round/new')}
-            style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}>
-            <ThemedText style={styles.ctaLabel}>Start your first round</ThemedText>
+            style={({ pressed }) => [styles.ctaWrap, pressed && styles.pressed]}>
+            <SketchSurface
+              seed="empty-cta"
+              fill={colors.accent}
+              stroke={colors.accent}
+              grain
+              style={styles.cta}>
+              <ThemedText style={styles.ctaLabel}>Start your first round</ThemedText>
+            </SketchSurface>
           </Pressable>
         </View>
       </Screen>
@@ -92,7 +100,8 @@ export default function RoundsScreen() {
             }
             onLongPress={() => confirmDelete(item)}
             delayLongPress={400}
-            style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}>
+            style={({ pressed }) => [styles.cardWrap, pressed && styles.pressed]}>
+            <SketchSurface seed={`round-${item.id}`} style={styles.card}>
             <View style={styles.cardTop}>
               <View style={styles.cardTitle}>
                 <ThemedText type="subtitle" numberOfLines={1}>
@@ -116,6 +125,7 @@ export default function RoundsScreen() {
                 value={item.summary.totalPutts > 0 ? String(item.summary.totalPutts) : '—'}
               />
             </View>
+            </SketchSurface>
           </Pressable>
         )}
       />
@@ -151,19 +161,22 @@ const styles = StyleSheet.create({
   emptyCopy: {
     textAlign: 'center',
   },
-  cta: {
+  ctaWrap: {
     marginTop: spacing.md,
-    backgroundColor: colors.accent,
+  },
+  cta: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  ctaPressed: {
-    backgroundColor: colors.accentPressed,
+  pressed: {
+    opacity: 0.6,
   },
   ctaLabel: {
     color: colors.accentOn,
-    fontWeight: '600',
+    fontFamily: fontFamily.serif,
+    fontSize: 16,
   },
   list: {
     paddingHorizontal: spacing.md,
@@ -172,16 +185,12 @@ const styles = StyleSheet.create({
   separator: {
     height: spacing.md,
   },
+  cardWrap: {
+    minHeight: 100,
+  },
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.md,
     gap: spacing.md,
-  },
-  cardPressed: {
-    backgroundColor: colors.accentMuted,
   },
   cardTop: {
     flexDirection: 'row',
@@ -203,8 +212,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   statValue: {
+    fontFamily: fontFamily.serifBold,
     fontSize: 18,
-    fontWeight: '600',
     color: colors.textPrimary,
   },
 });

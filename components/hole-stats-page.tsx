@@ -4,8 +4,9 @@ import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { BinaryChoice } from '@/components/binary-choice';
 import { OptionRow } from '@/components/option-row';
 import { ScoreGrid } from '@/components/score-grid';
+import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, radius, spacing } from '@/constants/theme';
+import { colors, fontFamily, spacing } from '@/constants/theme';
 import { updateHole } from '@/db/queries';
 import type { Hole } from '@/db/types';
 import { computeRoundSummary, deriveGir, formatPct, resolveUpAndDown } from '@/lib/stats';
@@ -64,7 +65,7 @@ export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
         </ThemedText>
       </View>
 
-      <View style={styles.summary}>
+      <SketchSurface seed="stats-summary" style={styles.summary}>
         <SummaryStat
           label="Score"
           value={summary.holesPlayed > 0 ? String(summary.totalScore) : '—'}
@@ -76,7 +77,7 @@ export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
         <SummaryStat label="GIR" value={formatPct(summary.girPct)} />
         <SummaryStat label="FIR" value={formatPct(summary.firPct)} />
         <SummaryStat label="U&D" value={formatPct(summary.udPct)} />
-      </View>
+      </SketchSurface>
 
       <ScoreGrid
         par={hole.par}
@@ -144,15 +145,17 @@ export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
 
       <View style={styles.notesWrap}>
         <ThemedText style={styles.notesLabel}>Notes</ThemedText>
-        <TextInput
-          value={notesDraft}
-          onChangeText={setNotesDraft}
-          onBlur={commitNotes}
-          multiline
-          placeholder="Anything to remember about this hole…"
-          placeholderTextColor={colors.textMuted}
-          style={styles.notesInput}
-        />
+        <SketchSurface seed="stats-notes" style={styles.notesSurface}>
+          <TextInput
+            value={notesDraft}
+            onChangeText={setNotesDraft}
+            onBlur={commitNotes}
+            multiline
+            placeholder="Anything to remember about this hole…"
+            placeholderTextColor={colors.textMuted}
+            style={styles.notesInput}
+          />
+        </SketchSurface>
       </View>
     </ScrollView>
   );
@@ -185,10 +188,6 @@ const styles = StyleSheet.create({
   },
   summary: {
     flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
     padding: spacing.md,
     gap: spacing.sm,
   },
@@ -198,23 +197,22 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   summaryValue: {
+    fontFamily: fontFamily.serifBold,
     fontSize: 18,
-    fontWeight: '600',
     color: colors.textPrimary,
   },
   notesWrap: {
     gap: spacing.sm,
   },
   notesLabel: {
+    fontFamily: fontFamily.serif,
     fontSize: 15,
-    fontWeight: '500',
     color: colors.textPrimary,
   },
+  notesSurface: {
+    minHeight: 88,
+  },
   notesInput: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     fontSize: 16,

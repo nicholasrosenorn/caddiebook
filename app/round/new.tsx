@@ -12,8 +12,9 @@ import {
 } from 'react-native';
 
 import { Screen } from '@/components/screen';
+import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, radius, spacing } from '@/constants/theme';
+import { colors, fontFamily, spacing } from '@/constants/theme';
 import { createRound } from '@/db/queries';
 
 const HOLE_OPTIONS = [9, 18] as const;
@@ -51,15 +52,17 @@ export default function NewRoundScreen() {
         style={styles.flex}>
         <View style={styles.field}>
           <ThemedText type="caption">COURSE NAME</ThemedText>
-          <TextInput
-            value={courseName}
-            onChangeText={setCourseName}
-            placeholder="e.g. Pebble Beach"
-            placeholderTextColor={colors.textMuted}
-            style={styles.input}
-            autoFocus
-            returnKeyType="done"
-          />
+          <SketchSurface seed="new-course" radius={8} style={styles.inputSurface}>
+            <TextInput
+              value={courseName}
+              onChangeText={setCourseName}
+              placeholder="e.g. Pebble Beach"
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+              autoFocus
+              returnKeyType="done"
+            />
+          </SketchSurface>
         </View>
 
         <View style={styles.field}>
@@ -78,8 +81,10 @@ export default function NewRoundScreen() {
             </View>
           ) : (
             <>
-              <Pressable onPress={() => setAndroidPickerOpen(true)} style={styles.input}>
-                <ThemedText>{date.toLocaleDateString()}</ThemedText>
+              <Pressable onPress={() => setAndroidPickerOpen(true)}>
+                <SketchSurface seed="new-date" radius={8} style={styles.input}>
+                  <ThemedText>{date.toLocaleDateString()}</ThemedText>
+                </SketchSurface>
               </Pressable>
               {androidPickerOpen && (
                 <DateTimePicker
@@ -106,14 +111,18 @@ export default function NewRoundScreen() {
                 <Pressable
                   key={n}
                   onPress={() => setHoleCount(n)}
-                  style={({ pressed }) => [
-                    styles.segment,
-                    selected && styles.segmentSelected,
-                    pressed && !selected && styles.segmentPressed,
-                  ]}>
-                  <ThemedText style={selected ? styles.segmentLabelSelected : undefined}>
-                    {n}
-                  </ThemedText>
+                  style={({ pressed }) => [styles.segment, pressed && !selected && styles.pressed]}>
+                  <SketchSurface
+                    seed={`new-holes-${n}`}
+                    radius={8}
+                    fill={selected ? colors.accent : colors.surface}
+                    stroke={selected ? colors.accent : colors.borderStrong}
+                    grain={selected}
+                    style={styles.segmentSurface}>
+                    <ThemedText style={selected ? styles.segmentLabelSelected : undefined}>
+                      {n}
+                    </ThemedText>
+                  </SketchSurface>
                 </Pressable>
               );
             })}
@@ -124,13 +133,20 @@ export default function NewRoundScreen() {
           disabled={!canSubmit}
           onPress={handleSubmit}
           style={({ pressed }) => [
-            styles.cta,
+            styles.ctaWrap,
             !canSubmit && styles.ctaDisabled,
-            pressed && canSubmit && styles.ctaPressed,
+            pressed && canSubmit && styles.pressed,
           ]}>
-          <ThemedText style={styles.ctaLabel}>
-            {submitting ? 'Starting…' : 'Start round'}
-          </ThemedText>
+          <SketchSurface
+            seed="new-cta"
+            fill={colors.accent}
+            stroke={colors.accent}
+            grain
+            style={styles.cta}>
+            <ThemedText style={styles.ctaLabel}>
+              {submitting ? 'Starting…' : 'Start round'}
+            </ThemedText>
+          </SketchSurface>
         </Pressable>
       </KeyboardAvoidingView>
     </Screen>
@@ -150,11 +166,10 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     gap: spacing.xs,
   },
+  inputSurface: {
+    minHeight: 48,
+  },
   input: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     fontSize: 16,
@@ -169,43 +184,41 @@ const styles = StyleSheet.create({
   },
   segmented: {
     flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
+    gap: spacing.sm,
   },
   segment: {
     flex: 1,
+    minHeight: 52,
+  },
+  segmentSurface: {
+    flex: 1,
+    minHeight: 52,
     alignItems: 'center',
-    paddingVertical: spacing.md,
+    justifyContent: 'center',
   },
-  segmentSelected: {
-    backgroundColor: colors.accent,
-  },
-  segmentPressed: {
-    backgroundColor: colors.accentMuted,
+  pressed: {
+    opacity: 0.6,
   },
   segmentLabelSelected: {
     color: colors.accentOn,
-    fontWeight: '600',
+    fontFamily: fontFamily.serif,
+  },
+  ctaWrap: {
+    marginTop: spacing.xl,
+    minHeight: 52,
   },
   cta: {
-    marginTop: spacing.xl,
-    backgroundColor: colors.accent,
     paddingVertical: spacing.md,
-    borderRadius: radius.md,
     alignItems: 'center',
-  },
-  ctaPressed: {
-    backgroundColor: colors.accentPressed,
+    justifyContent: 'center',
+    minHeight: 52,
   },
   ctaDisabled: {
     opacity: 0.5,
   },
   ctaLabel: {
     color: colors.accentOn,
-    fontWeight: '600',
+    fontFamily: fontFamily.serif,
     fontSize: 16,
   },
 });

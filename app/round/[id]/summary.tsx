@@ -6,9 +6,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApproachTarget } from '@/components/approach-target';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
 import { Screen } from '@/components/screen';
+import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { colors, radius, spacing } from '@/constants/theme';
+import { colors, fontFamily, spacing } from '@/constants/theme';
 import {
   getHolesForRound,
   getPuttsForRound,
@@ -113,7 +114,7 @@ export default function SummaryScreen() {
           ) : null}
         </View>
 
-        <View style={styles.scoreCard}>
+        <SketchSurface seed="summary-score" style={styles.scoreCard}>
           <View style={styles.scoreCardCol}>
             <ThemedText type="caption">SCORE</ThemedText>
             <ThemedText style={styles.bigScore}>
@@ -135,7 +136,7 @@ export default function SummaryScreen() {
               <ThemedText style={styles.bigScoreSuffix}>/{round.holeCount}</ThemedText>
             </ThemedText>
           </View>
-        </View>
+        </SketchSurface>
 
         <View style={styles.statGrid}>
           <View style={styles.statRow}>
@@ -205,8 +206,15 @@ export default function SummaryScreen() {
 
         <Pressable
           onPress={() => router.push(`/round/${id}` as any)}
-          style={({ pressed }) => [styles.editCta, pressed && styles.editCtaPressed]}>
-          <ThemedText style={styles.editCtaLabel}>Edit round</ThemedText>
+          style={({ pressed }) => [styles.editCtaWrap, pressed && styles.editCtaPressed]}>
+          <SketchSurface
+            seed="summary-edit"
+            fill={colors.accent}
+            stroke={colors.accent}
+            grain
+            style={styles.editCta}>
+            <ThemedText style={styles.editCtaLabel}>Edit round</ThemedText>
+          </SketchSurface>
         </Pressable>
       </ScrollView>
 
@@ -237,27 +245,27 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.statTile}>
+    <SketchSurface seed={`summary-stat-${label}`} style={styles.statTile}>
       <ThemedText type="caption" numberOfLines={1}>
         {label.toUpperCase()}
       </ThemedText>
       <ThemedText style={styles.statTileValue} numberOfLines={1}>
         {value}
       </ThemedText>
-    </View>
+    </SketchSurface>
   );
 }
 
 function PerParTile({ label, value }: { label: string; value: number | null }) {
   return (
-    <View style={styles.perParTile}>
+    <SketchSurface seed={`summary-perpar-${label}`} style={styles.perParTile}>
       <ThemedText type="caption" numberOfLines={1}>
         {label.toUpperCase()}
       </ThemedText>
       <ThemedText style={styles.perParValue} numberOfLines={1}>
         {value != null ? value.toFixed(1) : '—'}
       </ThemedText>
-    </View>
+    </SketchSurface>
   );
 }
 
@@ -288,7 +296,11 @@ function ScoreDistributionBars({
         return (
           <View key={row.key} style={styles.distRowItem}>
             <ThemedText style={styles.distRowLabel}>{row.label}</ThemedText>
-            <View style={styles.distBarTrack}>
+            <SketchSurface
+              seed={`dist-${row.key}`}
+              radius={7}
+              fill={colors.surfaceAlt}
+              style={styles.distBarTrack}>
               <View
                 style={[
                   styles.distBarFill,
@@ -300,7 +312,7 @@ function ScoreDistributionBars({
                 ]}
               />
               <View style={{ flex: Math.max(0, 1 - frac) }} />
-            </View>
+            </SketchSurface>
             <ThemedText type="muted" style={styles.distRowCount}>
               {count}
             </ThemedText>
@@ -332,7 +344,11 @@ function PuttingDistribution({ putts }: { putts: Putt[] }) {
         return (
           <View key={b.ft} style={styles.puttRow}>
             <ThemedText style={styles.puttLabel}>{b.label}</ThemedText>
-            <View style={styles.puttBarTrack}>
+            <SketchSurface
+              seed={`putt-${b.ft}`}
+              radius={7}
+              fill={colors.surfaceAlt}
+              style={styles.puttBarTrack}>
               <View
                 style={[
                   styles.puttBarMake,
@@ -346,7 +362,7 @@ function PuttingDistribution({ putts }: { putts: Putt[] }) {
                 ]}
               />
               <View style={{ flex: Math.max(0, 1 - makesPct - missesPct) }} />
-            </View>
+            </SketchSurface>
             <ThemedText type="muted" style={styles.puttCounts}>
               {b.makes}/{b.total}
             </ThemedText>
@@ -394,7 +410,7 @@ function ReviewAnswers({ review }: { review: PostRoundReview }) {
     },
   ];
   return (
-    <View style={styles.reviewCard}>
+    <SketchSurface seed="summary-review" style={styles.reviewCard}>
       {rows.map((row, i) => (
         <View
           key={row.question}
@@ -411,17 +427,17 @@ function ReviewAnswers({ review }: { review: PostRoundReview }) {
           </ThemedText>
         </View>
       ))}
-    </View>
+    </SketchSurface>
   );
 }
 
 function NoReview() {
   return (
-    <View style={styles.reviewCard}>
+    <SketchSurface seed="summary-noreview" style={styles.reviewCard}>
       <View style={styles.reviewRow}>
         <ThemedText type="muted">No review yet. Finish the round to record one.</ThemedText>
       </View>
-    </View>
+    </SketchSurface>
   );
 }
 
@@ -450,10 +466,6 @@ const styles = StyleSheet.create({
   scoreCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
   },
@@ -465,18 +477,18 @@ const styles = StyleSheet.create({
   scoreCardDivider: {
     width: 1,
     alignSelf: 'stretch',
-    backgroundColor: colors.border,
+    backgroundColor: colors.borderStrong,
     marginVertical: spacing.xs,
   },
   bigScore: {
+    fontFamily: fontFamily.serifBold,
     fontSize: 36,
-    fontWeight: '700',
     color: colors.textPrimary,
     lineHeight: 40,
   },
   bigScoreSuffix: {
+    fontFamily: fontFamily.serif,
     fontSize: 18,
-    fontWeight: '500',
     color: colors.textSecondary,
   },
   statGrid: {
@@ -489,18 +501,15 @@ const styles = StyleSheet.create({
   statTile: {
     flex: 1,
     minWidth: 0,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    minHeight: 64,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.sm,
     gap: 4,
     alignItems: 'center',
   },
   statTileValue: {
+    fontFamily: fontFamily.serifBold,
     fontSize: 22,
-    fontWeight: '700',
     color: colors.textPrimary,
   },
   perParRow: {
@@ -510,18 +519,15 @@ const styles = StyleSheet.create({
   perParTile: {
     flex: 1,
     minWidth: 0,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    minHeight: 64,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.sm,
     alignItems: 'center',
     gap: 4,
   },
   perParValue: {
+    fontFamily: fontFamily.serifBold,
     fontSize: 22,
-    fontWeight: '700',
     color: colors.textPrimary,
   },
   section: {
@@ -540,15 +546,14 @@ const styles = StyleSheet.create({
   },
   distRowLabel: {
     width: 64,
+    fontFamily: fontFamily.serif,
     fontSize: 14,
-    fontWeight: '500',
     color: colors.textPrimary,
   },
   distBarTrack: {
     flex: 1,
-    height: 14,
+    height: 16,
     flexDirection: 'row',
-    backgroundColor: colors.surfaceAlt,
     borderRadius: 7,
     overflow: 'hidden',
   },
@@ -576,15 +581,14 @@ const styles = StyleSheet.create({
   },
   puttLabel: {
     width: 64,
+    fontFamily: fontFamily.serif,
     fontSize: 14,
-    fontWeight: '500',
     color: colors.textPrimary,
   },
   puttBarTrack: {
     flex: 1,
-    height: 14,
+    height: 16,
     flexDirection: 'row',
-    backgroundColor: colors.surfaceAlt,
     borderRadius: 7,
     overflow: 'hidden',
   },
@@ -616,11 +620,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   reviewCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
+    paddingHorizontal: spacing.xs,
   },
   reviewRow: {
     flexDirection: 'row',
@@ -652,22 +652,24 @@ const styles = StyleSheet.create({
   reviewAnswerRating: {
     color: colors.accent,
   },
-  editCta: {
+  editCtaWrap: {
     marginTop: spacing.md,
+    minHeight: 52,
+  },
+  editCta: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    borderRadius: radius.md,
-    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 52,
   },
   editCtaPressed: {
-    backgroundColor: colors.accentPressed,
+    opacity: 0.6,
   },
   editCtaLabel: {
     color: colors.accentOn,
+    fontFamily: fontFamily.serif,
     fontSize: 17,
-    fontWeight: '600',
   },
   closeButton: {
     position: 'absolute',

@@ -1,8 +1,9 @@
 import { StyleSheet, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
+import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, radius, spacing } from '@/constants/theme';
+import { spacing } from '@/constants/theme';
 
 const PLACEHOLDER_METRICS = [
   { label: 'Avg Score', value: '—' },
@@ -14,7 +15,7 @@ const PLACEHOLDER_METRICS = [
 
 export default function StatsScreen() {
   return (
-    <Screen>
+    <Screen marks>
       <View style={styles.header}>
         <ThemedText type="title">Stats</ThemedText>
         <ThemedText type="muted">Lifetime trends across all rounds</ThemedText>
@@ -22,12 +23,12 @@ export default function StatsScreen() {
 
       <View style={styles.grid}>
         {PLACEHOLDER_METRICS.map((metric) => (
-          <View key={metric.label} style={styles.card}>
+          <SketchSurface key={metric.label} seed={`stat-${metric.label}`} style={styles.card}>
             <ThemedText type="caption">{metric.label.toUpperCase()}</ThemedText>
             <ThemedText type="title" style={styles.value}>
               {metric.value}
             </ThemedText>
-          </View>
+          </SketchSurface>
         ))}
       </View>
     </Screen>
@@ -48,10 +49,7 @@ const styles = StyleSheet.create({
   card: {
     flexBasis: '47%',
     flexGrow: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    minHeight: 88,
     padding: spacing.md,
     gap: spacing.xs,
   },

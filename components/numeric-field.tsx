@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, TextInput, type TextInputProps } from 'react-native';
+import { StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 
-import { colors, radius, spacing } from '@/constants/theme';
+import { SketchSurface } from '@/components/sketch';
+import { colors, spacing } from '@/constants/theme';
 
 type NumericFieldProps = Omit<TextInputProps, 'value' | 'onChangeText' | 'onBlur'> & {
   value: number | null;
@@ -47,30 +48,33 @@ export function NumericField({
   };
 
   return (
-    <TextInput
-      keyboardType="number-pad"
-      returnKeyType="done"
-      value={text}
-      onChangeText={(t) => setText(t.replace(/[^0-9]/g, ''))}
-      onBlur={commit}
-      onSubmitEditing={commit}
-      style={[
-        styles.input,
-        { textAlign: align, width },
-        style,
-      ]}
-      placeholderTextColor={colors.textMuted}
-      {...rest}
-    />
+    <SketchSurface seed="numeric-field" radius={8} style={[styles.surface, { width }]}>
+      <View style={styles.inner}>
+        <TextInput
+          keyboardType="number-pad"
+          returnKeyType="done"
+          value={text}
+          onChangeText={(t) => setText(t.replace(/[^0-9]/g, ''))}
+          onBlur={commit}
+          onSubmitEditing={commit}
+          style={[styles.input, { textAlign: align }, style]}
+          placeholderTextColor={colors.textMuted}
+          {...rest}
+        />
+      </View>
+    </SketchSurface>
   );
 }
 
 const styles = StyleSheet.create({
+  surface: {
+    minHeight: 40,
+  },
+  inner: {
+    flex: 1,
+    justifyContent: 'center',
+  },
   input: {
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.sm,
     fontSize: 16,

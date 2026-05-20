@@ -11,9 +11,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Screen } from '@/components/screen';
+import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { colors, radius, spacing } from '@/constants/theme';
+import { colors, fontFamily, spacing } from '@/constants/theme';
 import { getReview, setRoundCompletedAt, upsertReview } from '@/db/queries';
 import type { CommonMiss, MostCostly, RangeFocus } from '@/db/types';
 import {
@@ -225,14 +226,21 @@ export default function ReviewScreen() {
                         !!rangeFocus &&
                         overallRating != null;
                       return [
-                        styles.primaryCta,
+                        styles.primaryCtaWrap,
                         !ready && styles.primaryCtaDisabled,
-                        pressed && ready && styles.primaryCtaPressed,
+                        pressed && ready && styles.pressed,
                       ];
                     }}>
-                    <ThemedText style={styles.primaryCtaLabel}>
-                      {hadExistingReview ? 'Save review' : 'Finish round'}
-                    </ThemedText>
+                    <SketchSurface
+                      seed="review-submit"
+                      fill={colors.accent}
+                      stroke={colors.accent}
+                      grain
+                      style={styles.primaryCta}>
+                      <ThemedText style={styles.primaryCtaLabel}>
+                        {hadExistingReview ? 'Save review' : 'Finish round'}
+                      </ThemedText>
+                    </SketchSurface>
                   </Pressable>
                 </QuestionPage>
               </ScrollView>
@@ -286,7 +294,9 @@ function QuestionPage({
             accessibilityRole="button"
             accessibilityLabel={`Back to question ${index} of ${total}`}
             style={({ pressed }) => [styles.backChevron, pressed && styles.backChevronPressed]}>
-            <ThemedText style={styles.backChevronLabel}>‹</ThemedText>
+            <SketchSurface seed="review-back" radius={18} style={styles.backChevronSurface}>
+              <ThemedText style={styles.backChevronLabel}>‹</ThemedText>
+            </SketchSurface>
           </Pressable>
         ) : (
           <View style={styles.backChevronPlaceholder} />
@@ -320,15 +330,18 @@ function ChipList<T extends string>({
           <Pressable
             key={opt.value}
             onPress={() => onChange(opt.value)}
-            style={({ pressed }) => [
-              styles.chip,
-              selected && styles.chipSelected,
-              pressed && !selected && styles.chipPressed,
-            ]}>
-            <ThemedText
-              style={[styles.chipLabel, selected && styles.chipLabelSelected]}>
-              {opt.label}
-            </ThemedText>
+            style={({ pressed }) => [styles.chip, pressed && !selected && styles.pressed]}>
+            <SketchSurface
+              seed={`review-chip-${opt.value}`}
+              fill={selected ? colors.accent : colors.surface}
+              stroke={selected ? colors.accent : colors.borderStrong}
+              grain={selected}
+              style={styles.chipSurface}>
+              <ThemedText
+                style={[styles.chipLabel, selected && styles.chipLabelSelected]}>
+                {opt.label}
+              </ThemedText>
+            </SketchSurface>
           </Pressable>
         );
       })}
@@ -351,15 +364,18 @@ function RatingGrid({
       <Pressable
         key={n}
         onPress={() => onChange(n)}
-        style={({ pressed }) => [
-          styles.ratingTile,
-          selected && styles.ratingTileSelected,
-          pressed && !selected && styles.ratingTilePressed,
-        ]}>
-        <ThemedText
-          style={[styles.ratingValue, selected && styles.ratingValueSelected]}>
-          {n}
-        </ThemedText>
+        style={({ pressed }) => [styles.ratingTile, pressed && !selected && styles.pressed]}>
+        <SketchSurface
+          seed={`review-rating-${n}`}
+          fill={selected ? colors.accent : colors.surface}
+          stroke={selected ? colors.accent : colors.borderStrong}
+          grain={selected}
+          style={styles.ratingTileSurface}>
+          <ThemedText
+            style={[styles.ratingValue, selected && styles.ratingValueSelected]}>
+            {n}
+          </ThemedText>
+        </SketchSurface>
       </Pressable>
     );
   };
@@ -402,15 +418,18 @@ const styles = StyleSheet.create({
   backChevron: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+  },
+  backChevronSurface: {
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   backChevronPressed: {
-    backgroundColor: colors.accentMuted,
+    opacity: 0.6,
+  },
+  pressed: {
+    opacity: 0.6,
   },
   backChevronPlaceholder: {
     width: 36,
@@ -438,24 +457,17 @@ const styles = StyleSheet.create({
   },
   chip: {
     minHeight: 56,
+  },
+  chipSurface: {
+    flex: 1,
+    minHeight: 56,
     paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chipSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  chipPressed: {
-    backgroundColor: colors.accentMuted,
-  },
   chipLabel: {
+    fontFamily: fontFamily.serif,
     fontSize: 17,
-    fontWeight: '600',
     color: colors.textPrimary,
   },
   chipLabelSelected: {
@@ -471,47 +483,38 @@ const styles = StyleSheet.create({
   ratingTile: {
     flex: 1,
     aspectRatio: 1,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+  },
+  ratingTileSurface: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ratingTileSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
-  ratingTilePressed: {
-    backgroundColor: colors.accentMuted,
-  },
   ratingValue: {
+    fontFamily: fontFamily.serifBold,
     fontSize: 22,
-    fontWeight: '700',
     color: colors.textPrimary,
   },
   ratingValueSelected: {
     color: colors.accentOn,
   },
-  primaryCta: {
+  primaryCtaWrap: {
     marginTop: spacing.md,
+    minHeight: 52,
+  },
+  primaryCta: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    borderRadius: radius.md,
-    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  primaryCtaPressed: {
-    backgroundColor: colors.accentPressed,
+    minHeight: 52,
   },
   primaryCtaDisabled: {
-    backgroundColor: colors.border,
+    opacity: 0.5,
   },
   primaryCtaLabel: {
     color: colors.accentOn,
+    fontFamily: fontFamily.serif,
     fontSize: 17,
-    fontWeight: '600',
   },
   closeButton: {
     position: 'absolute',

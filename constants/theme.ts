@@ -1,23 +1,23 @@
 import { Platform, TextStyle } from 'react-native';
 
 export const colors = {
-  background: '#F8FAFC',
-  surface: '#FFFFFF',
-  surfaceAlt: '#F1F5F9',
-  border: '#E2E8F0',
-  borderStrong: '#CBD5E1',
-  textPrimary: '#0F172A',
-  textSecondary: '#475569',
-  textMuted: '#94A3B8',
-  accent: '#059669',
-  accentPressed: '#047857',
-  accentMuted: '#05966914',
-  accentSoft: '#D1FAE5',
-  accentOn: '#FFFFFF',
-  danger: '#DC2626',
-  warning: '#F59E0B',
-  info: '#0EA5E9',
-};
+  background: '#F1EBDC',
+  surface: '#F7F1E2',
+  surfaceAlt: '#EBE3CC',
+  border: '#D9CFB5',
+  borderStrong: '#B7A98A',
+  textPrimary: '#1A1A1A',
+  textSecondary: '#5A5346',
+  textMuted: '#8E8674',
+  accent: '#1B4D3E',
+  accentPressed: '#143A2F',
+  accentMuted: '#1B4D3E14',
+  accentSoft: '#D7DFD3',
+  accentOn: '#F1EBDC',
+  danger: '#9B3B2E',
+  warning: '#B58A2A',
+  info: '#4A6B7A',
+} as const;
 
 export const spacing = {
   xs: 4,
@@ -26,25 +26,72 @@ export const spacing = {
   lg: 24,
   xl: 32,
   xxl: 48,
-};
+} as const;
 
 export const radius = {
   sm: 6,
   md: 12,
   lg: 20,
   pill: 999,
+} as const;
+
+export const fontFamily = {
+  sans: Platform.select({
+    ios: 'System',
+    android: 'sans-serif',
+    default: 'system-ui',
+  })!,
+  serif: 'Fraunces_500Medium',
+  serifBold: 'Fraunces_700Bold',
 };
 
 export const typography = {
-  title: { fontSize: 28, fontWeight: '700', lineHeight: 34, color: colors.textPrimary } satisfies TextStyle,
-  subtitle: { fontSize: 18, fontWeight: '600', lineHeight: 24, color: colors.textPrimary } satisfies TextStyle,
-  body: { fontSize: 16, fontWeight: '400', lineHeight: 22, color: colors.textPrimary } satisfies TextStyle,
-  bodyMuted: { fontSize: 16, fontWeight: '400', lineHeight: 22, color: colors.textSecondary } satisfies TextStyle,
-  caption: { fontSize: 12, fontWeight: '500', lineHeight: 16, color: colors.textMuted } satisfies TextStyle,
-};
-
-export const fontFamily = Platform.select({
-  ios: 'System',
-  android: 'sans-serif',
-  default: 'system-ui',
-});
+  title: {
+    fontFamily: fontFamily.serifBold,
+    fontSize: 30,
+    lineHeight: 36,
+    color: colors.textPrimary,
+    letterSpacing: -0.2,
+  } satisfies TextStyle,
+  subtitle: {
+    fontFamily: fontFamily.serif,
+    fontSize: 20,
+    lineHeight: 26,
+    color: colors.textPrimary,
+  } satisfies TextStyle,
+  body: {
+    fontFamily: fontFamily.sans,
+    fontSize: 16,
+    fontWeight: '400',
+    lineHeight: 22,
+    color: colors.textPrimary,
+  } satisfies TextStyle,
+  bodyMuted: {
+    fontFamily: fontFamily.sans,
+    fontSize: 16,
+    fontWeight: '400',
+    lineHeight: 22,
+    color: colors.textSecondary,
+  } satisfies TextStyle,
+  caption: {
+    fontFamily: fontFamily.sans,
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 14,
+    color: colors.textMuted,
+    letterSpacing: 1.4,
+  } satisfies TextStyle,
+  label: {
+    fontFamily: fontFamily.serif,
+    fontSize: 13,
+    lineHeight: 16,
+    color: colors.textSecondary,
+    letterSpacing: 0.3,
+  } satisfies TextStyle,
+  display: {
+    fontFamily: fontFamily.serifBold,
+    fontSize: 56,
+    lineHeight: 60,
+    color: colors.textPrimary,
+  } satisfies TextStyle,
+} as const;

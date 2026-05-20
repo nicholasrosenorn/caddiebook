@@ -1,10 +1,15 @@
+import {
+  Fraunces_500Medium,
+  Fraunces_700Bold,
+  useFonts,
+} from '@expo-google-fonts/fraunces';
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 
-import { colors } from '@/constants/theme';
+import { colors, fontFamily } from '@/constants/theme';
 import { initDb } from '@/db/client';
 
 const navigationTheme = {
@@ -26,6 +31,10 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
+  const [fontsLoaded] = useFonts({
+    Fraunces_500Medium,
+    Fraunces_700Bold,
+  });
 
   useEffect(() => {
     initDb()
@@ -35,7 +44,7 @@ export default function RootLayout() {
       .finally(() => setReady(true));
   }, []);
 
-  if (!ready) {
+  if (!ready || !fontsLoaded) {
     return null;
   }
 
@@ -44,7 +53,7 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: colors.background },
-          headerTitleStyle: { color: colors.textPrimary },
+          headerTitleStyle: { color: colors.textPrimary, fontFamily: fontFamily.serifBold },
           headerTintColor: colors.accent,
           contentStyle: { backgroundColor: colors.background },
         }}>

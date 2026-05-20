@@ -1,8 +1,9 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { colors, radius, spacing } from '@/constants/theme';
+import { colors, fontFamily, spacing } from '@/constants/theme';
 
 type Props = {
   label: string;
@@ -21,29 +22,35 @@ export function BinaryChoice({ label, hint, value, onChange }: Props) {
       <View style={styles.row}>
         <Pressable
           onPress={() => onChange(value === true ? null : true)}
-          style={({ pressed }) => [
-            styles.button,
-            value === true && styles.buttonSelected,
-            pressed && value !== true && styles.buttonPressed,
-          ]}>
-          <IconSymbol
-            name="checkmark"
-            size={22}
-            color={value === true ? colors.accentOn : colors.textPrimary}
-          />
+          style={({ pressed }) => [styles.button, pressed && value !== true && styles.buttonPressed]}>
+          <SketchSurface
+            seed={`bin-${label}-yes`}
+            fill={value === true ? colors.accent : colors.surface}
+            stroke={value === true ? colors.accent : colors.borderStrong}
+            grain={value === true}
+            style={styles.surface}>
+            <IconSymbol
+              name="checkmark"
+              size={22}
+              color={value === true ? colors.accentOn : colors.textPrimary}
+            />
+          </SketchSurface>
         </Pressable>
         <Pressable
           onPress={() => onChange(value === false ? null : false)}
-          style={({ pressed }) => [
-            styles.button,
-            value === false && styles.buttonSelected,
-            pressed && value !== false && styles.buttonPressed,
-          ]}>
-          <IconSymbol
-            name="xmark"
-            size={22}
-            color={value === false ? colors.accentOn : colors.textPrimary}
-          />
+          style={({ pressed }) => [styles.button, pressed && value !== false && styles.buttonPressed]}>
+          <SketchSurface
+            seed={`bin-${label}-no`}
+            fill={value === false ? colors.accent : colors.surface}
+            stroke={value === false ? colors.accent : colors.borderStrong}
+            grain={value === false}
+            style={styles.surface}>
+            <IconSymbol
+              name="xmark"
+              size={22}
+              color={value === false ? colors.accentOn : colors.textPrimary}
+            />
+          </SketchSurface>
         </Pressable>
       </View>
     </View>
@@ -58,8 +65,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   label: {
+    fontFamily: fontFamily.serif,
     fontSize: 15,
-    fontWeight: '500',
     color: colors.textPrimary,
   },
   row: {
@@ -69,18 +76,14 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
     height: 52,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+  },
+  surface: {
+    flex: 1,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  buttonSelected: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
-  },
   buttonPressed: {
-    backgroundColor: colors.accentMuted,
+    opacity: 0.6,
   },
 });

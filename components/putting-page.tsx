@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
-import { colors, spacing } from '@/constants/theme';
+import { colors, fontFamily, spacing } from '@/constants/theme';
 import { createPutt, deletePutt } from '@/db/queries';
 import type { Hole, Putt } from '@/db/types';
+import { roughCirclePath } from '@/lib/sketch';
 
 type Bucket = { value: number; label: string };
 
@@ -171,14 +173,9 @@ function PuttingGrid({
                   <Pressable
                     onPress={() => onRemove(putt.id)}
                     hitSlop={6}
-                    style={({ pressed }) => [
-                      styles.slot,
-                      variant === 'make'
-                        ? styles.slotMakeFilled
-                        : styles.slotMissFilled,
-                      pressed && styles.slotPressed,
-                    ]}
-                  />
+                    style={({ pressed }) => [styles.slot, pressed && styles.slotPressed]}>
+                    <PuttGlyph kind={variant} seed={putt.id} />
+                  </Pressable>
                 </View>
               );
             }
@@ -187,18 +184,40 @@ function PuttingGrid({
                 <Pressable
                   onPress={() => onAdd(b.value)}
                   hitSlop={6}
-                  style={({ pressed }) => [
-                    styles.slot,
-                    styles.slotEmpty,
-                    pressed && styles.slotEmptyPressed,
-                  ]}
-                />
+                  style={({ pressed }) => [styles.slot, pressed && styles.slotPressed]}>
+                  <PuttGlyph kind="empty" seed={`empty-${variant}-${b.value}-${rowIdx}`} />
+                </Pressable>
               </View>
             );
           })}
         </View>
       ))}
     </View>
+  );
+}
+
+function PuttGlyph({ kind, seed }: { kind: 'make' | 'miss' | 'empty'; seed: string }) {
+  const c = SLOT_SIZE / 2;
+  const r = SLOT_SIZE * 0.38;
+  const path = roughCirclePath(c, c, r, seed, { jitter: 0.06, points: 14 });
+  if (kind === 'make') {
+    return (
+      <Svg width={SLOT_SIZE} height={SLOT_SIZE}>
+        <Path d={path} fill={colors.accent} stroke={colors.accent} strokeWidth={1.2} />
+      </Svg>
+    );
+  }
+  if (kind === 'miss') {
+    return (
+      <Svg width={SLOT_SIZE} height={SLOT_SIZE}>
+        <Path d={path} fill="none" stroke={colors.accent} strokeWidth={2} />
+      </Svg>
+    );
+  }
+  return (
+    <Svg width={SLOT_SIZE} height={SLOT_SIZE}>
+      <Path d={path} fill="none" stroke={colors.borderStrong} strokeWidth={1.2} strokeOpacity={0.6} />
+    </Svg>
   );
 }
 
@@ -251,9 +270,9 @@ const styles = StyleSheet.create({
   verticalLabelText: {
     width: ROTATED_TEXT_WIDTH,
     textAlign: 'center',
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.textSecondary,
+    fontFamily: fontFamily.serif,
+    fontSize: 12,
+    color: colors.textMuted,
     letterSpacing: 2,
     transform: [{ rotate: '-90deg' }],
   },
@@ -274,9 +293,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   bucketHeader: {
+    fontFamily: fontFamily.serif,
     fontSize: 13,
-    fontWeight: '600',
-    color: colors.textPrimary,
+    color: colors.textSecondary,
   },
   grid: {
     gap: 6,
@@ -291,27 +310,10 @@ const styles = StyleSheet.create({
   slot: {
     width: SLOT_SIZE,
     height: SLOT_SIZE,
-    borderRadius: SLOT_SIZE / 2,
-  },
-  slotEmpty: {
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.borderStrong,
-  },
-  slotEmptyPressed: {
-    backgroundColor: colors.accentMuted,
-  },
-  slotMakeFilled: {
-    backgroundColor: colors.accent,
-    borderWidth: 1.5,
-    borderColor: colors.accent,
-  },
-  slotMissFilled: {
-    backgroundColor: 'transparent',
-    borderWidth: 2,
-    borderColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   slotPressed: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
 });

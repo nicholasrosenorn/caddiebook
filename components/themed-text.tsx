@@ -2,7 +2,13 @@ import { StyleSheet, Text, type TextProps } from 'react-native';
 
 import { typography } from '@/constants/theme';
 
-export type ThemedTextType = 'default' | 'title' | 'subtitle' | 'caption' | 'muted';
+export type ThemedTextType =
+  | 'default'
+  | 'title'
+  | 'subtitle'
+  | 'caption'
+  | 'muted'
+  | 'label';
 
 export type ThemedTextProps = TextProps & {
   type?: ThemedTextType;
@@ -18,4 +24,5 @@ const styles = StyleSheet.create({
   subtitle: typography.subtitle,
   caption: typography.caption,
   muted: typography.bodyMuted,
+  label: typography.label,
 });

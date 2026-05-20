@@ -1,8 +1,9 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { SketchDivider, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, spacing } from '@/constants/theme';
+import { colors, fontFamily, spacing } from '@/constants/theme';
 
 type Props = {
   holeNumber: number;
@@ -25,85 +26,88 @@ export function StickyHoleNav({
 }: Props) {
   const insets = useSafeAreaInsets();
   return (
-    <View
-      style={[
-        styles.container,
-        { paddingBottom: Math.max(insets.bottom, spacing.sm) },
-      ]}>
-      <Pressable
-        onPress={onPrev}
-        disabled={isFirstHole}
-        style={({ pressed }) => [
-          styles.chevron,
-          isFirstHole && styles.chevronDisabled,
-          pressed && !isFirstHole && styles.chevronPressed,
+    <View style={styles.outer}>
+      <SketchDivider seed="nav-divider" color={colors.borderStrong} />
+      <View
+        style={[
+          styles.container,
+          { paddingBottom: Math.max(insets.bottom, spacing.sm) },
         ]}>
-        <ThemedText style={styles.chevronLabel}>‹</ThemedText>
-      </Pressable>
+        <Pressable
+          onPress={onPrev}
+          disabled={isFirstHole}
+          hitSlop={6}
+          style={({ pressed }) => [
+            styles.chevronWrap,
+            isFirstHole && styles.disabled,
+            pressed && !isFirstHole && styles.pressed,
+          ]}>
+          <SketchSurface seed="nav-prev" style={styles.chevron}>
+            <ThemedText style={styles.chevronLabel}>‹</ThemedText>
+          </SketchSurface>
+        </Pressable>
 
-      <View style={styles.title}>
-        <ThemedText style={styles.titleText}>
-          Hole {holeNumber}
-          {par != null ? ` · Par ${par}` : ''}
-        </ThemedText>
-        {isLastHole ? (
-          <ThemedText style={styles.subTitle}>Finish round</ThemedText>
-        ) : null}
+        <View style={styles.title}>
+          <ThemedText style={styles.titleText}>
+            Hole {holeNumber}
+            {par != null ? ` · Par ${par}` : ''}
+          </ThemedText>
+          {isLastHole ? (
+            <ThemedText style={styles.subTitle}>Finish round</ThemedText>
+          ) : null}
+        </View>
+
+        <Pressable
+          onPress={isLastHole ? onFinish : onNext}
+          hitSlop={6}
+          style={({ pressed }) => [styles.chevronWrap, pressed && styles.pressed]}>
+          <SketchSurface
+            seed="nav-next"
+            fill={colors.accent}
+            stroke={colors.accent}
+            grain
+            style={styles.chevron}>
+            <ThemedText style={[styles.chevronLabel, styles.chevronLabelPrimary]}>
+              {isLastHole ? '✓' : '›'}
+            </ThemedText>
+          </SketchSurface>
+        </Pressable>
       </View>
-
-      <Pressable
-        onPress={isLastHole ? onFinish : onNext}
-        style={({ pressed }) => [
-          styles.chevron,
-          styles.chevronPrimary,
-          pressed && styles.chevronPrimaryPressed,
-        ]}>
-        <ThemedText style={[styles.chevronLabel, styles.chevronLabelPrimary]}>
-          {isLastHole ? '✓' : '›'}
-        </ThemedText>
-      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  outer: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
     zIndex: 20,
+    backgroundColor: colors.background,
+  },
+  container: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
-    backgroundColor: colors.background,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
     gap: spacing.md,
+  },
+  chevronWrap: {
+    width: 48,
+    height: 48,
   },
   chevron: {
     width: 48,
     height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chevronPrimary: {
-    backgroundColor: colors.accent,
-    borderColor: colors.accent,
+  pressed: {
+    opacity: 0.6,
   },
-  chevronPrimaryPressed: {
-    backgroundColor: colors.accentPressed,
-  },
-  chevronPressed: {
-    backgroundColor: colors.accentMuted,
-  },
-  chevronDisabled: {
-    opacity: 0.35,
+  disabled: {
+    opacity: 0.3,
   },
   chevronLabel: {
     fontSize: 28,
@@ -120,13 +124,14 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   titleText: {
-    fontSize: 17,
-    fontWeight: '700',
+    fontFamily: fontFamily.serifBold,
+    fontSize: 18,
     color: colors.textPrimary,
   },
   subTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.accent,
+    letterSpacing: 0.5,
   },
 });

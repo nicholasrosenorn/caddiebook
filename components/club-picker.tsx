@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 
+import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS, OTHER_CLUB } from '@/constants/clubs';
 import { colors, radius, spacing } from '@/constants/theme';
@@ -30,11 +31,13 @@ export function ClubPicker({ value, onChange }: ClubPickerProps) {
     <>
       <Pressable
         onPress={() => setOpen(true)}
-        style={({ pressed }) => [styles.field, pressed && styles.fieldPressed]}>
-        <ThemedText style={value ? styles.value : styles.placeholder}>
-          {value ?? 'Select club'}
-        </ThemedText>
-        <ThemedText type="muted">›</ThemedText>
+        style={({ pressed }) => [styles.fieldWrap, pressed && styles.fieldPressed]}>
+        <SketchSurface seed="club-field" radius={8} style={styles.field}>
+          <ThemedText style={value ? styles.value : styles.placeholder}>
+            {value ?? 'Select club'}
+          </ThemedText>
+          <ThemedText type="muted">›</ThemedText>
+        </SketchSurface>
       </Pressable>
 
       <Modal
@@ -117,20 +120,19 @@ export function ClubPicker({ value, onChange }: ClubPickerProps) {
 }
 
 const styles = StyleSheet.create({
+  fieldWrap: {
+    minHeight: 44,
+  },
   field: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    minHeight: 40,
+    minHeight: 44,
   },
   fieldPressed: {
-    backgroundColor: colors.accentMuted,
+    opacity: 0.6,
   },
   value: {
     color: colors.textPrimary,
