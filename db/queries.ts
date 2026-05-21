@@ -555,3 +555,112 @@ export async function setBag(clubs: string[]): Promise<void> {
     [BAG_KEY, JSON.stringify(clubs)],
   );
 }
+
+const CLUB_YARDAGES_KEY = 'club_yardages';
+
+// The player's stock (full-swing) carry per club, stored as a JSON map of
+// club name -> yards. This is the single source of truth for a club's full
+// distance — the wedge grid's "full" column reads from here too. Returns {}
+// when never set.
+export async function getClubYardages(): Promise<Record<string, number>> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ value: string | null }>(
+    `SELECT value FROM app_settings WHERE key = ?;`,
+    [CLUB_YARDAGES_KEY],
+  );
+  if (!row?.value) return {};
+  try {
+    const parsed = JSON.parse(row.value);
+    if (parsed == null || typeof parsed !== 'object') return {};
+    const out: Record<string, number> = {};
+    for (const [club, yds] of Object.entries(parsed)) {
+      if (typeof yds === 'number' && Number.isFinite(yds)) out[club] = yds;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+// Set (or, with null, clear) a single club's stock yardage via read-modify-write
+// of the stored map.
+export async function setClubYardage(club: string, yds: number | null): Promise<void> {
+  const map = await getClubYardages();
+  if (yds == null) {
+    delete map[club];
+  } else {
+    map[club] = yds;
+  }
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO app_settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
+    [CLUB_YARDAGES_KEY, JSON.stringify(map)],
+  );
+}
+
+// Generic string-valued setting (key/value), for small UI prefs like the wedge
+// grid's axis-label mode.
+export async function getSetting(key: string): Promise<string | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ value: string | null }>(
+    `SELECT value FROM app_settings WHERE key = ?;`,
+    [key],
+  );
+  return row?.value ?? null;
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO app_settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
+    [key, value],
+  );
+}
+
+const WEDGE_PARTIALS_KEY = 'wedge_partials';
+
+// The ¾ and ½ swing carries per wedge. The "full" carry is the club's stock
+// yardage (see getClubYardages) — the single source of truth shared with the
+// Stock Yardages screen. Only the partials live here.
+export type WedgePartials = { tq: number | null; half: number | null; quarter: number | null };
+
+const EMPTY_PARTIALS: WedgePartials = { tq: null, half: null, quarter: null };
+
+function num(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+export async function getWedgePartials(): Promise<Record<string, WedgePartials>> {
+  const raw = await getSetting(WEDGE_PARTIALS_KEY);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed == null || typeof parsed !== 'object') return {};
+    const out: Record<string, WedgePartials> = {};
+    for (const [club, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (v == null || typeof v !== 'object') continue;
+      const rec = v as Record<string, unknown>;
+      out[club] = { tq: num(rec.tq), half: num(rec.half), quarter: num(rec.quarter) };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export async function setWedgePartial(
+  club: string,
+  kind: keyof WedgePartials,
+  yds: number | null,
+): Promise<void> {
+  const map = await getWedgePartials();
+  const next: WedgePartials = { ...(map[club] ?? EMPTY_PARTIALS), [kind]: yds };
+  if (next.tq == null && next.half == null && next.quarter == null) {
+    delete map[club];
+  } else {
+    map[club] = next;
+  }
+  await setSetting(WEDGE_PARTIALS_KEY, JSON.stringify(map));
+}

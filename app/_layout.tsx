@@ -58,6 +58,27 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: colors.background },
         }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="menu"
+          options={{
+            headerShown: false,
+            presentation: 'transparentModal',
+            animation: 'none',
+            contentStyle: { backgroundColor: 'transparent' },
+          }}
+        />
+        <Stack.Screen
+          name="tools/yardages"
+          options={{ title: 'Stock yardages', headerBackTitle: 'Back' }}
+        />
+        <Stack.Screen
+          name="tools/wedge-grid"
+          options={{ title: 'Wedge grid', headerBackTitle: 'Back' }}
+        />
+        <Stack.Screen
+          name="tools/tempo"
+          options={{ title: 'Tempo trainer', headerBackTitle: 'Back' }}
+        />
         <Stack.Screen name="round/new" options={{ title: 'New Round', presentation: 'modal' }} />
         <Stack.Screen name="round/[id]/index" options={{ headerShown: false }} />
         <Stack.Screen name="round/[id]/review" options={{ headerShown: false }} />

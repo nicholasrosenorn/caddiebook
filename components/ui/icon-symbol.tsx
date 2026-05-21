@@ -20,6 +20,7 @@ const MAPPING = {
   'chevron.right': 'chevron-right',
   'chevron.down': 'keyboard-arrow-down',
   'list.bullet': 'format-list-bulleted',
+  'line.3.horizontal': 'menu',
   'chart.bar.fill': 'bar-chart',
   'plus': 'add',
   'plus.circle.fill': 'add-circle',
@@ -27,6 +28,10 @@ const MAPPING = {
   'checkmark': 'check',
   'xmark': 'close',
   'arrow.uturn.backward': 'undo',
+  'bolt.fill': 'bolt',
+  'clock': 'schedule',
+  'play.fill': 'play-arrow',
+  'stop.fill': 'stop',
 } as IconMapping;
 
 /**

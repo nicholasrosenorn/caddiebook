@@ -211,6 +211,19 @@ export default function RoundScreen() {
       </View>
 
       <Pressable
+        onPress={() => router.push('/menu')}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel="Open menu"
+        style={({ pressed }) => [
+          styles.menuButton,
+          { top: insets.top + 8 },
+          pressed && styles.closeButtonPressed,
+        ]}>
+        <IconSymbol name="line.3.horizontal" size={18} color={colors.textPrimary} />
+      </Pressable>
+
+      <Pressable
         onPress={onClose}
         hitSlop={10}
         accessibilityRole="button"
@@ -250,6 +263,19 @@ const styles = StyleSheet.create({
   closeButton: {
     position: 'absolute',
     right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 30,
+  },
+  menuButton: {
+    position: 'absolute',
+    left: 12,
     width: 36,
     height: 36,
     borderRadius: 18,

@@ -75,7 +75,7 @@ function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
 export default function StatsScreen() {
   const [data, setData] = useState<Data | null>(null);
   const [holeFilter, setHoleFilter] = useState<HoleCountFilter>(18);
-  const [roundsFilter, setRoundsFilter] = useState<RoundsFilter>('all');
+  const [roundsFilter, setRoundsFilter] = useState<RoundsFilter>(20);
   const [devBusy, setDevBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -268,7 +268,7 @@ function StatsBody({ view, holeFilter }: { view: StatsView; holeFilter: HoleCoun
       {/* Driver dispersion */}
       <Section title="Driver dispersion">
         <View style={styles.targetWrap}>
-          <DriverTarget pins={drivePins} width={260} height={400} pinSize={6} />
+          <DriverTarget pins={drivePins} width={280} height={420} pinSize={6} />
         </View>
         <ThemedText type="muted" style={[styles.centerText, {marginTop: spacing.md}]}>
           {stats.driverTotal} drive{stats.driverTotal === 1 ? '' : 's'} · LF{' '}
@@ -279,7 +279,7 @@ function StatsBody({ view, holeFilter }: { view: StatsView; holeFilter: HoleCoun
       {/* Approach dispersion */}
       <Section title="Approach dispersion">
         <View style={styles.targetWrap}>
-          <ApproachTarget pins={approachPins} size={280} pinSize={7} />
+          <ApproachTarget pins={approachPins} size={320} pinSize={7} />
         </View>
         <ThemedText type="muted" style={styles.centerText}>
           {stats.approachTotal} approach{stats.approachTotal === 1 ? '' : 'es'}

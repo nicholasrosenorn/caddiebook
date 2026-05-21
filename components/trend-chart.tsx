@@ -63,8 +63,6 @@ export function TrendChart({
     return { coords, linePath, areaPath, min, max, baselineY: baseline != null ? y(baseline) : null };
   }, [width, height, points, baseline]);
 
-  const latest = points.length > 0 ? points[points.length - 1] : null;
-
   return (
     <View onLayout={onLayout} style={[styles.wrap, { height }]}>
       {geom && (
@@ -109,17 +107,11 @@ export function TrendChart({
             {formatValue(geom.min)}
           </ThemedText>
           {baseline != null && baselineLabel ? (
-            <ThemedText style={[styles.axis, { top: (geom.baselineY ?? 0) - 7, right: 2 }]}>
+            <ThemedText style={[styles.baselineLabel, { top: (geom.baselineY ?? 0) - 7 }]}>
               {baselineLabel}
             </ThemedText>
           ) : null}
         </>
-      )}
-      {latest != null && (
-        <View style={styles.latestBadge} pointerEvents="none">
-          <ThemedText style={styles.latestLabel}>LATEST</ThemedText>
-          <ThemedText style={styles.latestValue}>{formatValue(latest)}</ThemedText>
-        </View>
       )}
     </View>
   );
@@ -143,21 +135,12 @@ const styles = StyleSheet.create({
   axisBottom: {
     bottom: 0,
   },
-  latestBadge: {
+  baselineLabel: {
     position: 'absolute',
-    top: 2,
     right: 2,
-    alignItems: 'flex-end',
-  },
-  latestLabel: {
+    textAlign: 'right',
     fontFamily: fontFamily.sans,
-    fontSize: 9,
-    letterSpacing: 1,
+    fontSize: 10,
     color: colors.textMuted,
-  },
-  latestValue: {
-    fontFamily: fontFamily.serifBold,
-    fontSize: 16,
-    color: colors.textPrimary,
   },
 });

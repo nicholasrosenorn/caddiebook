@@ -21,7 +21,7 @@ export const CLUB_OPTIONS = [
   '4H',
   '3H',
   '2H',
-  '9W`',
+  '9W',
   '7W',
   '5W',
   '3W',
@@ -31,3 +31,9 @@ export const CLUB_OPTIONS = [
 ] as const;
 
 export const OTHER_CLUB = 'Other';
+
+// A wedge is the pitching wedge or any more-lofted (degree-labelled) club —
+// the scoring clubs that get a wedge-grid column.
+export function isWedge(club: string): boolean {
+  return club === 'PW' || club.endsWith('°');
+}

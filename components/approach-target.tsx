@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, View, type GestureResponderEvent } from 'react-native';
 import Svg, { Circle, G, Line, Path, Polygon } from 'react-native-svg';
 
@@ -24,7 +25,7 @@ type ApproachTargetProps = {
   pinSize?: number;
 };
 
-export function ApproachTarget({
+function ApproachTargetImpl({
   pins = [],
   onTap,
   size = DEFAULT_SIZE,
@@ -38,17 +39,38 @@ export function ApproachTarget({
   };
 
   const c = size / 2;
-  // The putting surface fills all the way out to the outermost ring.
-  const surfaceR = APPROACH_RINGS[APPROACH_RINGS.length - 1].maxR * size;
-  const fringeR = surfaceR + size * 0.04;
-  const grain = stippleInEllipse(c, c, surfaceR, surfaceR, 70, 'approach-green-grain');
+  // Seeded geometry is deterministic in size — compute once, not every render.
+  const { surfaceR, fringeD, greenD, grain, rings } = useMemo(() => {
+    // The putting surface fills all the way out to the outermost ring.
+    const surfaceR = APPROACH_RINGS[APPROACH_RINGS.length - 1].maxR * size;
+    const fringeR = surfaceR + size * 0.04;
+    const rings = APPROACH_RINGS.flatMap((ring) => {
+      const r = ring.maxR * size;
+      if (r >= surfaceR) return [];
+      return [{ ft: ring.ft, d: roughCirclePath(c, c, r, `approach-ring-${ring.ft}`, { jitter: 0.018 }) }];
+    });
+    return {
+      surfaceR,
+      fringeD: roughCirclePath(c, c, fringeR, 'approach-fringe', { jitter: 0.022 }),
+      greenD: roughCirclePath(c, c, surfaceR, 'approach-green', { jitter: 0.024 }),
+      grain: stippleInEllipse(c, c, surfaceR, surfaceR, 70, 'approach-green-grain'),
+      rings,
+    };
+  }, [c, size]);
+
+  // Dispersion overlays (no onTap) are fully static — rasterize so scrolling
+  // blits a cached bitmap instead of recompositing the SVG + pins every frame.
+  const rasterize = !onTap;
 
   return (
-    <View style={[styles.wrap, { width: size, height: size }]}>
+    <View
+      style={[styles.wrap, { width: size, height: size }]}
+      shouldRasterizeIOS={rasterize}
+      renderToHardwareTextureAndroid={rasterize}>
       <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
         {/* Fringe — slightly darker green band ringing the whole surface */}
         <Path
-          d={roughCirclePath(c, c, fringeR, 'approach-fringe', { jitter: 0.022 })}
+          d={fringeD}
           fill={FRINGE_GREEN}
           stroke={colors.accent}
           strokeWidth={1.6}
@@ -56,12 +78,7 @@ export function ApproachTarget({
         />
 
         {/* The green — light beige-green surface, out to the outermost ring */}
-        <Path
-          d={roughCirclePath(c, c, surfaceR, 'approach-green', { jitter: 0.024 })}
-          fill={GREEN_FILL}
-          stroke={colors.accent}
-          strokeWidth={1.4}
-        />
+        <Path d={greenD} fill={GREEN_FILL} stroke={colors.accent} strokeWidth={1.4} />
         <G>
           {grain.map((dot, i) => (
             <Circle key={i} cx={dot.x} cy={dot.y} r={dot.r} fill={colors.accent} opacity={0.1} />
@@ -69,20 +86,16 @@ export function ApproachTarget({
         </G>
 
         {/* Contour rings drawn over the green (skip the outermost — it's the edge) */}
-        {APPROACH_RINGS.map((ring) => {
-          const r = ring.maxR * size;
-          if (r >= surfaceR) return null;
-          return (
-            <Path
-              key={`in-${ring.ft}`}
-              d={roughCirclePath(c, c, r, `approach-ring-${ring.ft}`, { jitter: 0.018 })}
-              stroke={colors.accent}
-              strokeWidth={1}
-              strokeOpacity={0.22}
-              fill="none"
-            />
-          );
-        })}
+        {rings.map((ring) => (
+          <Path
+            key={`in-${ring.ft}`}
+            d={ring.d}
+            stroke={colors.accent}
+            strokeWidth={1}
+            strokeOpacity={0.22}
+            fill="none"
+          />
+        ))}
 
         {/* Pin flag */}
         <Line x1={c} y1={c} x2={c} y2={c - size * 0.14} stroke={colors.accent} strokeWidth={1.6} />
@@ -129,50 +142,52 @@ export function ApproachTarget({
         style={[StyleSheet.absoluteFill, { borderRadius: size / 2 }]}
       />
 
-      {/* Shot pins */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        {pins.map((pin, i) => (
-          <Pin
-            key={pin.key ?? i}
-            xNorm={pin.xNorm}
-            yNorm={pin.yNorm}
-            variant={pin.variant ?? 'primary'}
-            size={pinSize}
-            containerSize={size}
-          />
-        ))}
-      </View>
+      {/* Shot pins — one SVG layer of circles rather than N absolute Views, so
+          a dense dispersion overlay stays a single native view. Kept on top of
+          the chrome to preserve the previous z-order. The View wrapper carries
+          pointerEvents="none" (react-native-svg's <Svg> doesn't reliably honor
+          it) so taps fall through to the Pressable below. */}
+      {pins.length > 0 ? (
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+            {pins.map((pin, i) => (
+              <PinCircle
+                key={pin.key ?? i}
+                cx={pin.xNorm * size}
+                cy={pin.yNorm * size}
+                size={pinSize}
+                variant={pin.variant ?? 'primary'}
+              />
+            ))}
+          </Svg>
+        </View>
+      ) : null}
     </View>
   );
 }
 
-function Pin({
-  xNorm,
-  yNorm,
-  variant,
+export const ApproachTarget = memo(ApproachTargetImpl);
+
+function PinCircle({
+  cx,
+  cy,
   size,
-  containerSize,
+  variant,
 }: {
-  xNorm: number;
-  yNorm: number;
-  variant: 'primary' | 'muted';
+  cx: number;
+  cy: number;
   size: number;
-  containerSize: number;
+  variant: 'primary' | 'muted';
 }) {
   return (
-    <View
-      style={[
-        styles.pin,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          borderWidth: size <= 8 ? 1 : 2,
-          left: xNorm * containerSize - size / 2,
-          top: yNorm * containerSize - size / 2,
-        },
-        variant === 'muted' && styles.pinMuted,
-      ]}
+    <Circle
+      cx={cx}
+      cy={cy}
+      r={size / 2}
+      fill={colors.accentPressed}
+      stroke={colors.accentOn}
+      strokeWidth={size <= 8 ? 1 : 2}
+      opacity={variant === 'muted' ? 0.45 : 1}
     />
   );
 }
@@ -212,17 +227,5 @@ const styles = StyleSheet.create({
   ringLabelOver: {
     color: colors.accent,
     opacity: 0.7,
-  },
-  pin: {
-    position: 'absolute',
-    width: PIN_SIZE,
-    height: PIN_SIZE,
-    borderRadius: PIN_SIZE / 2,
-    backgroundColor: colors.accentPressed,
-    borderWidth: 2,
-    borderColor: colors.accentOn,
-  },
-  pinMuted: {
-    opacity: 0.45,
   },
 });

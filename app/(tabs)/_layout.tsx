@@ -5,6 +5,22 @@ import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 
+function MenuButton() {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Open menu"
+      onPress={() => router.push('/menu')}
+      hitSlop={12}
+      style={({ pressed }) => ({
+        paddingHorizontal: spacing.md,
+        opacity: pressed ? 0.6 : 1,
+      })}>
+      <IconSymbol name="line.3.horizontal" size={24} color={colors.accent} />
+    </Pressable>
+  );
+}
+
 export default function TabLayout() {
   return (
     <Tabs
@@ -35,6 +51,7 @@ export default function TabLayout() {
         options={{
           title: 'Rounds',
           tabBarIcon: ({ color }) => <IconSymbol size={26} name="list.bullet" color={color} />,
+          headerLeft: () => <MenuButton />,
           headerRight: () => (
             <Pressable
               accessibilityRole="button"
@@ -55,6 +72,7 @@ export default function TabLayout() {
         options={{
           title: 'Stats',
           tabBarIcon: ({ color }) => <IconSymbol size={26} name="chart.bar.fill" color={color} />,
+          headerLeft: () => <MenuButton />,
         }}
       />
     </Tabs>

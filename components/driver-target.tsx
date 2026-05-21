@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, View, type GestureResponderEvent } from 'react-native';
 import Svg, { Circle, ClipPath, Defs, G, Path, Rect } from 'react-native-svg';
 
@@ -34,7 +35,7 @@ type DriverTargetProps = {
   pinSize?: number;
 };
 
-export function DriverTarget({
+function DriverTargetImpl({
   pins = [],
   onTap,
   width = DEFAULT_WIDTH,
@@ -48,34 +49,48 @@ export function DriverTarget({
     onTap(clamp(x), clamp(y));
   };
 
-  // One shape, drawn at three insets: fairway (innermost) → rough → outer shading.
-  const path = fairwayPath(width, height, 'fairway');
-  const grain = wavyLines(width, height, 5, 'fairway-grain', { amplitude: 6 });
-  // Sandy stipple texture, like the approach green — fine on the fairway,
-  // coarser/sparser over the rough band.
-  const fairwayStipple = stippleInEllipse(
-    width / 2,
-    height / 2,
-    width * 0.4,
-    height * 0.46,
-    54,
-    'fairway-stipple',
-  );
-  const roughStipple = stippleInEllipse(
-    width / 2,
-    height / 2,
-    width * 0.47,
-    height * 0.49,
-    40,
-    'rough-stipple',
-  );
+  // Seeded geometry is deterministic in width/height — compute once, not on
+  // every render (filter changes upstream would otherwise rebuild all of it).
+  const { path, grain, fairwayStipple, roughStipple } = useMemo(() => {
+    // One shape, drawn at three insets: fairway (innermost) → rough → outer shading.
+    return {
+      path: fairwayPath(width, height, 'fairway'),
+      grain: wavyLines(width, height, 5, 'fairway-grain', { amplitude: 6 }),
+      // Sandy stipple texture, like the approach green — fine on the fairway,
+      // coarser/sparser over the rough band.
+      fairwayStipple: stippleInEllipse(
+        width / 2,
+        height / 2,
+        width * 0.4,
+        height * 0.46,
+        54,
+        'fairway-stipple',
+      ),
+      roughStipple: stippleInEllipse(
+        width / 2,
+        height / 2,
+        width * 0.47,
+        height * 0.49,
+        40,
+        'rough-stipple',
+      ),
+    };
+  }, [width, height]);
+
   const tf = (s: number) => `translate(${(width * (1 - s)) / 2} ${(height * (1 - s)) / 2}) scale(${s})`;
   const cfL = width * CF_LEFT_EDGE;
   const cfR = width * CF_RIGHT_EDGE;
   const teeY = height * 0.96;
 
+  // Dispersion overlays (no onTap) are fully static — rasterize so scrolling
+  // blits a cached bitmap instead of recompositing the SVG + pins every frame.
+  const rasterize = !onTap;
+
   return (
-    <View style={[styles.wrap, { width, height }]}>
+    <View
+      style={[styles.wrap, { width, height }]}
+      shouldRasterizeIOS={rasterize}
+      renderToHardwareTextureAndroid={rasterize}>
       <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
         <Defs>
           <ClipPath id="fairwayClip">
@@ -176,53 +191,52 @@ export function DriverTarget({
       {/* Tap surface */}
       <Pressable disabled={!onTap} onPress={handlePress} style={StyleSheet.absoluteFill} />
 
-      {/* Shot pins */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        {pins.map((pin, i) => (
-          <Pin
-            key={pin.key ?? i}
-            xNorm={pin.xNorm}
-            yNorm={pin.yNorm}
-            variant={pin.variant ?? 'primary'}
-            size={pinSize}
-            containerWidth={width}
-            containerHeight={height}
-          />
-        ))}
-      </View>
+      {/* Shot pins — one SVG layer of circles rather than N absolute Views, so
+          a dense dispersion overlay stays a single native view. Kept on top of
+          the chrome to preserve the previous z-order. The View wrapper carries
+          pointerEvents="none" (react-native-svg's <Svg> doesn't reliably honor
+          it) so taps fall through to the Pressable below. */}
+      {pins.length > 0 ? (
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
+            {pins.map((pin, i) => (
+              <PinCircle
+                key={pin.key ?? i}
+                cx={pin.xNorm * width}
+                cy={pin.yNorm * height}
+                size={pinSize}
+                variant={pin.variant ?? 'primary'}
+              />
+            ))}
+          </Svg>
+        </View>
+      ) : null}
     </View>
   );
 }
 
-function Pin({
-  xNorm,
-  yNorm,
-  variant,
+export const DriverTarget = memo(DriverTargetImpl);
+
+function PinCircle({
+  cx,
+  cy,
   size,
-  containerWidth,
-  containerHeight,
+  variant,
 }: {
-  xNorm: number;
-  yNorm: number;
-  variant: 'primary' | 'muted';
+  cx: number;
+  cy: number;
   size: number;
-  containerWidth: number;
-  containerHeight: number;
+  variant: 'primary' | 'muted';
 }) {
   return (
-    <View
-      style={[
-        styles.pin,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          borderWidth: size <= 8 ? 1 : 2,
-          left: xNorm * containerWidth - size / 2,
-          top: yNorm * containerHeight - size / 2,
-        },
-        variant === 'muted' && styles.pinMuted,
-      ]}
+    <Circle
+      cx={cx}
+      cy={cy}
+      r={size / 2}
+      fill={colors.accent}
+      stroke={colors.accentOn}
+      strokeWidth={size <= 8 ? 1 : 2}
+      opacity={variant === 'muted' ? 0.45 : 1}
     />
   );
 }
@@ -277,17 +291,5 @@ const styles = StyleSheet.create({
   laneText: {
     fontSize: 12,
     color: colors.textSecondary,
-  },
-  pin: {
-    position: 'absolute',
-    width: PIN_SIZE,
-    height: PIN_SIZE,
-    borderRadius: PIN_SIZE / 2,
-    backgroundColor: colors.accent,
-    borderWidth: 2,
-    borderColor: colors.accentOn,
-  },
-  pinMuted: {
-    opacity: 0.45,
   },
 });

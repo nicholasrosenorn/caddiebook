@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { ApproachTarget } from '@/components/approach-target';
@@ -8,7 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { YardageRuler } from '@/components/yardage-ruler';
 import { CLUB_OPTIONS } from '@/constants/clubs';
 import { colors, radius, spacing } from '@/constants/theme';
-import { getBag, updateHole, upsertShot } from '@/db/queries';
+import { getBag, getClubYardages, updateHole, upsertShot } from '@/db/queries';
 import type { Hole, Shot } from '@/db/types';
 import { approachResult } from '@/lib/shots';
 
@@ -26,12 +27,20 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) 
   const targetSize = Math.min(320, width - 32, height * 0.5);
   const [position, setPosition] = useState<Position | null>(null);
   const [bag, setBag] = useState<readonly string[]>(CLUB_OPTIONS);
+  const [yardages, setYardages] = useState<Record<string, number>>({});
 
-  useEffect(() => {
-    getBag().then((clubs) => {
-      if (clubs.length > 0) setBag(clubs);
-    });
-  }, []);
+  // Reload on focus (not just mount) so stock yardages set on the Stock
+  // Yardages screen are reflected when the player returns to the round.
+  useFocusEffect(
+    useCallback(() => {
+      getBag().then((clubs) => setBag(clubs.length > 0 ? clubs : CLUB_OPTIONS));
+      getClubYardages().then(setYardages);
+    }, []),
+  );
+
+  // Fallback park when the selected club has no stock yardage on file.
+  const rulerDefault =
+    hole.approachClub != null ? (yardages[hole.approachClub] ?? 125) : 125;
 
   useEffect(() => {
     const approach = shotsForRound.find(
@@ -61,7 +70,13 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) 
 
   const onClubChange = async (club: string | null) => {
     try {
-      await updateHole(roundId, hole.holeNumber, { approachClub: club });
+      const stock = club != null ? yardages[club] : undefined;
+      await updateHole(roundId, hole.holeNumber, {
+        approachClub: club,
+        // Prefill the approach distance with the club's stock yardage so the
+        // ruler reflects the pick immediately; the player nudges from there.
+        ...(stock != null ? { approachDistanceYds: stock } : {}),
+      });
       await onChange();
     } catch (err) {
       console.error(err);
@@ -114,7 +129,16 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) 
         </View>
         <View style={styles.formField}>
           <ThemedText type="caption">YARDS IN</ThemedText>
-          <YardageRuler value={hole.approachDistanceYds} onCommit={onYardsCommit} max={350} />
+          {/* Remount on club change so the ruler picks up the freshly-written
+              value with a clean `touched` state; keyed by club (not value) so
+              nudging within the same club doesn't reset mid-edit. */}
+          <YardageRuler
+            key={`ruler-${hole.approachClub ?? 'none'}`}
+            value={hole.approachDistanceYds}
+            onCommit={onYardsCommit}
+            max={350}
+            defaultValue={rulerDefault}
+          />
         </View>
       </View>
     </View>
