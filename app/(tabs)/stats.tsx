@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ApproachTarget } from '@/components/approach-target';
@@ -16,7 +16,6 @@ import {
   getAllPutts,
   getAllReviews,
   getAllShots,
-  getBag,
   listRounds,
 } from '@/db/queries';
 import type { Hole, PostRoundReview, Putt, Round, Shot } from '@/db/types';
@@ -44,7 +43,6 @@ type Data = {
   shotsByRound: Map<string, Shot[]>;
   puttsByRound: Map<string, Putt[]>;
   reviewsByRound: Map<string, PostRoundReview>;
-  bag: string[]; // player's bag; empty = fall back to all clubs
 };
 
 type StatsView = {
@@ -80,6 +78,34 @@ function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
   return map;
 }
 
+// Distinct, non-null club values logged on the given rounds' holes — the set a
+// club dropdown should offer (only clubs actually used for that shot type).
+function distinctClubs(
+  rounds: Round[],
+  holesByRound: Map<string, Hole[]>,
+  field: 'driveClub' | 'approachClub',
+): string[] {
+  const seen = new Set<string>();
+  for (const r of rounds) {
+    for (const h of holesByRound.get(r.id) ?? []) {
+      const club = h[field];
+      if (club) seen.add(club);
+    }
+  }
+  return [...seen];
+}
+
+// Approach clubs read most naturally in canonical loft order (wedges → long
+// irons); unknown/custom clubs fall to the end.
+function sortByClubOrder(clubs: string[]): string[] {
+  const order = CLUB_OPTIONS as readonly string[];
+  const rank = (c: string) => {
+    const i = order.indexOf(c);
+    return i === -1 ? order.length : i;
+  };
+  return [...clubs].sort((a, b) => rank(a) - rank(b));
+}
+
 export default function StatsScreen() {
   const [data, setData] = useState<Data | null>(null);
   const [holeFilter, setHoleFilter] = useState<HoleCountFilter>(18);
@@ -89,13 +115,12 @@ export default function StatsScreen() {
   const [devBusy, setDevBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const [rounds, holes, shots, putts, reviews, bag] = await Promise.all([
+    const [rounds, holes, shots, putts, reviews] = await Promise.all([
       listRounds(),
       getAllHoles(),
       getAllShots(),
       getAllPutts(),
       getAllReviews(),
-      getBag(),
     ]);
     const reviewsByRound = new Map<string, PostRoundReview>();
     for (const rv of reviews) reviewsByRound.set(rv.roundId, rv);
@@ -105,7 +130,6 @@ export default function StatsScreen() {
       shotsByRound: groupBy(shots, (s) => s.roundId),
       puttsByRound: groupBy(putts, (p) => p.roundId),
       reviewsByRound,
-      bag,
     });
   }, []);
 
@@ -173,22 +197,47 @@ export default function StatsScreen() {
     );
   }, [data, filteredRounds, clubFilter]);
 
-  const clubOptions = useMemo<DropdownOption<ClubFilter>[]>(() => {
-    const bag = data && data.bag.length > 0 ? data.bag : [...CLUB_OPTIONS];
-    return [
-      { value: 'all', short: 'All clubs', label: 'All clubs' },
-      ...bag.map((c) => ({ value: c, label: c })),
-    ];
-  }, [data]);
+  // Each dropdown offers only the clubs actually logged for that shot type in
+  // the current round set (loft order for approach, longest→shortest for drives).
+  const approachClubsUsed = useMemo(() => {
+    if (!data || !filteredRounds) return [];
+    return sortByClubOrder(distinctClubs(filteredRounds, data.holesByRound, 'approachClub'));
+  }, [data, filteredRounds]);
 
-  // Driver dropdown: same bag, sorted longest → shortest.
-  const driveClubOptions = useMemo<DropdownOption<ClubFilter>[]>(() => {
-    const bag = data && data.bag.length > 0 ? data.bag : [...CLUB_OPTIONS];
-    return [
+  const driveClubsUsed = useMemo(() => {
+    if (!data || !filteredRounds) return [];
+    return sortByDriveLength(distinctClubs(filteredRounds, data.holesByRound, 'driveClub'));
+  }, [data, filteredRounds]);
+
+  const clubOptions = useMemo<DropdownOption<ClubFilter>[]>(
+    () => [
       { value: 'all', short: 'All clubs', label: 'All clubs' },
-      ...sortByDriveLength(bag).map((c) => ({ value: c, label: c })),
-    ];
-  }, [data]);
+      ...approachClubsUsed.map((c) => ({ value: c, label: c })),
+    ],
+    [approachClubsUsed],
+  );
+
+  const driveClubOptions = useMemo<DropdownOption<ClubFilter>[]>(
+    () => [
+      { value: 'all', short: 'All clubs', label: 'All clubs' },
+      ...driveClubsUsed.map((c) => ({ value: c, label: c })),
+    ],
+    [driveClubsUsed],
+  );
+
+  // If a hole-count/recency change drops the selected club from the set, fall
+  // back to "All" so the dropdown label and the filtered data stay in sync.
+  useEffect(() => {
+    if (clubFilter !== 'all' && !approachClubsUsed.includes(clubFilter)) {
+      setClubFilter('all');
+    }
+  }, [approachClubsUsed, clubFilter]);
+
+  useEffect(() => {
+    if (driveClubFilter !== 'all' && !driveClubsUsed.includes(driveClubFilter)) {
+      setDriveClubFilter('all');
+    }
+  }, [driveClubsUsed, driveClubFilter]);
 
   if (!data) return <Screen />;
 
