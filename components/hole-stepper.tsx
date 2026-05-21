@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { SketchSurface } from '@/components/sketch';
+import { GlassSurface } from '@/components/glass-surface';
 import { ThemedText } from '@/components/themed-text';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { fontFamily, radius, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
 
 type Props = {
@@ -21,7 +21,8 @@ export function HoleStepper({ holeNumber, par, isFirstHole, isLastHole, onPrev, 
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.outer} pointerEvents="box-none">
-      <SketchSurface seed="hole-stepper" radius={spacing.md} style={styles.pill}>
+      <View style={styles.pill}>
+        <GlassSurface borderRadius={radius.pill} />
         <Pressable
           onPress={onPrev}
           disabled={isFirstHole}
@@ -54,7 +55,7 @@ export function HoleStepper({ holeNumber, par, isFirstHole, isLastHole, onPrev, 
           ]}>
           <ThemedText style={styles.chevronLabel}>›</ThemedText>
         </Pressable>
-      </SketchSurface>
+      </View>
     </View>
   );
 }
@@ -72,9 +73,11 @@ const makeStyles = (colors: Palette) =>
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.xs,
+    paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     gap: spacing.xs,
+    borderRadius: radius.pill,
+    overflow: 'hidden',
   },
   chevron: {
     width: 36,

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { GlassSurface } from '@/components/glass-surface';
 import { SketchDivider, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { fontFamily, spacing, type Palette } from '@/constants/theme';
@@ -31,6 +32,7 @@ export function StickyHoleNav({
   const insets = useSafeAreaInsets();
   return (
     <View style={styles.outer}>
+      <GlassSurface />
       <SketchDivider seed="nav-divider" color={colors.borderStrong} />
       <View
         style={[
@@ -89,7 +91,6 @@ const makeStyles = (colors: Palette) =>
     right: 0,
     bottom: 0,
     zIndex: 20,
-    backgroundColor: colors.background,
   },
   container: {
     flexDirection: 'row',

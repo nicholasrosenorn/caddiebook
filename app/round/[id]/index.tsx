@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApproachPage } from '@/components/approach-page';
 import { DrivePage } from '@/components/drive-page';
+import { GlassSurface } from '@/components/glass-surface';
 import { HoleStatsPage } from '@/components/hole-stats-page';
 import { HoleStepper } from '@/components/hole-stepper';
 import { ParPage } from '@/components/par-page';
@@ -218,12 +219,14 @@ export default function RoundScreen() {
         hitSlop={10}
         accessibilityRole="button"
         accessibilityLabel="Open menu"
-        style={({ pressed }) => [
-          styles.menuButton,
-          { top: insets.top + 8 },
-          pressed && styles.closeButtonPressed,
-        ]}>
-        <IconSymbol name="line.3.horizontal" size={18} color={colors.textPrimary} />
+        style={[styles.menuButton, { top: insets.top + 8 }]}>
+        {({ pressed }) => (
+          <>
+            <GlassSurface borderRadius={18} />
+            {pressed && <View style={styles.buttonPressedOverlay} pointerEvents="none" />}
+            <IconSymbol name="line.3.horizontal" size={18} color={colors.textPrimary} />
+          </>
+        )}
       </Pressable>
 
       <Pressable
@@ -231,12 +234,14 @@ export default function RoundScreen() {
         hitSlop={10}
         accessibilityRole="button"
         accessibilityLabel="Close round"
-        style={({ pressed }) => [
-          styles.closeButton,
-          { top: insets.top + 8 },
-          pressed && styles.closeButtonPressed,
-        ]}>
-        <IconSymbol name="xmark" size={18} color={colors.textPrimary} />
+        style={[styles.closeButton, { top: insets.top + 8 }]}>
+        {({ pressed }) => (
+          <>
+            <GlassSurface borderRadius={18} />
+            {pressed && <View style={styles.buttonPressedOverlay} pointerEvents="none" />}
+            <IconSymbol name="xmark" size={18} color={colors.textPrimary} />
+          </>
+        )}
       </Pressable>
     </Screen>
   );
@@ -272,9 +277,7 @@ const makeStyles = (colors: Palette) =>
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 30,
@@ -285,14 +288,14 @@ const makeStyles = (colors: Palette) =>
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 30,
   },
-  closeButtonPressed: {
+  buttonPressedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 18,
     backgroundColor: colors.accentMuted,
   },
   dotsContainer: {

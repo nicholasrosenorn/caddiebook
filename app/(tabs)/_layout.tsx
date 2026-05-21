@@ -1,9 +1,8 @@
 import { router, Tabs } from 'expo-router';
 import { Pressable, View } from 'react-native';
 
-import { HapticTab } from '@/components/haptic-tab';
+import { GlassTabBar } from '@/components/glass-tab-bar';
 import { InfoHint } from '@/components/info-hint';
-import { TabBarBackground } from '@/components/tab-bar-background';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { fontFamily, spacing } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
@@ -29,21 +28,8 @@ export default function TabLayout() {
   const colors = useColors();
   return (
     <Tabs
+      tabBar={(props) => <GlassTabBar {...props} />}
       screenOptions={{
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarBackground: () => <TabBarBackground />,
-        tabBarStyle: {
-          position: 'absolute',
-          backgroundColor: 'transparent',
-          borderTopWidth: 0,
-          elevation: 0,
-        },
-        tabBarLabelStyle: {
-          fontFamily: fontFamily.serif,
-          fontSize: 11,
-          letterSpacing: 0.5,
-        },
         headerStyle: { backgroundColor: colors.background },
         headerTitleStyle: {
           color: colors.textPrimary,
@@ -51,7 +37,6 @@ export default function TabLayout() {
           fontSize: 22,
         },
         headerShadowVisible: false,
-        tabBarButton: HapticTab,
       }}>
       <Tabs.Screen
         name="index"
