@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { BagPicker } from '@/components/bag-picker';
@@ -8,7 +8,8 @@ import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { YardageRuler } from '@/components/yardage-ruler';
 import { CLUB_OPTIONS, isWedge } from '@/constants/clubs';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import {
   getBag,
   getClubYardages,
@@ -47,6 +48,8 @@ function wedgesFromBag(bag: string[]): string[] {
 }
 
 export default function WedgeGridScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [bag, setBagState] = useState<string[]>([...CLUB_OPTIONS]);
   const [wedges, setWedges] = useState<string[]>([]);
   const [yardages, setYardages] = useState<Record<string, number>>({});
@@ -108,9 +111,6 @@ export default function WedgeGridScreen() {
 
   return (
     <Screen>
-      <ThemedText type="muted" style={styles.intro}>
-        Carry distance per wedge and swing length.
-      </ThemedText>
 
       <View style={styles.bagPicker}>
         <BagPicker value={bag} onChange={onBagChange} label="My Wedges" options={WEDGE_OPTIONS} />
@@ -193,14 +193,15 @@ export default function WedgeGridScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   intro: {
     fontSize: 13,
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
   },
   bagPicker: {
-    paddingBottom: spacing.lg,
+    paddingVertical: spacing.lg,
   },
   empty: {
     paddingTop: spacing.xl,

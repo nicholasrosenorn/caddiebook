@@ -1,8 +1,10 @@
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import { updateHole } from '@/db/queries';
 import type { Hole } from '@/db/types';
 
@@ -16,6 +18,8 @@ type Props = {
 };
 
 export function ParPage({ roundId, hole, onChange, onPicked }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const handlePick = async (par: number) => {
     try {
       await updateHole(roundId, hole.holeNumber, { par });
@@ -73,7 +77,8 @@ export function ParPage({ roundId, hole, onChange, onPicked }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: spacing.md,

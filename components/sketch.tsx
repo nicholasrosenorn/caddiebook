@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent, type ViewProps } from 'react-native';
 import Svg, { Circle, G, Line, Path } from 'react-native-svg';
 
-import { colors } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import {
   bunkerPath,
   roughRectPath,
@@ -17,20 +17,22 @@ export function CornerDots({
   size = 20,
   gap = 7,
   r = 1.6,
-  color = colors.borderStrong,
+  color,
 }: {
   size?: number;
   gap?: number;
   r?: number;
   color?: string;
 }) {
+  const colors = useColors();
+  const tint = color ?? colors.borderStrong;
   const a = (size - gap) / 2;
   const b = a + gap;
   return (
     <Svg width={size} height={size}>
       {[a, b].map((cx) =>
         [a, b].map((cy) => (
-          <Circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={r} fill={color} />
+          <Circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={r} fill={tint} />
         )),
       )}
     </Svg>
@@ -40,23 +42,25 @@ export function CornerDots({
 // Small registration crosshair (ticks + ring).
 export function Crosshair({
   size = 22,
-  color = colors.borderStrong,
+  color,
   strokeWidth = 1.2,
 }: {
   size?: number;
   color?: string;
   strokeWidth?: number;
 }) {
+  const colors = useColors();
+  const tint = color ?? colors.borderStrong;
   const c = size / 2;
   const r = size * 0.22;
   const tick = size * 0.16;
   return (
     <Svg width={size} height={size}>
-      <Circle cx={c} cy={c} r={r} stroke={color} strokeWidth={strokeWidth} fill="none" />
-      <Line x1={c} y1={0} x2={c} y2={tick} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={c} y1={size - tick} x2={c} y2={size} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={0} y1={c} x2={tick} y2={c} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={size - tick} y1={c} x2={size} y2={c} stroke={color} strokeWidth={strokeWidth} />
+      <Circle cx={c} cy={c} r={r} stroke={tint} strokeWidth={strokeWidth} fill="none" />
+      <Line x1={c} y1={0} x2={c} y2={tick} stroke={tint} strokeWidth={strokeWidth} />
+      <Line x1={c} y1={size - tick} x2={c} y2={size} stroke={tint} strokeWidth={strokeWidth} />
+      <Line x1={0} y1={c} x2={tick} y2={c} stroke={tint} strokeWidth={strokeWidth} />
+      <Line x1={size - tick} y1={c} x2={size} y2={c} stroke={tint} strokeWidth={strokeWidth} />
     </Svg>
   );
 }
@@ -64,18 +68,20 @@ export function Crosshair({
 // A small registration plus mark.
 export function PlusMark({
   size = 14,
-  color = colors.borderStrong,
+  color,
   strokeWidth = 1.2,
 }: {
   size?: number;
   color?: string;
   strokeWidth?: number;
 }) {
+  const colors = useColors();
+  const tint = color ?? colors.borderStrong;
   const c = size / 2;
   return (
     <Svg width={size} height={size}>
-      <Line x1={c} y1={0} x2={c} y2={size} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={0} y1={c} x2={size} y2={c} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={c} y1={0} x2={c} y2={size} stroke={tint} strokeWidth={strokeWidth} />
+      <Line x1={0} y1={c} x2={size} y2={c} stroke={tint} strokeWidth={strokeWidth} />
     </Svg>
   );
 }
@@ -92,6 +98,7 @@ export function Paper({
   seed?: string;
   grainOpacity?: number;
 }) {
+  const colors = useColors();
   const [size, setSize] = useState({ w: 0, h: 0 });
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -124,8 +131,8 @@ export function Paper({
 // fill controls the body color; selected swaps to the accent fill.
 export function SketchSurface({
   seed,
-  fill = colors.surface,
-  stroke = colors.borderStrong,
+  fill,
+  stroke,
   strokeWidth = 1.3,
   radius = 10,
   grain = false,
@@ -140,6 +147,9 @@ export function SketchSurface({
   radius?: number;
   grain?: boolean;
 }) {
+  const colors = useColors();
+  const fillColor = fill ?? colors.surface;
+  const strokeColor = stroke ?? colors.borderStrong;
   const [size, setSize] = useState({ w: 0, h: 0 });
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -160,7 +170,7 @@ export function SketchSurface({
     <View style={style} onLayout={onLayout} {...rest}>
       {size.w > 0 && (
         <Svg width={size.w} height={size.h} style={StyleSheet.absoluteFill}>
-          <Path d={path} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
+          <Path d={path} fill={fillColor} stroke={strokeColor} strokeWidth={strokeWidth} />
           {dots.map((d, i) => (
             <Circle key={i} cx={d.x} cy={d.y} r={d.r} fill={colors.accentOn} opacity={0.16} />
           ))}
@@ -174,13 +184,15 @@ export function SketchSurface({
 // A faintly hand-drawn horizontal divider.
 export function SketchDivider({
   seed = 'divider',
-  color = colors.border,
+  color,
   strokeWidth = 1.2,
 }: {
   seed?: string;
   color?: string;
   strokeWidth?: number;
 }) {
+  const colors = useColors();
+  const tint = color ?? colors.border;
   const [width, setWidth] = useState(0);
   const onLayout = (e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
@@ -191,17 +203,12 @@ export function SketchDivider({
     <View style={dividerStyles.wrap} onLayout={onLayout}>
       {width > 0 && (
         <Svg width={width} height={4}>
-          <Path d={path} stroke={color} strokeWidth={strokeWidth} fill="none" />
+          <Path d={path} stroke={tint} strokeWidth={strokeWidth} fill="none" />
         </Svg>
       )}
     </View>
   );
 }
-
-const paperStyles = StyleSheet.create({
-  markTL: { position: 'absolute', top: 8, left: 8 },
-  markTR: { position: 'absolute', top: 8, right: 8 },
-});
 
 const dividerStyles = StyleSheet.create({
   wrap: { height: 4, width: '100%' },
@@ -210,17 +217,19 @@ const dividerStyles = StyleSheet.create({
 // A pair of short stacked tick lines used as a minimalist label mark.
 export function TickPair({
   width = 16,
-  color = colors.borderStrong,
+  color,
   strokeWidth = 1.2,
 }: {
   width?: number;
   color?: string;
   strokeWidth?: number;
 }) {
+  const colors = useColors();
+  const tint = color ?? colors.borderStrong;
   return (
     <Svg width={width} height={8}>
-      <Line x1={0} y1={2} x2={width} y2={2} stroke={color} strokeWidth={strokeWidth} />
-      <Line x1={0} y1={6} x2={width * 0.6} y2={6} stroke={color} strokeWidth={strokeWidth} />
+      <Line x1={0} y1={2} x2={width} y2={2} stroke={tint} strokeWidth={strokeWidth} />
+      <Line x1={0} y1={6} x2={width * 0.6} y2={6} stroke={tint} strokeWidth={strokeWidth} />
     </Svg>
   );
 }
@@ -235,6 +244,7 @@ export function TopoChip({
   height?: number;
   seed?: string;
 }) {
+  const colors = useColors();
   const rings = topoRings(width * 0.62, height * 0.5, height * 0.46, 5, seed);
   return (
     <Svg width={width} height={height}>
@@ -268,6 +278,7 @@ export function BunkerBlob({
   seed?: string;
   rotation?: number;
 }) {
+  const colors = useColors();
   const cx = width / 2;
   const cy = height / 2;
   const rx = width * 0.42;
@@ -300,7 +311,7 @@ export type ScoreIndicator =
 export function ScoreGlyph({
   kind,
   size = 44,
-  color = colors.textPrimary,
+  color,
   strokeWidth = 1.6,
 }: {
   kind: ScoreIndicator;
@@ -308,9 +319,11 @@ export function ScoreGlyph({
   color?: string;
   strokeWidth?: number;
 }) {
+  const colors = useColors();
+  const tint = color ?? colors.textPrimary;
   const c = size / 2;
   const ring = (r: number, key: string) => (
-    <Circle key={key} cx={c} cy={c} r={r} stroke={color} strokeWidth={strokeWidth} fill="none" />
+    <Circle key={key} cx={c} cy={c} r={r} stroke={tint} strokeWidth={strokeWidth} fill="none" />
   );
   const box = (s: number, key: string) => {
     const off = c - s / 2;
@@ -318,7 +331,7 @@ export function ScoreGlyph({
       <Path
         key={key}
         d={`M${off} ${off} H${off + s} V${off + s} H${off} Z`}
-        stroke={color}
+        stroke={tint}
         strokeWidth={strokeWidth}
         fill="none"
       />

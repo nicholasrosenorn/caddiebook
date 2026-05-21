@@ -2,7 +2,7 @@ import { memo } from 'react';
 import Svg, { Circle, G, Line, Path, Polygon } from 'react-native-svg';
 
 import { isWedge } from '@/constants/clubs';
-import { colors } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import { trajectoryPath } from '@/lib/sketch';
 
 // The shared carry scale: every arc (cards + the bag fan) maps a yardage onto
@@ -70,6 +70,7 @@ function ClubArcImpl({
   loft = 0.5,
   parkedAt = 100,
 }: ClubArcProps) {
+  const colors = useColors();
   const groundY = height - 12;
   const x0 = PAD_L;
   const value = carry ?? parkedAt;
@@ -134,6 +135,7 @@ type BagFanProps = {
 };
 
 function BagFanImpl({ width, height, items }: BagFanProps) {
+  const colors = useColors();
   const groundY = height - 12;
   const x0 = PAD_L;
   const sorted = [...items].sort((a, b) => b.carry - a.carry);

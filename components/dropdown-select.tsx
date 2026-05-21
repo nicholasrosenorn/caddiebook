@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 
 export type DropdownOption<T extends string | number> = {
   value: T;
@@ -32,6 +33,8 @@ export function DropdownSelect<T extends string | number>({
   block = false,
   style,
 }: Props<T>) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const ref = useRef<View>(null);
@@ -100,7 +103,8 @@ export function DropdownSelect<T extends string | number>({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   block: {
     flex: 1,
   },

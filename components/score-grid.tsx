@@ -1,8 +1,10 @@
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ScoreGlyph, type ScoreIndicator } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, spacing } from '@/constants/theme';
+import { spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 
 const ROWS: number[][] = [
   [1, 2, 3],
@@ -19,6 +21,8 @@ type Props = {
 };
 
 export function ScoreGrid({ par, value, onChange }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.container}>
       <ThemedText type="label" style={styles.label}>Score</ThemedText>
@@ -52,6 +56,8 @@ function ScoreCell({
   selected: boolean;
   onPress: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const indicator: ScoreIndicator = par != null ? getIndicator(n, par) : 'none';
   const shapeColor = selected ? colors.accentOn : colors.borderStrong;
   return (
@@ -93,7 +99,8 @@ function getIndicator(score: number, par: number): ScoreIndicator {
   return 'tripleSquare';
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   container: {
     gap: spacing.sm,
   },

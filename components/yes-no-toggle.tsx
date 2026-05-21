@@ -1,8 +1,10 @@
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, spacing } from '@/constants/theme';
+import { spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 
 type Value = boolean | null;
 
@@ -18,6 +20,8 @@ const OPTIONS: { label: string; value: Value }[] = [
 ];
 
 export function YesNoToggle({ value, onChange, allowClear = true }: YesNoToggleProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.row}>
       {OPTIONS.map((option) => {
@@ -51,7 +55,8 @@ export function YesNoToggle({ value, onChange, allowClear = true }: YesNoToggleP
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   row: {
     flexDirection: 'row',
     gap: spacing.sm,

@@ -5,17 +5,13 @@ import Svg, { Circle, G, Line, Path, Polygon } from 'react-native-svg';
 import type { TargetPin } from '@/components/driver-target';
 import { BunkerBlob } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors } from '@/constants/theme';
+import { type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import { APPROACH_RINGS } from '@/lib/shots';
 import { roughCirclePath, stippleInEllipse } from '@/lib/sketch';
 
 const DEFAULT_SIZE = 280;
 const PIN_SIZE = 13;
-
-// Same palette as the driver target: light beige-green putting surface with a
-// slightly darker fringe band around it.
-const GREEN_FILL = '#E4E2CB';
-const FRINGE_GREEN = '#C0D0AC';
 
 type ApproachTargetProps = {
   pins?: TargetPin[];
@@ -31,6 +27,12 @@ function ApproachTargetImpl({
   size = DEFAULT_SIZE,
   pinSize = PIN_SIZE,
 }: ApproachTargetProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  // Same palette as the driver target: light beige-green putting surface with a
+  // slightly darker fringe band around it.
+  const GREEN_FILL = colors.fairway;
+  const FRINGE_GREEN = colors.rough;
   const handlePress = (e: GestureResponderEvent) => {
     if (!onTap) return;
     const x = e.nativeEvent.locationX / size;
@@ -179,6 +181,7 @@ function PinCircle({
   size: number;
   variant: 'primary' | 'muted';
 }) {
+  const colors = useColors();
   return (
     <Circle
       cx={cx}
@@ -196,7 +199,8 @@ function clamp(v: number): number {
   return Math.max(0, Math.min(1, v));
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   wrap: {
     alignSelf: 'center',
     position: 'relative',

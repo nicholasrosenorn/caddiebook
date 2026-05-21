@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
@@ -13,7 +13,8 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { Paper, SketchDivider } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -35,6 +36,8 @@ const ITEMS: ToolItem[] = [
 ];
 
 export default function MenuScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const panelWidth = Math.min(320, width * 0.82);
@@ -72,6 +75,8 @@ export default function MenuScreen() {
     closeThen(() => router.replace(item.route as any));
   };
 
+  const openSettings = () => closeThen(() => router.replace('/settings' as any));
+
   const panelStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: (progress.value - 1) * panelWidth }],
   }));
@@ -88,7 +93,11 @@ export default function MenuScreen() {
         accessibilityLabel="Close menu"
       />
       <Animated.View
-        style={[styles.panel, panelStyle, { width: panelWidth, paddingTop: insets.top + spacing.lg }]}>
+        style={[
+          styles.panel,
+          panelStyle,
+          { width: panelWidth, paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.md },
+        ]}>
         <Paper />
         <Pressable
           onPress={dismiss}
@@ -137,81 +146,111 @@ export default function MenuScreen() {
             );
           })}
         </View>
+
+        {/* Settings pinned to the bottom of the panel */}
+        <View style={styles.footer}>
+          <SketchDivider seed="menu-settings" />
+          <Pressable
+            onPress={openSettings}
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
+            <View style={styles.settingsIcon}>
+              <IconSymbol name="gearshape" size={20} color={colors.textSecondary} />
+            </View>
+            <View style={styles.rowText}>
+              <ThemedText style={styles.rowLabel}>Settings</ThemedText>
+              <ThemedText type="muted" style={styles.rowHint}>
+                Theme &amp; appearance
+              </ThemedText>
+            </View>
+            <IconSymbol name="chevron.right" size={20} color={colors.textMuted} />
+          </Pressable>
+        </View>
       </Animated.View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#1A1A1A55',
-  },
-  panel: {
-    height: '100%',
-    backgroundColor: colors.background,
-    borderRightWidth: 1,
-    borderRightColor: colors.borderStrong,
-    paddingHorizontal: spacing.md,
-  },
-  close: {
-    position: 'absolute',
-    right: spacing.md,
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-  },
-  closePressed: {
-    opacity: 0.5,
-  },
-  header: {
-    gap: 2,
-    paddingBottom: spacing.lg,
-  },
-  title: {
-    fontFamily: fontFamily.serifBold,
-    fontSize: 20,
-    color: colors.textPrimary,
-    marginTop: 5,
-  },
-  list: {
-    gap: 0,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.md,
-    gap: spacing.sm,
-  },
-  rowPressed: {
-    opacity: 0.6,
-  },
-  rowText: {
-    flex: 1,
-    gap: 2,
-  },
-  rowLabel: {
-    fontFamily: fontFamily.serif,
-    fontSize: 18,
-    color: colors.textPrimary,
-  },
-  rowLabelDisabled: {
-    color: colors.textMuted,
-  },
-  rowHint: {
-    fontSize: 12,
-  },
-  soon: {
-    fontFamily: fontFamily.sans,
-    fontSize: 10,
-    letterSpacing: 1,
-    color: colors.textMuted,
-  },
-});
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
+    root: {
+      flex: 1,
+      flexDirection: 'row',
+    },
+    backdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: '#1A1A1A55',
+    },
+    panel: {
+      height: '100%',
+      backgroundColor: colors.background,
+      borderRightWidth: 1,
+      borderRightColor: colors.borderStrong,
+      paddingHorizontal: spacing.md,
+    },
+    close: {
+      position: 'absolute',
+      right: spacing.md,
+      width: 32,
+      height: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 10,
+    },
+    closePressed: {
+      opacity: 0.5,
+    },
+    header: {
+      gap: 2,
+      paddingBottom: spacing.lg,
+    },
+    title: {
+      fontFamily: fontFamily.serifBold,
+      fontSize: 20,
+      color: colors.textPrimary,
+      marginTop: 5,
+    },
+    list: {
+      gap: 0,
+    },
+    footer: {
+      marginTop: 'auto',
+    },
+    settingsIcon: {
+      width: 28,
+      alignItems: 'flex-start',
+      justifyContent: 'center',
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: spacing.md,
+      gap: spacing.sm,
+    },
+    rowPressed: {
+      opacity: 0.6,
+    },
+    rowText: {
+      flex: 1,
+      gap: 2,
+    },
+    rowLabel: {
+      fontFamily: fontFamily.serif,
+      fontSize: 18,
+      color: colors.textPrimary,
+    },
+    rowLabelDisabled: {
+      color: colors.textMuted,
+    },
+    rowHint: {
+      fontSize: 12,
+    },
+    soon: {
+      fontFamily: fontFamily.sans,
+      fontSize: 10,
+      letterSpacing: 1,
+      color: colors.textMuted,
+    },
+  });

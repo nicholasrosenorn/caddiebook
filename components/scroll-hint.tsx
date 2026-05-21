@@ -3,11 +3,13 @@ import { Animated, Easing, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { colors, spacing } from '@/constants/theme';
+import { spacing } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 
 // A gently bouncing chevron-down hinting that the next page is a swipe away.
 // Tapping it also advances to the next page.
 export function ScrollHint({ onPress }: { onPress: () => void }) {
+  const colors = useColors();
   const insets = useSafeAreaInsets();
   const bounce = useRef(new Animated.Value(0)).current;
 

@@ -1,11 +1,13 @@
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import { deleteRound, getHolesForRound, listRounds } from '@/db/queries';
 import type { Round, RoundSummary } from '@/db/types';
 import { computeRoundSummary, formatPct } from '@/lib/stats';
@@ -13,7 +15,10 @@ import { computeRoundSummary, formatPct } from '@/lib/stats';
 type RoundWithSummary = Round & { summary: RoundSummary };
 
 export default function RoundsScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [rounds, setRounds] = useState<RoundWithSummary[] | null>(null);
+  const tabBarHeight = useBottomTabBarHeight();
 
   const load = useCallback(async () => {
     const list = await listRounds();
@@ -87,7 +92,7 @@ export default function RoundsScreen() {
       <FlatList
         data={rounds}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + spacing.md }]}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         renderItem={({ item }) => (
           <Pressable
@@ -134,6 +139,8 @@ export default function RoundsScreen() {
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.stat}>
       <ThemedText type="caption">{label.toUpperCase()}</ThemedText>
@@ -150,7 +157,8 @@ function formatDate(iso: string): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   emptyState: {
     flex: 1,
     alignItems: 'center',

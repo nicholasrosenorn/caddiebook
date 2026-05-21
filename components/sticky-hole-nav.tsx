@@ -1,9 +1,11 @@
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SketchDivider, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 
 type Props = {
   holeNumber: number;
@@ -24,6 +26,8 @@ export function StickyHoleNav({
   onNext,
   onFinish,
 }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   return (
     <View style={styles.outer}>
@@ -77,7 +81,8 @@ export function StickyHoleNav({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   outer: {
     position: 'absolute',
     left: 0,

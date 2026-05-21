@@ -1,3 +1,4 @@
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -10,7 +11,8 @@ import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { TrendChart } from '@/components/trend-chart';
 import { CLUB_OPTIONS, sortByDriveLength } from '@/constants/clubs';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import {
   getAllHoles,
   getAllPutts,
@@ -107,6 +109,9 @@ function sortByClubOrder(clubs: string[]): string[] {
 }
 
 export default function StatsScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const tabBarHeight = useBottomTabBarHeight();
   const [data, setData] = useState<Data | null>(null);
   const [holeFilter, setHoleFilter] = useState<HoleCountFilter>(18);
   const [roundsFilter, setRoundsFilter] = useState<RoundsFilter>(20);
@@ -246,7 +251,7 @@ export default function StatsScreen() {
   return (
     <Screen padded={false} marks>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + spacing.lg }]}
         showsVerticalScrollIndicator={false}>
 
         {__DEV__ ? (
@@ -323,6 +328,8 @@ function StatsBody({
   driveClubOptions: DropdownOption<ClubFilter>[];
   onDriveClubChange: (value: ClubFilter) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { stats, trend, review } = view;
   const showTrends = trend.length >= 2;
   const uniform = stats.uniformLength;
@@ -350,9 +357,9 @@ function StatsBody({
           <BestRoundCallout best={stats.bestRound} uniform={uniform} />
         ) : null}
         <View style={styles.perParRow}>
-          <PerParTile label="Par 3" value={stats.perPar.par3} />
-          <PerParTile label="Par 4" value={stats.perPar.par4} />
-          <PerParTile label="Par 5" value={stats.perPar.par5} />
+          <PerParTile label="Par 3 avg" value={stats.perPar.par3} />
+          <PerParTile label="Par 4 avg" value={stats.perPar.par4} />
+          <PerParTile label="Par 5 avg" value={stats.perPar.par5} />
         </View>
       </Section>
 
@@ -517,6 +524,8 @@ function DevBar({
   onSeed: () => void;
   onClear: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.devBar}>
       <Pressable style={styles.devBtn} disabled={busy} onPress={onSeed}>
@@ -547,6 +556,8 @@ function ScoringCard({
   stats: LifetimeStats;
   holeFilter: HoleCountFilter;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   // Single hole-count → a real scoring average. Mixed → fair per-18 to-par.
   const single = holeFilter !== 'all';
   const primaryLabel = single ? 'SCORING AVG' : 'TO PAR /18';
@@ -576,6 +587,8 @@ function ScoringCard({
 }
 
 function BestRoundCallout({ best, uniform }: { best: RoundDerived; uniform: boolean }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <SketchSurface
       seed="stats-best"
@@ -615,6 +628,8 @@ function TrendCard({
   baselineLabel?: string;
   formatValue: (n: number) => string;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   if (points.length < 2) return null;
   return (
     <SketchSurface seed={`trend-${title}`} style={styles.trendCard}>
@@ -633,6 +648,8 @@ function TrendCard({
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.section}>
       <ThemedText type="subtitle">{title}</ThemedText>
@@ -642,6 +659,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function StatTile({ label, value }: { label: string; value: string }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <SketchSurface seed={`stats-tile-${label}`} style={styles.statTile}>
       <ThemedText type="caption" numberOfLines={1}>
@@ -655,6 +674,8 @@ function StatTile({ label, value }: { label: string; value: string }) {
 }
 
 function PerParTile({ label, value }: { label: string; value: number | null }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <SketchSurface seed={`stats-perpar-${label}`} style={styles.perParTile}>
       <ThemedText type="caption" numberOfLines={1}>
@@ -667,19 +688,6 @@ function PerParTile({ label, value }: { label: string; value: number | null }) {
   );
 }
 
-const DIST_ROWS: {
-  key: keyof LifetimeStats['distribution'];
-  label: string;
-  color: string;
-}[] = [
-  { key: 'eagleOrBetter', label: 'Eagle+', color: colors.info },
-  { key: 'birdie', label: 'Birdie', color: colors.accent },
-  { key: 'par', label: 'Par', color: colors.borderStrong },
-  { key: 'bogey', label: 'Bogey', color: colors.warning },
-  { key: 'doubleBogey', label: 'Double', color: '#F97316' },
-  { key: 'tripleOrWorse', label: 'Triple+', color: colors.danger },
-];
-
 function ScoreDistributionBars({
   distribution,
   empty,
@@ -687,6 +695,20 @@ function ScoreDistributionBars({
   distribution: LifetimeStats['distribution'];
   empty?: boolean;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const DIST_ROWS: {
+    key: keyof LifetimeStats['distribution'];
+    label: string;
+    color: string;
+  }[] = [
+    { key: 'eagleOrBetter', label: 'Eagle+', color: colors.info },
+    { key: 'birdie', label: 'Birdie', color: colors.accent },
+    { key: 'par', label: 'Par', color: colors.borderStrong },
+    { key: 'bogey', label: 'Bogey', color: colors.warning },
+    { key: 'doubleBogey', label: 'Double', color: '#F97316' },
+    { key: 'tripleOrWorse', label: 'Triple+', color: colors.danger },
+  ];
   const max = Math.max(1, ...DIST_ROWS.map((r) => distribution[r.key]));
   return (
     <View style={styles.barList}>
@@ -737,6 +759,8 @@ function SplitDistanceBars({
   failLabel: string;
   seedPrefix: string;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.barList}>
       {rows.map((r) => {
@@ -790,6 +814,8 @@ function SplitDistanceBars({
 }
 
 function ReviewInsightsCard({ review }: { review: ReturnType<typeof aggregateReview> }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const rows: { question: string; answer: string | null; emphasis?: boolean }[] = [
     {
       question: 'Most often costs you strokes',
@@ -853,7 +879,8 @@ function formatDate(iso: string): string {
   });
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   content: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,

@@ -1,8 +1,10 @@
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 
 type Props = {
   holeNumber: number;
@@ -15,6 +17,8 @@ type Props = {
 
 // Floating top-center pill for jumping between holes while entering data.
 export function HoleStepper({ holeNumber, par, isFirstHole, isLastHole, onPrev, onNext }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.outer} pointerEvents="box-none">
       <SketchSurface seed="hole-stepper" radius={spacing.md} style={styles.pill}>
@@ -55,7 +59,8 @@ export function HoleStepper({ holeNumber, par, isFirstHole, isLastHole, onPrev, 
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   outer: {
     position: 'absolute',
     top: spacing.sm,

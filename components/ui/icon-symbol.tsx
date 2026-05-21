@@ -24,6 +24,7 @@ const MAPPING = {
   'chart.bar.fill': 'bar-chart',
   'plus': 'add',
   'plus.circle.fill': 'add-circle',
+  'info.circle': 'info-outline',
   'figure.golf': 'sports-golf',
   'checkmark': 'check',
   'xmark': 'close',
@@ -32,6 +33,7 @@ const MAPPING = {
   'clock': 'schedule',
   'play.fill': 'play-arrow',
   'stop.fill': 'stop',
+  'gearshape': 'settings',
 } as IconMapping;
 
 /**

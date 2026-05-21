@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { FlatList, Modal, Pressable, StyleSheet, View } from 'react-native';
 
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS } from '@/constants/clubs';
-import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { fontFamily, radius, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 
 type Props = {
   value: string[];
@@ -19,6 +20,8 @@ type Props = {
 // Multi-select club bag editor — same modal pattern as the (single-select)
 // club picker, but rows toggle membership and emit clubs in canonical order.
 export function BagPicker({ value, onChange, label, options = CLUB_OPTIONS }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [open, setOpen] = useState(false);
   const selected = new Set(value);
   const optionSet = new Set(options);
@@ -108,7 +111,8 @@ export function BagPicker({ value, onChange, label, options = CLUB_OPTIONS }: Pr
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   field: {
     flexDirection: 'row',
     justifyContent: 'space-between',

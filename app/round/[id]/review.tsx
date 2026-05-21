@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -14,7 +14,8 @@ import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import { getReview, setRoundCompletedAt, upsertReview } from '@/db/queries';
 import type { CommonMiss, MostCostly, RangeFocus } from '@/db/types';
 import {
@@ -27,6 +28,8 @@ import {
 const TOTAL_PAGES = 5;
 
 export default function ReviewScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const [pageHeight, setPageHeight] = useState<number | null>(null);
@@ -284,6 +287,8 @@ function QuestionPage({
   onBack: (() => void) | null;
   children: React.ReactNode;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={{ height }}>
       <View style={styles.pageContent}>
@@ -322,6 +327,8 @@ function ChipList<T extends string>({
   value: T | null;
   onChange: (next: T) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.chipList}>
       {options.map((opt) => {
@@ -356,6 +363,8 @@ function RatingGrid({
   value: number | null;
   onChange: (next: number) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const row1 = RATING_VALUES.slice(0, 5);
   const row2 = RATING_VALUES.slice(5, 10);
   const renderTile = (n: number) => {
@@ -394,6 +403,8 @@ function PageDots({
   totalPages: number;
   currentPage: number;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.dotsContainer} pointerEvents="none">
       {Array.from({ length: totalPages }).map((_, i) => (
@@ -406,7 +417,8 @@ function PageDots({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   flex: { flex: 1 },
   pageContent: {
     flex: 1,

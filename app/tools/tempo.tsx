@@ -1,7 +1,7 @@
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   cancelAnimation,
@@ -18,7 +18,8 @@ import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import { getSetting, setSetting } from '@/db/queries';
 
 const TEMPOS = [126, 144, 156, 184] as const;
@@ -48,6 +49,8 @@ const AnimatedG = Animated.createAnimatedComponent(G);
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 export default function TempoScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [bpm, setBpm] = useState<number>(144);
   const [running, setRunning] = useState(false);
 
@@ -247,7 +250,8 @@ export default function TempoScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     alignItems: 'center',

@@ -4,7 +4,8 @@ import Svg, { Circle, ClipPath, Defs, G, Path, Rect } from 'react-native-svg';
 
 import { BunkerBlob } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, spacing } from '@/constants/theme';
+import { spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import { CF_LEFT_EDGE, CF_RIGHT_EDGE, FAIRWAY_INSET } from '@/lib/shots';
 import { fairwayPath, stippleInEllipse, wavyLines } from '@/lib/sketch';
 
@@ -12,10 +13,6 @@ const DEFAULT_WIDTH = 220;
 const DEFAULT_HEIGHT = 450;
 const PIN_SIZE = 13;
 
-// Three nested tones, beige (fairway) → dark green (outer shading).
-const FAIRWAY_GREEN = '#E4E2CB';
-const ROUGH_GREEN = '#C0D0AC';
-const SHADING_GREEN = '#A6BC90';
 const ROUGH_INSET = 0.85;
 
 export type TargetPin = {
@@ -42,6 +39,12 @@ function DriverTargetImpl({
   height = DEFAULT_HEIGHT,
   pinSize = PIN_SIZE,
 }: DriverTargetProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  // Three nested tones, beige (fairway) → dark green (outer shading).
+  const FAIRWAY_GREEN = colors.fairway;
+  const ROUGH_GREEN = colors.rough;
+  const SHADING_GREEN = colors.roughDeep;
   const handlePress = (e: GestureResponderEvent) => {
     if (!onTap) return;
     const x = e.nativeEvent.locationX / width;
@@ -228,6 +231,7 @@ function PinCircle({
   size: number;
   variant: 'primary' | 'muted';
 }) {
+  const colors = useColors();
   return (
     <Circle
       cx={cx}
@@ -245,7 +249,8 @@ function clamp(v: number): number {
   return Math.max(0, Math.min(1, v));
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   wrap: {
     alignSelf: 'center',
     position: 'relative',

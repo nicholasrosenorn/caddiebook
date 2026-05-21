@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { BinaryChoice } from '@/components/binary-choice';
@@ -6,7 +6,8 @@ import { OptionRow } from '@/components/option-row';
 import { ScoreGrid } from '@/components/score-grid';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import { updateHole } from '@/db/queries';
 import type { Hole } from '@/db/types';
 import { computeRoundSummary, deriveGir, formatPct, resolveUpAndDown } from '@/lib/stats';
@@ -21,6 +22,8 @@ type Props = {
 };
 
 export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [notesDraft, setNotesDraft] = useState(hole.notes ?? '');
 
   useEffect(() => {
@@ -162,6 +165,8 @@ export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
 }
 
 function SummaryStat({ label, value }: { label: string; value: string }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.summaryStat}>
       <ThemedText type="caption">{label.toUpperCase()}</ThemedText>
@@ -170,7 +175,8 @@ function SummaryStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   scroll: {
     flex: 1,
   },

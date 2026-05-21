@@ -3,14 +3,12 @@ import { Pressable, StyleSheet, useWindowDimensions, View, type LayoutChangeEven
 import Svg, { Circle, G, Line, Path, Polygon } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import { createPutt, deletePutt } from '@/db/queries';
 import type { Hole, Putt } from '@/db/types';
 import { roughCirclePath, roughRectPath, stippleInRect } from '@/lib/sketch';
 
-// Same beige-green / fringe palette as the approach + driver targets.
-const GREEN_FILL = '#E4E2CB';
-const FRINGE_GREEN = '#C0D0AC';
 const GLYPH_SIZE = 18;
 const LABEL_W = 52;
 const FRINGE = 8; // width of the darker fringe band around the board
@@ -34,6 +32,8 @@ type Props = {
 };
 
 export function PuttingPage({ roundId, hole, putts, onChange }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { width: screenWidth } = useWindowDimensions();
   const boardWidth = Math.min(340, screenWidth - 32);
 
@@ -99,6 +99,11 @@ function Board({
   onAdd: (distance: number, made: boolean) => void;
   onRemove: (id: string) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  // Same beige-green / fringe palette as the approach + driver targets.
+  const GREEN_FILL = colors.fairway;
+  const FRINGE_GREEN = colors.rough;
   const [size, setSize] = useState({ w: 0, h: 0 });
   const onLayout = (e: LayoutChangeEvent) => {
     const { width: w, height: h } = e.nativeEvent.layout;
@@ -202,6 +207,8 @@ function PuttZone({
   onAdd: () => void;
   onRemove: (id: string) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const total = editable.length + muted.length;
   return (
     <Pressable onPress={onAdd} style={({ pressed }) => [styles.zone, pressed && styles.zonePressed]}>
@@ -231,6 +238,7 @@ function PuttZone({
 }
 
 function PuttGlyph({ kind, seed, opacity = 1 }: { kind: 'make' | 'miss'; seed: string; opacity?: number }) {
+  const colors = useColors();
   const c = GLYPH_SIZE / 2;
   const r = GLYPH_SIZE * 0.4;
   const path = roughCirclePath(c, c, r, seed, { jitter: 0.06, points: 14 });
@@ -246,6 +254,7 @@ function PuttGlyph({ kind, seed, opacity = 1 }: { kind: 'make' | 'miss'; seed: s
 }
 
 function Cup() {
+  const colors = useColors();
   return (
     <Svg width={36} height={30}>
       {/* flagstick rising out of the <3 band into the cup */}
@@ -257,7 +266,8 @@ function Cup() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: spacing.md,

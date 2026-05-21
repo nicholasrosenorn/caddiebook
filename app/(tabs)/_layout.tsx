@@ -1,11 +1,15 @@
 import { router, Tabs } from 'expo-router';
-import { Pressable } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
+import { InfoHint } from '@/components/info-hint';
+import { TabBarBackground } from '@/components/tab-bar-background';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 
 function MenuButton() {
+  const colors = useColors();
   return (
     <Pressable
       accessibilityRole="button"
@@ -22,15 +26,18 @@ function MenuButton() {
 }
 
 export default function TabLayout() {
+  const colors = useColors();
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textMuted,
+        tabBarBackground: () => <TabBarBackground />,
         tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.borderStrong,
-          borderTopWidth: 1,
+          position: 'absolute',
+          backgroundColor: 'transparent',
+          borderTopWidth: 0,
+          elevation: 0,
         },
         tabBarLabelStyle: {
           fontFamily: fontFamily.serif,
@@ -53,17 +60,28 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={26} name="list.bullet" color={color} />,
           headerLeft: () => <MenuButton />,
           headerRight: () => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="New round"
-              onPress={() => router.push('/round/new')}
-              hitSlop={12}
-              style={({ pressed }) => ({
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: spacing.sm,
                 paddingHorizontal: spacing.md,
-                opacity: pressed ? 0.6 : 1,
-              })}>
-              <IconSymbol name="plus" size={24} color={colors.accent} />
-            </Pressable>
+              }}>
+              <InfoHint
+                title="Managing rounds"
+                message="Tap a round to open it. Press and hold a round to delete it."
+                size={22}
+                color={colors.accent}
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="New round"
+                onPress={() => router.push('/round/new')}
+                hitSlop={12}
+                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
+                <IconSymbol name="plus" size={24} color={colors.accent} />
+              </Pressable>
+            </View>
           ),
         }}
       />

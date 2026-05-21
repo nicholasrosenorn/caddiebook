@@ -11,7 +11,8 @@ import {
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS, OTHER_CLUB } from '@/constants/clubs';
-import { colors, radius, spacing } from '@/constants/theme';
+import { radius, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 
 type ClubPickerProps = {
   value: string | null;
@@ -19,6 +20,8 @@ type ClubPickerProps = {
 };
 
 export function ClubPicker({ value, onChange }: ClubPickerProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [open, setOpen] = useState(false);
   const [otherText, setOtherText] = useState('');
   const isStandard = useMemo(
@@ -119,7 +122,8 @@ export function ClubPicker({ value, onChange }: ClubPickerProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   fieldWrap: {
     minHeight: 44,
   },

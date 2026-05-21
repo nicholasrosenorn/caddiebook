@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 
 import { SketchSurface } from '@/components/sketch';
-import { colors, spacing } from '@/constants/theme';
+import { spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 
 type NumericFieldProps = Omit<TextInputProps, 'value' | 'onChangeText' | 'onBlur'> & {
   value: number | null;
@@ -23,6 +24,8 @@ export function NumericField({
   style,
   ...rest
 }: NumericFieldProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [text, setText] = useState<string>(value == null ? '' : String(value));
 
   useEffect(() => {
@@ -66,7 +69,8 @@ export function NumericField({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   surface: {
     minHeight: 40,
   },

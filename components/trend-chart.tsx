@@ -3,7 +3,8 @@ import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
-import { colors, fontFamily } from '@/constants/theme';
+import { fontFamily, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 
 type TrendChartProps = {
   /** Chronological values, oldest → newest. */
@@ -27,8 +28,11 @@ export function TrendChart({
   baseline,
   baselineLabel,
   formatValue = (n) => `${Math.round(n)}`,
-  color = colors.accent,
+  color,
 }: TrendChartProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const tint = color ?? colors.accent;
   const [width, setWidth] = useState(0);
   const onLayout = (e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
@@ -81,10 +85,10 @@ export function TrendChart({
               />
             )}
             {geom.areaPath ? (
-              <Path d={geom.areaPath} fill={color} opacity={0.07} />
+              <Path d={geom.areaPath} fill={tint} opacity={0.07} />
             ) : null}
             {geom.coords.length > 1 && (
-              <Path d={geom.linePath} stroke={color} strokeWidth={2} fill="none" />
+              <Path d={geom.linePath} stroke={tint} strokeWidth={2} fill="none" />
             )}
             {geom.coords.map((c, i) => {
               const last = i === geom.coords.length - 1;
@@ -94,8 +98,8 @@ export function TrendChart({
                   cx={c.x}
                   cy={c.y}
                   r={last ? 4 : 2.2}
-                  fill={last ? color : colors.surface}
-                  stroke={color}
+                  fill={last ? tint : colors.surface}
+                  stroke={tint}
                   strokeWidth={last ? 0 : 1.4}
                 />
               );
@@ -117,7 +121,8 @@ export function TrendChart({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   wrap: {
     width: '100%',
     position: 'relative',

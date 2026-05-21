@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -10,7 +10,8 @@ import {
 
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 
 type Props = {
   value: number | null;
@@ -35,6 +36,8 @@ export function YardageRuler({
   step = 5,
   defaultValue = 125,
 }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const scrollRef = useRef<ScrollView>(null);
   const [width, setWidth] = useState(0);
   const [display, setDisplay] = useState<number>(value ?? defaultValue);
@@ -124,7 +127,8 @@ export function YardageRuler({
 
 const TRACK_HEIGHT = 46;
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   surface: {
     paddingVertical: spacing.sm,
   },

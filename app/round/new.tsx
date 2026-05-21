@@ -1,6 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -16,12 +16,15 @@ import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS } from '@/constants/clubs';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import { createRound, getBag, setBag } from '@/db/queries';
 
 const HOLE_OPTIONS = [9, 18] as const;
 
 export default function NewRoundScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [courseName, setCourseName] = useState('');
   const [date, setDate] = useState(new Date());
   const [holeCount, setHoleCount] = useState<9 | 18>(18);
@@ -180,7 +183,8 @@ function formatIsoDate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   flex: { flex: 1 },
   field: {
     paddingTop: spacing.md,

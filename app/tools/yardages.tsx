@@ -11,11 +11,13 @@ import {
 
 import { BagPicker } from '@/components/bag-picker';
 import { BagFan, ClubArc, clubLoft, xToCarry } from '@/components/club-arc';
+import { InfoHint } from '@/components/info-hint';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS, sortByDriveLength } from '@/constants/clubs';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import { getBag, getClubYardages, setBag, setClubYardage } from '@/db/queries';
 
 const DEFAULT_YDS = 100;
@@ -29,6 +31,8 @@ function clubsFromBag(bag: string[]): string[] {
 }
 
 export default function YardagesScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [bag, setBagState] = useState<string[]>([...CLUB_OPTIONS]);
   const [clubs, setClubs] = useState<string[]>([]);
   const [yardages, setYardages] = useState<Record<string, number>>({});
@@ -77,14 +81,20 @@ export default function YardagesScreen() {
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}>
-        <ThemedText type="muted" style={styles.intro}>
-          Your full-swing carry per club. Drag the flag to set a distance. Long-press a yardage to clear
-          it.
-        </ThemedText>
 
         <BagPicker value={bag} onChange={onBagChange} label="My bag" />
 
         {fanItems.length >= 2 && <BagPlate items={fanItems} />}
+
+        <View style={styles.introRow}>
+          <ThemedText type="muted" style={styles.intro}>
+            Drag a flag to set a carry distance. Long-press a yardage to clear it.
+          </ThemedText>
+          <InfoHint
+            title="Setting your yardages"
+            message="Drag the flag along each club's arc to set its typical carry. Once two or more clubs have a number, the full-bag fan plots them together. Long-press a yardage to clear it."
+          />
+        </View>
 
         {clubs.map((club) => (
           <ArcCard
@@ -101,6 +111,8 @@ export default function YardagesScreen() {
 
 // The whole-bag silhouette plate: nested trajectories at a glance.
 function BagPlate({ items }: { items: { carry: number; loft: number }[] }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [width, setWidth] = useState(0);
   const onLayout = (e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
@@ -134,6 +146,8 @@ function ArcCard({
   yards: number | null;
   onCommit: (next: number | null) => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [bandW, setBandW] = useState(0);
   const [drag, setDrag] = useState<number | null>(null);
   const display = drag ?? yards;
@@ -207,14 +221,21 @@ function ArcCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   content: {
     paddingVertical: spacing.md,
     gap: spacing.sm,
   },
-  intro: {
-    fontSize: 13,
+  introRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
     paddingBottom: spacing.sm,
+  },
+  intro: {
+    flex: 1,
+    fontSize: 13,
   },
   fanCard: {
     paddingHorizontal: spacing.sm,

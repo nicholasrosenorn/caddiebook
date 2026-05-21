@@ -1,12 +1,13 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { ClubChips } from '@/components/club-chips';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
 import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS, sortByDriveLength } from '@/constants/clubs';
-import { colors, radius, spacing } from '@/constants/theme';
+import { radius, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import { getBag, updateHole, upsertShot } from '@/db/queries';
 import type { Hole, Shot } from '@/db/types';
 import { driverLane, isFairwayHit } from '@/lib/shots';
@@ -21,6 +22,8 @@ type Props = {
 };
 
 export function DrivePage({ roundId, hole, shotsForRound, onChange }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const targetWidth = Math.min(300, screenWidth - 60);
   const targetHeight = Math.min(500, screenHeight * 0.56);
@@ -123,7 +126,8 @@ function formatDriverResult(xNorm: number, yNorm: number): string {
   return 'Right of fairway';
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: spacing.md,

@@ -1,7 +1,9 @@
+import { useMemo } from 'react';
 import { StyleSheet, View, type ViewProps } from 'react-native';
 
 import { Paper } from '@/components/sketch';
-import { colors, spacing } from '@/constants/theme';
+import { spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 
 type ScreenProps = ViewProps & {
   padded?: boolean;
@@ -19,6 +21,8 @@ export function Screen({
   style,
   ...rest
 }: ScreenProps) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={[styles.screen, style]} {...rest}>
       {paper && <Paper marks={marks} />}
@@ -27,15 +31,16 @@ export function Screen({
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    flex: 1,
-  },
-  padded: {
-    paddingHorizontal: spacing.md,
-  },
-});
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    content: {
+      flex: 1,
+    },
+    padded: {
+      paddingHorizontal: spacing.md,
+    },
+  });

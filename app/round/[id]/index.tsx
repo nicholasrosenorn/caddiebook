@@ -20,7 +20,8 @@ import { Screen } from '@/components/screen';
 import { ScrollHint } from '@/components/scroll-hint';
 import { StickyHoleNav } from '@/components/sticky-hole-nav';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { colors } from '@/constants/theme';
+import { type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import {
   getHolesForRound,
   getPuttsForRound,
@@ -32,6 +33,8 @@ import type { Hole, Putt, Round, Shot } from '@/db/types';
 const NAV_HEIGHT = 96;
 
 export default function RoundScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const [round, setRound] = useState<Round | null>(null);
   const [holes, setHoles] = useState<Hole[]>([]);
@@ -246,6 +249,8 @@ function PageDots({
   totalPages: number;
   currentPage: number;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.dotsContainer} pointerEvents="none">
       {Array.from({ length: totalPages }).map((_, i) => (
@@ -258,7 +263,8 @@ function PageDots({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   flex: { flex: 1 },
   closeButton: {
     position: 'absolute',

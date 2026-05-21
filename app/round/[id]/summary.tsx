@@ -1,5 +1,5 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,7 +9,8 @@ import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { colors, fontFamily, spacing } from '@/constants/theme';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import {
   getHolesForRound,
   getPuttsForRound,
@@ -42,6 +43,8 @@ const PUTT_BUCKETS = [
 ] as const;
 
 export default function SummaryScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const [round, setRound] = useState<Round | null>(null);
@@ -236,6 +239,8 @@ export default function SummaryScreen() {
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.section}>
       <ThemedText type="subtitle">{title}</ThemedText>
@@ -245,6 +250,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function StatTile({ label, value }: { label: string; value: string }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <SketchSurface seed={`summary-stat-${label}`} style={styles.statTile}>
       <ThemedText type="caption" numberOfLines={1}>
@@ -258,6 +265,8 @@ function StatTile({ label, value }: { label: string; value: string }) {
 }
 
 function PerParTile({ label, value }: { label: string; value: number | null }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <SketchSurface seed={`summary-perpar-${label}`} style={styles.perParTile}>
       <ThemedText type="caption" numberOfLines={1}>
@@ -270,24 +279,25 @@ function PerParTile({ label, value }: { label: string; value: number | null }) {
   );
 }
 
-const DIST_ROWS: {
-  key: keyof ReturnType<typeof computeScoreDistribution>;
-  label: string;
-  color: string;
-}[] = [
-  { key: 'eagleOrBetter', label: 'Eagle+', color: colors.info },
-  { key: 'birdie', label: 'Birdie', color: colors.accent },
-  { key: 'par', label: 'Par', color: colors.borderStrong },
-  { key: 'bogey', label: 'Bogey', color: colors.warning },
-  { key: 'doubleBogey', label: 'Double', color: '#F97316' },
-  { key: 'tripleOrWorse', label: 'Triple+', color: colors.danger },
-];
-
 function ScoreDistributionBars({
   distribution,
 }: {
   distribution: ReturnType<typeof computeScoreDistribution>;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const DIST_ROWS: {
+    key: keyof ReturnType<typeof computeScoreDistribution>;
+    label: string;
+    color: string;
+  }[] = [
+    { key: 'eagleOrBetter', label: 'Eagle+', color: colors.info },
+    { key: 'birdie', label: 'Birdie', color: colors.accent },
+    { key: 'par', label: 'Par', color: colors.borderStrong },
+    { key: 'bogey', label: 'Bogey', color: colors.warning },
+    { key: 'doubleBogey', label: 'Double', color: '#F97316' },
+    { key: 'tripleOrWorse', label: 'Triple+', color: colors.danger },
+  ];
   const max = Math.max(1, ...DIST_ROWS.map((r) => distribution[r.key]));
   return (
     <View style={styles.distList}>
@@ -325,6 +335,8 @@ function ScoreDistributionBars({
 }
 
 function PuttingDistribution({ putts }: { putts: Putt[] }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const buckets = PUTT_BUCKETS.map((b) => {
     const inBucket = putts.filter((p) => p.distanceFt === b.ft);
     const makes = inBucket.filter((p) => p.made).length;
@@ -385,6 +397,8 @@ function PuttingDistribution({ putts }: { putts: Putt[] }) {
 }
 
 function ReviewAnswers({ review }: { review: PostRoundReview }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const rows: { question: string; answer: string | null; emphasis?: 'rating' }[] = [
     {
       question: 'Cost me the most strokes',
@@ -433,6 +447,8 @@ function ReviewAnswers({ review }: { review: PostRoundReview }) {
 }
 
 function NoReview() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <SketchSurface seed="summary-noreview" style={styles.reviewCard}>
       <View style={styles.reviewRow}>
@@ -456,7 +472,8 @@ function formatToPar(toPar: number): string {
   return `${toPar}`;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   content: {
     paddingHorizontal: spacing.md,
     gap: spacing.lg,

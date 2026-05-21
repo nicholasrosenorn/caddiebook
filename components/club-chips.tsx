@@ -1,9 +1,11 @@
+import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS, OTHER_CLUB } from '@/constants/clubs';
-import { colors, fontFamily, radius, spacing } from '@/constants/theme';
+import { fontFamily, radius, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 
 type Props = {
   value: string | null;
@@ -15,6 +17,8 @@ type Props = {
 // Inline, tap-first club selector: a horizontal strip of chips (selection
 // convention — filled green when active, paper + drawn outline otherwise).
 export function ClubChips({ value, onChange, clubs = CLUB_OPTIONS }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const isStandard = value != null && (CLUB_OPTIONS as readonly string[]).includes(value);
   const showOther = value != null && !isStandard;
   // If a previously-saved standard club isn't in the bag, still show it so the
@@ -69,6 +73,8 @@ function Chip({
   selected: boolean;
   onPress: () => void;
 }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
       <SketchSurface
@@ -86,7 +92,8 @@ function Chip({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   wrap: {
     gap: spacing.sm,
   },

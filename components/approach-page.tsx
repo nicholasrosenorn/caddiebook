@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { ApproachTarget } from '@/components/approach-target';
@@ -8,7 +8,8 @@ import type { TargetPin } from '@/components/driver-target';
 import { ThemedText } from '@/components/themed-text';
 import { YardageRuler } from '@/components/yardage-ruler';
 import { CLUB_OPTIONS } from '@/constants/clubs';
-import { colors, radius, spacing } from '@/constants/theme';
+import { radius, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
 import { getBag, getClubYardages, updateHole, upsertShot } from '@/db/queries';
 import type { Hole, Shot } from '@/db/types';
 import { approachResult } from '@/lib/shots';
@@ -23,6 +24,8 @@ type Props = {
 };
 
 export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { width, height } = useWindowDimensions();
   const targetSize = Math.min(320, width - 32, height * 0.5);
   const [position, setPosition] = useState<Position | null>(null);
@@ -151,7 +154,8 @@ function formatApproachLabel(x: number, y: number): string {
   return `${r.proximityFt} ft from pin (GIR ✓)`;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: spacing.md,
