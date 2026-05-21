@@ -1,12 +1,12 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { BagPicker } from '@/components/bag-picker';
 import { Screen } from '@/components/screen';
-import { SketchSurface } from '@/components/sketch';
+import { SketchDivider, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { YardageRuler } from '@/components/yardage-ruler';
+import { WedgeRangeChart } from '@/components/wedge-range-chart';
 import { CLUB_OPTIONS, isWedge } from '@/constants/clubs';
 import { fontFamily, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
@@ -28,6 +28,9 @@ const ROWS: { key: RowKey; label: string }[] = [
   { key: 'half', label: '½' },
   { key: 'quarter', label: '¼' },
 ];
+
+// Legend dot diameters, biggest → smallest, mirroring the chart's power sizes.
+const LEGEND_DOT = [18, 14, 11, 9];
 
 const HEADER_H = 34;
 const CELL_H = 52;
@@ -83,10 +86,19 @@ export default function WedgeGridScreen() {
     await setBag(next);
   }, []);
 
-  const valueFor = (club: string, row: RowKey): number | null => {
-    if (row === 'full') return yardages[club] ?? null;
-    return partials[club]?.[row] ?? null;
-  };
+  const valueFor = useCallback(
+    (club: string, row: RowKey): number | null => {
+      if (row === 'full') return yardages[club] ?? null;
+      return partials[club]?.[row] ?? null;
+    },
+    [yardages, partials],
+  );
+
+  const onSelect = useCallback(
+    (club: string, row: RowKey) =>
+      setSelected((sel) => (sel?.club === club && sel?.row === row ? null : { club, row })),
+    [],
+  );
 
   const onCommit = useCallback(async (sel: Selection, next: number | null) => {
     if (sel.row === 'full') {
@@ -106,12 +118,14 @@ export default function WedgeGridScreen() {
     }
   }, []);
 
-  const rowLabel = (row: RowKey) => ROWS.find((x) => x.key === row)!.label;
-  const selValue = selected ? valueFor(selected.club, selected.row) : null;
 
   return (
     <Screen>
-
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets>
       <View style={styles.bagPicker}>
         <BagPicker value={bag} onChange={onBagChange} label="My Wedges" options={WEDGE_OPTIONS} />
       </View>
@@ -121,6 +135,32 @@ export default function WedgeGridScreen() {
           No wedges in your bag yet. Add wedges to your bag to use the grid.
         </ThemedText>
       ) : (
+        <>
+        {/* Hero: the carry "range" — wedges across, distance up. Dot size = power.
+            Read-only; the grid below is the editor. */}
+        <WedgeRangeChart wedges={wedges} getValue={valueFor} selected={selected} />
+
+        {/* Power markers tucked close under the chart */}
+        <View style={styles.legend}>
+          {ROWS.map((r, i) => (
+            <View key={r.key} style={styles.legendItem}>
+              <View style={[styles.legendDot, { width: LEGEND_DOT[i], height: LEGEND_DOT[i] }]} />
+              <ThemedText style={styles.legendLabel}>{r.label}</ThemedText>
+            </View>
+          ))}
+        </View>
+
+        <SketchDivider seed="wedge-divider" />
+
+        <View style={styles.hint}>
+          <View style={styles.infoBadge}>
+            <ThemedText style={styles.infoI}>i</ThemedText>
+          </View>
+          <ThemedText style={styles.hintText}>
+            Edit your wedge numbers below to update the graph.
+          </ThemedText>
+        </View>
+
         <View style={styles.gridRow}>
           {/* Fixed left swing-length labels */}
           <View style={styles.labelCol}>
@@ -136,6 +176,7 @@ export default function WedgeGridScreen() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.cols}>
             {wedges.map((club) => (
               <View key={club} style={styles.col}>
@@ -148,7 +189,7 @@ export default function WedgeGridScreen() {
                   return (
                     <Pressable
                       key={r.key}
-                      onPress={() => setSelected(isSel ? null : { club, row: r.key })}
+                      onPress={() => onSelect(club, r.key)}
                       accessibilityRole="button"
                       accessibilityLabel={`${club} ${r.label}`}
                       style={styles.cell}>
@@ -158,7 +199,14 @@ export default function WedgeGridScreen() {
                         fill={isSel ? colors.accentMuted : colors.surface}
                         stroke={isSel ? colors.accent : colors.borderStrong}
                         style={styles.cellInner}>
-                        {v != null ? (
+                        {isSel ? (
+                          <CellInput
+                            value={v}
+                            onCommit={(next) => onCommit({ club, row: r.key }, next)}
+                            style={styles.cellInput}
+                            placeholderColor={colors.textMuted}
+                          />
+                        ) : v != null ? (
                           <ThemedText style={styles.value}>{v}</ThemedText>
                         ) : (
                           <ThemedText style={styles.valueEmpty}>—</ThemedText>
@@ -171,41 +219,132 @@ export default function WedgeGridScreen() {
             ))}
           </ScrollView>
         </View>
+        </>
       )}
-
-      {selected && (
-        <View style={styles.editor}>
-          <ThemedText type="caption">
-            {selected.club} · {rowLabel(selected.row)}
-          </ThemedText>
-          <YardageRuler
-            key={`${selected.club}-${selected.row}`}
-            value={selValue}
-            onCommit={(next) => onCommit(selected, next)}
-            min={20}
-            max={180}
-            step={5}
-            defaultValue={selValue ?? 90}
-          />
-        </View>
-      )}
+      </ScrollView>
     </Screen>
+  );
+}
+
+// An inline cell editor: a numeric keyboard input that replaces the cell's value
+// while it's selected. Commits (clamped) on blur / submit / unmount; tapping
+// another cell moves the edit there. Local text state keeps typing snappy and
+// only the final value writes through.
+function CellInput({
+  value,
+  onCommit,
+  style,
+  placeholderColor,
+}: {
+  value: number | null;
+  onCommit: (next: number | null) => void;
+  style: TextInput['props']['style'];
+  placeholderColor: string;
+}) {
+  const [text, setText] = useState(value == null ? '' : String(value));
+  const latest = useRef(text);
+  latest.current = text;
+  const committed = useRef(false);
+
+  const commit = useCallback(() => {
+    if (committed.current) return;
+    committed.current = true;
+    const t = latest.current.trim();
+    if (t === '') {
+      if (value !== null) onCommit(null);
+      return;
+    }
+    const parsed = parseInt(t, 10);
+    if (Number.isNaN(parsed)) return;
+    const clamped = Math.max(20, Math.min(180, parsed));
+    if (clamped !== value) onCommit(clamped);
+  }, [value, onCommit]);
+
+  // Save if the cell unmounts (e.g. tapping another cell) without a blur first.
+  useEffect(() => () => commit(), [commit]);
+
+  return (
+    <TextInput
+      autoFocus
+      keyboardType="number-pad"
+      returnKeyType="done"
+      selectTextOnFocus
+      value={text}
+      onChangeText={(t) => setText(t.replace(/[^0-9]/g, ''))}
+      onFocus={() => {
+        committed.current = false;
+      }}
+      onBlur={commit}
+      onSubmitEditing={commit}
+      placeholder="—"
+      placeholderTextColor={placeholderColor}
+      style={style}
+    />
   );
 }
 
 const makeStyles = (colors: Palette) =>
   StyleSheet.create({
-  intro: {
-    fontSize: 13,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
-  },
   bagPicker: {
     paddingVertical: spacing.lg,
+  },
+  scrollContent: {
+    paddingBottom: spacing.xl,
   },
   empty: {
     paddingTop: spacing.xl,
     textAlign: 'center',
+  },
+  legend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.lg,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.md,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  legendDot: {
+    borderRadius: 999,
+    backgroundColor: colors.accentPressed,
+  },
+  legendLabel: {
+    fontFamily: fontFamily.serif,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  hint: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  infoBadge: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  infoI: {
+    fontFamily: fontFamily.serif,
+    fontSize: 12,
+    lineHeight: 14,
+    color: colors.textSecondary,
+  },
+  hintText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.textMuted,
   },
   gridRow: {
     flexDirection: 'row',
@@ -260,8 +399,13 @@ const makeStyles = (colors: Palette) =>
     fontSize: 18,
     color: colors.textMuted,
   },
-  editor: {
-    paddingTop: spacing.lg,
-    gap: spacing.xs,
+  cellInput: {
+    alignSelf: 'stretch',
+    flex: 1,
+    textAlign: 'center',
+    fontFamily: fontFamily.serifBold,
+    fontSize: 20,
+    color: colors.textPrimary,
+    padding: 0,
   },
 });
