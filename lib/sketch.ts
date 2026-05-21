@@ -70,6 +70,20 @@ export function smoothOpenPath(points: Point[]): string {
   return d;
 }
 
+// A ball-flight arc: a clean parabola from a tee point to a landing point on a
+// shared ground line. apexH is the rise at the midpoint (bigger = loftier /
+// longer carry). Deterministic — no jitter; the trajectory reads as a precise
+// drafted curve, and length encodes distance (DESIGN.md P2/P3).
+export function trajectoryPath(
+  x0: number,
+  x1: number,
+  groundY: number,
+  apexH: number,
+): string {
+  const xMid = (x0 + x1) / 2;
+  return `M ${round(x0)} ${round(groundY)} Q ${round(xMid)} ${round(groundY - apexH)} ${round(x1)} ${round(groundY)}`;
+}
+
 // A slightly irregular ring/disc outline.
 export function roughCirclePath(
   cx: number,

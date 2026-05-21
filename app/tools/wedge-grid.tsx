@@ -2,6 +2,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { BagPicker } from '@/components/bag-picker';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
@@ -12,6 +13,7 @@ import {
   getBag,
   getClubYardages,
   getWedgePartials,
+  setBag,
   setClubYardage,
   setWedgePartial,
   type WedgePartials,
@@ -34,20 +36,32 @@ const GAP = spacing.sm;
 
 type Selection = { club: string; row: RowKey };
 
+// Every wedge (PW + more-lofted), in canonical order — the only clubs the
+// grid's bag picker offers.
+const WEDGE_OPTIONS = CLUB_OPTIONS.filter(isWedge);
+
+// The wedges in a bag, in canonical order.
+function wedgesFromBag(bag: string[]): string[] {
+  const pool = new Set(bag);
+  return WEDGE_OPTIONS.filter((c) => pool.has(c));
+}
+
 export default function WedgeGridScreen() {
+  const [bag, setBagState] = useState<string[]>([...CLUB_OPTIONS]);
   const [wedges, setWedges] = useState<string[]>([]);
   const [yardages, setYardages] = useState<Record<string, number>>({});
   const [partials, setPartials] = useState<Record<string, WedgePartials>>({});
   const [selected, setSelected] = useState<Selection | null>(null);
 
   const load = useCallback(async () => {
-    const [bag, yds, parts] = await Promise.all([
+    const [storedBag, yds, parts] = await Promise.all([
       getBag(),
       getClubYardages(),
       getWedgePartials(),
     ]);
-    const pool = bag.length > 0 ? bag : (CLUB_OPTIONS as readonly string[]);
-    setWedges(CLUB_OPTIONS.filter((c) => isWedge(c) && pool.includes(c)));
+    const effective = storedBag.length > 0 ? storedBag : [...CLUB_OPTIONS];
+    setBagState(effective);
+    setWedges(wedgesFromBag(effective));
     setYardages(yds);
     setPartials(parts);
   }, []);
@@ -57,6 +71,14 @@ export default function WedgeGridScreen() {
       load();
     }, [load]),
   );
+
+  const onBagChange = useCallback(async (next: string[]) => {
+    setBagState(next);
+    setWedges(wedgesFromBag(next));
+    // Drop the open editor if its wedge is no longer in the bag.
+    setSelected((sel) => (sel && !next.includes(sel.club) ? null : sel));
+    await setBag(next);
+  }, []);
 
   const valueFor = (club: string, row: RowKey): number | null => {
     if (row === 'full') return yardages[club] ?? null;
@@ -89,6 +111,10 @@ export default function WedgeGridScreen() {
       <ThemedText type="muted" style={styles.intro}>
         Carry distance per wedge and swing length.
       </ThemedText>
+
+      <View style={styles.bagPicker}>
+        <BagPicker value={bag} onChange={onBagChange} label="My Wedges" options={WEDGE_OPTIONS} />
+      </View>
 
       {wedges.length === 0 ? (
         <ThemedText type="muted" style={styles.empty}>
@@ -172,6 +198,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
+  },
+  bagPicker: {
+    paddingBottom: spacing.lg,
   },
   empty: {
     paddingTop: spacing.xl,

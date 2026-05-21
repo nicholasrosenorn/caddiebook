@@ -273,11 +273,11 @@ export default function StatsScreen() {
           />
         </View>
 
-        {isEmpty || !view || !approach || !driver || view.stats.roundCount === 0 ? (
-          <EmptyState hasAny={!isEmpty} />
-        ) : (
+        {view && approach && driver ? (
           <StatsBody
             view={view}
+            empty={view.stats.roundCount === 0}
+            hasAny={!isEmpty}
             holeFilter={holeFilter}
             approach={approach}
             clubFilter={clubFilter}
@@ -288,7 +288,7 @@ export default function StatsScreen() {
             driveClubOptions={driveClubOptions}
             onDriveClubChange={setDriveClubFilter}
           />
-        )}
+        ) : null}
       </ScrollView>
     </Screen>
   );
@@ -296,6 +296,8 @@ export default function StatsScreen() {
 
 function StatsBody({
   view,
+  empty,
+  hasAny,
   holeFilter,
   approach,
   clubFilter,
@@ -307,6 +309,10 @@ function StatsBody({
   onDriveClubChange,
 }: {
   view: StatsView;
+  /** No rounds matched the active filters — render the dashed skeleton. */
+  empty: boolean;
+  /** Whether any completed rounds exist at all (drives the empty hint copy). */
+  hasAny: boolean;
   holeFilter: HoleCountFilter;
   approach: ApproachStats;
   clubFilter: ClubFilter;
@@ -325,7 +331,13 @@ function StatsBody({
 
   return (
     <>
-      {/* Sample size for the active filters */}
+      {empty ? (
+        <ThemedText type="muted" style={styles.centerText}>
+          {hasAny
+            ? 'No rounds match these filters yet.'
+            : 'Finish a round to start building your stats.'}
+        </ThemedText>
+      ) : null}
 
       {/* Scoring headline — adapts to the hole-count filter */}
       <Section title="Scoring">
@@ -357,8 +369,8 @@ function StatsBody({
               label="Putts/Hole"
               value={stats.puttsPerHole != null ? stats.puttsPerHole.toFixed(2) : '—'}
             />
-            <StatTile label="3-Putts" value={String(stats.threePuttCount)} />
-            <StatTile label="1-Putts" value={String(stats.onePuttCount)} />
+            <StatTile label="3-Putts" value={empty ? '—' : String(stats.threePuttCount)} />
+            <StatTile label="1-Putts" value={empty ? '—' : String(stats.onePuttCount)} />
           </View>
         </View>
       </Section>
@@ -393,11 +405,11 @@ function StatsBody({
 
       {/* Score distribution */}
       <Section title="Score distribution">
-        <ScoreDistributionBars distribution={stats.distribution} />
+        <ScoreDistributionBars distribution={stats.distribution} empty={empty} />
       </Section>
 
-      {/* Driver dispersion */}
-      <Section title="Driver dispersion">
+      {/* Drive dispersion */}
+      <Section title="Drive dispersion">
         <DropdownSelect
           seed="drive-club"
           options={driveClubOptions}
@@ -441,7 +453,6 @@ function StatsBody({
           seedPrefix="appr"
           successLabel="Green hit"
           failLabel="Missed"
-          emptyText="No approach distances logged yet."
           rows={approach.approachByDistance.map((b) => ({
             key: b.label,
             label: b.label,
@@ -457,7 +468,6 @@ function StatsBody({
           seedPrefix="putt"
           successLabel="Made"
           failLabel="Missed"
-          emptyText="No putts logged yet."
           rows={stats.puttBuckets.map((b) => ({
             key: String(b.ft),
             label: b.label,
@@ -486,7 +496,7 @@ function StatsBody({
       </Section>
 
       {/* Review insights */}
-      {review.count > 0 ? (
+      {review.count > 0 || empty ? (
         <Section title="Mental Game">
           <ReviewInsightsCard review={review} />
         </Section>
@@ -672,8 +682,10 @@ const DIST_ROWS: {
 
 function ScoreDistributionBars({
   distribution,
+  empty,
 }: {
   distribution: LifetimeStats['distribution'];
+  empty?: boolean;
 }) {
   const max = Math.max(1, ...DIST_ROWS.map((r) => distribution[r.key]));
   return (
@@ -700,7 +712,7 @@ function ScoreDistributionBars({
               <View style={{ flex: Math.max(0, 1 - frac) }} />
             </SketchSurface>
             <ThemedText type="muted" style={styles.barCount}>
-              {count}
+              {empty ? '—' : count}
             </ThemedText>
           </View>
         );
@@ -718,18 +730,13 @@ function SplitDistanceBars({
   rows,
   successLabel,
   failLabel,
-  emptyText,
   seedPrefix,
 }: {
   rows: SplitRow[];
   successLabel: string;
   failLabel: string;
-  emptyText: string;
   seedPrefix: string;
 }) {
-  if (rows.every((r) => r.total === 0)) {
-    return <ThemedText type="muted">{emptyText}</ThemedText>;
-  }
   return (
     <View style={styles.barList}>
       {rows.map((r) => {
@@ -831,21 +838,6 @@ function ReviewInsightsCard({ review }: { review: ReturnType<typeof aggregateRev
           </ThemedText>
         </View>
       ))}
-    </SketchSurface>
-  );
-}
-
-function EmptyState({ hasAny }: { hasAny: boolean }) {
-  return (
-    <SketchSurface seed="stats-empty" style={styles.emptyCard}>
-      <ThemedText type="subtitle" style={styles.centerText}>
-        {hasAny ? 'No rounds match this filter' : 'No completed rounds yet'}
-      </ThemedText>
-      <ThemedText type="muted" style={styles.centerText}>
-        {hasAny
-          ? 'Try a different hole-count or widen the range.'
-          : 'Finish a round through its post-round review and your stats will start building here.'}
-      </ThemedText>
     </SketchSurface>
   );
 }
@@ -1113,10 +1105,5 @@ const styles = StyleSheet.create({
   },
   reviewAnswerRating: {
     color: colors.accent,
-  },
-  emptyCard: {
-    padding: spacing.lg,
-    gap: spacing.sm,
-    alignItems: 'center',
   },
 });

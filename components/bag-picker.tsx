@@ -9,14 +9,22 @@ import { colors, fontFamily, radius, spacing } from '@/constants/theme';
 type Props = {
   value: string[];
   onChange: (next: string[]) => void;
+  /** Fixed field label; when set, replaces the "N clubs" count summary. */
+  label?: string;
+  /** Which clubs the list offers (defaults to the full set). Toggling, "Select
+   *  all" and "Clear" only affect these — clubs outside the list are preserved. */
+  options?: readonly string[];
 };
 
 // Multi-select club bag editor — same modal pattern as the (single-select)
 // club picker, but rows toggle membership and emit clubs in canonical order.
-export function BagPicker({ value, onChange }: Props) {
+export function BagPicker({ value, onChange, label, options = CLUB_OPTIONS }: Props) {
   const [open, setOpen] = useState(false);
   const selected = new Set(value);
+  const optionSet = new Set(options);
 
+  // Always emit in canonical order; CLUB_OPTIONS iteration preserves any
+  // selected clubs that aren't in the offered `options`.
   const emit = (next: Set<string>) =>
     onChange(CLUB_OPTIONS.filter((c) => next.has(c)));
 
@@ -27,13 +35,18 @@ export function BagPicker({ value, onChange }: Props) {
     emit(next);
   };
 
-  const count = selected.size;
+  // Select-all / clear act only on the offered options, leaving the rest as-is.
+  const selectAll = () => emit(new Set([...selected, ...options]));
+  const clear = () => emit(new Set([...selected].filter((c) => !optionSet.has(c))));
+
+  const count = options.filter((c) => selected.has(c)).length;
   const summary =
-    count === 0
+    label ??
+    (count === 0
       ? 'No clubs'
-      : count === CLUB_OPTIONS.length
+      : count === options.length
         ? `Full bag · ${count} clubs`
-        : `${count} clubs`;
+        : `${count} clubs`);
 
   return (
     <>
@@ -41,7 +54,9 @@ export function BagPicker({ value, onChange }: Props) {
         onPress={() => setOpen(true)}
         style={({ pressed }) => pressed && styles.fieldPressed}>
         <SketchSurface seed="bag-field" radius={8} style={styles.field}>
-          <ThemedText style={count === 0 ? styles.placeholder : styles.value}>{summary}</ThemedText>
+          <ThemedText style={label == null && count === 0 ? styles.placeholder : styles.value}>
+            {summary}
+          </ThemedText>
           <ThemedText type="muted">›</ThemedText>
         </SketchSurface>
       </Pressable>
@@ -57,16 +72,16 @@ export function BagPicker({ value, onChange }: Props) {
             </View>
 
             <View style={styles.quickRow}>
-              <Pressable onPress={() => emit(new Set(CLUB_OPTIONS))} hitSlop={6}>
+              <Pressable onPress={selectAll} hitSlop={6}>
                 <ThemedText style={styles.quickAction}>Select all</ThemedText>
               </Pressable>
-              <Pressable onPress={() => emit(new Set())} hitSlop={6}>
+              <Pressable onPress={clear} hitSlop={6}>
                 <ThemedText style={styles.quickAction}>Clear</ThemedText>
               </Pressable>
             </View>
 
             <FlatList
-              data={CLUB_OPTIONS}
+              data={options}
               keyExtractor={(item) => item}
               contentContainerStyle={styles.list}
               ItemSeparatorComponent={() => <View style={styles.separator} />}
