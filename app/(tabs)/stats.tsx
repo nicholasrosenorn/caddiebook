@@ -9,21 +9,27 @@ import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { TrendChart } from '@/components/trend-chart';
+import { CLUB_OPTIONS, sortByDriveLength } from '@/constants/clubs';
 import { colors, fontFamily, spacing } from '@/constants/theme';
 import {
   getAllHoles,
   getAllPutts,
   getAllReviews,
   getAllShots,
+  getBag,
   listRounds,
 } from '@/db/queries';
 import type { Hole, PostRoundReview, Putt, Round, Shot } from '@/db/types';
 import { clearAllRounds, seedSampleRounds } from '@/lib/dev-seed';
 import {
+  aggregateApproach,
+  aggregateDriver,
   aggregateReview,
   aggregateStats,
   formatToPar,
   perRoundTrend,
+  type ApproachStats,
+  type DriverStats,
   type HoleCountFilter,
   type LifetimeStats,
   type ReviewInsights,
@@ -38,15 +44,17 @@ type Data = {
   shotsByRound: Map<string, Shot[]>;
   puttsByRound: Map<string, Putt[]>;
   reviewsByRound: Map<string, PostRoundReview>;
+  bag: string[]; // player's bag; empty = fall back to all clubs
 };
 
 type StatsView = {
   stats: LifetimeStats;
   trend: RoundDerived[];
   review: ReviewInsights;
-  drivePins: TargetPin[];
-  approachPins: TargetPin[];
 };
+
+// 'all' = every club; otherwise a club name from the bag.
+type ClubFilter = 'all' | string;
 
 const HOLE_FILTERS: DropdownOption<HoleCountFilter>[] = [
   { value: 'all', short: 'All', label: 'All lengths' },
@@ -76,15 +84,18 @@ export default function StatsScreen() {
   const [data, setData] = useState<Data | null>(null);
   const [holeFilter, setHoleFilter] = useState<HoleCountFilter>(18);
   const [roundsFilter, setRoundsFilter] = useState<RoundsFilter>(20);
+  const [clubFilter, setClubFilter] = useState<ClubFilter>('all');
+  const [driveClubFilter, setDriveClubFilter] = useState<ClubFilter>('all');
   const [devBusy, setDevBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const [rounds, holes, shots, putts, reviews] = await Promise.all([
+    const [rounds, holes, shots, putts, reviews, bag] = await Promise.all([
       listRounds(),
       getAllHoles(),
       getAllShots(),
       getAllPutts(),
       getAllReviews(),
+      getBag(),
     ]);
     const reviewsByRound = new Map<string, PostRoundReview>();
     for (const rv of reviews) reviewsByRound.set(rv.roundId, rv);
@@ -94,6 +105,7 @@ export default function StatsScreen() {
       shotsByRound: groupBy(shots, (s) => s.roundId),
       puttsByRound: groupBy(putts, (p) => p.roundId),
       reviewsByRound,
+      bag,
     });
   }, []);
 
@@ -116,12 +128,18 @@ export default function StatsScreen() {
     [load],
   );
 
-  const view = useMemo(() => {
+  // Rounds matching the hole-count + recency filters; shared by every section.
+  const filteredRounds = useMemo(() => {
     if (!data) return null;
     let rounds = data.rounds;
     if (holeFilter !== 'all') rounds = rounds.filter((r) => r.holeCount === holeFilter);
     if (roundsFilter !== 'all') rounds = rounds.slice(0, roundsFilter);
+    return rounds;
+  }, [data, holeFilter, roundsFilter]);
 
+  const view = useMemo<StatsView | null>(() => {
+    if (!data || !filteredRounds) return null;
+    const rounds = filteredRounds;
     const stats = aggregateStats(
       rounds,
       data.holesByRound,
@@ -130,18 +148,47 @@ export default function StatsScreen() {
     );
     const trend = perRoundTrend(rounds, data.holesByRound);
     const review = aggregateReview(rounds, data.reviewsByRound);
+    return { stats, trend, review };
+  }, [data, filteredRounds]);
 
-    const drivePins: TargetPin[] = [];
-    const approachPins: TargetPin[] = [];
-    for (const r of rounds) {
-      for (const s of data.shotsByRound.get(r.id) ?? []) {
-        const pin: TargetPin = { xNorm: s.xNorm, yNorm: s.yNorm, key: s.id, variant: 'muted' };
-        if (s.shotType === 'driver') drivePins.push(pin);
-        else approachPins.push(pin);
-      }
-    }
-    return { stats, trend, review, drivePins, approachPins };
-  }, [data, holeFilter, roundsFilter]);
+  // Driver dispersion recomputes only when its club filter (or data) changes.
+  const driver = useMemo<DriverStats | null>(() => {
+    if (!data || !filteredRounds) return null;
+    return aggregateDriver(
+      filteredRounds,
+      data.holesByRound,
+      data.shotsByRound,
+      driveClubFilter === 'all' ? null : driveClubFilter,
+    );
+  }, [data, filteredRounds, driveClubFilter]);
+
+  // Approach sections recompute only when the club filter (or data) changes.
+  const approach = useMemo<ApproachStats | null>(() => {
+    if (!data || !filteredRounds) return null;
+    return aggregateApproach(
+      filteredRounds,
+      data.holesByRound,
+      data.shotsByRound,
+      clubFilter === 'all' ? null : clubFilter,
+    );
+  }, [data, filteredRounds, clubFilter]);
+
+  const clubOptions = useMemo<DropdownOption<ClubFilter>[]>(() => {
+    const bag = data && data.bag.length > 0 ? data.bag : [...CLUB_OPTIONS];
+    return [
+      { value: 'all', short: 'All clubs', label: 'All clubs' },
+      ...bag.map((c) => ({ value: c, label: c })),
+    ];
+  }, [data]);
+
+  // Driver dropdown: same bag, sorted longest → shortest.
+  const driveClubOptions = useMemo<DropdownOption<ClubFilter>[]>(() => {
+    const bag = data && data.bag.length > 0 ? data.bag : [...CLUB_OPTIONS];
+    return [
+      { value: 'all', short: 'All clubs', label: 'All clubs' },
+      ...sortByDriveLength(bag).map((c) => ({ value: c, label: c })),
+    ];
+  }, [data]);
 
   if (!data) return <Screen />;
 
@@ -177,20 +224,55 @@ export default function StatsScreen() {
           />
         </View>
 
-        {isEmpty || !view || view.stats.roundCount === 0 ? (
+        {isEmpty || !view || !approach || !driver || view.stats.roundCount === 0 ? (
           <EmptyState hasAny={!isEmpty} />
         ) : (
-          <StatsBody view={view} holeFilter={holeFilter} />
+          <StatsBody
+            view={view}
+            holeFilter={holeFilter}
+            approach={approach}
+            clubFilter={clubFilter}
+            clubOptions={clubOptions}
+            onClubChange={setClubFilter}
+            driver={driver}
+            driveClubFilter={driveClubFilter}
+            driveClubOptions={driveClubOptions}
+            onDriveClubChange={setDriveClubFilter}
+          />
         )}
       </ScrollView>
     </Screen>
   );
 }
 
-function StatsBody({ view, holeFilter }: { view: StatsView; holeFilter: HoleCountFilter }) {
-  const { stats, trend, review, drivePins, approachPins } = view;
+function StatsBody({
+  view,
+  holeFilter,
+  approach,
+  clubFilter,
+  clubOptions,
+  onClubChange,
+  driver,
+  driveClubFilter,
+  driveClubOptions,
+  onDriveClubChange,
+}: {
+  view: StatsView;
+  holeFilter: HoleCountFilter;
+  approach: ApproachStats;
+  clubFilter: ClubFilter;
+  clubOptions: DropdownOption<ClubFilter>[];
+  onClubChange: (value: ClubFilter) => void;
+  driver: DriverStats;
+  driveClubFilter: ClubFilter;
+  driveClubOptions: DropdownOption<ClubFilter>[];
+  onDriveClubChange: (value: ClubFilter) => void;
+}) {
+  const { stats, trend, review } = view;
   const showTrends = trend.length >= 2;
   const uniform = stats.uniformLength;
+  const approachPins: TargetPin[] = approach.pins.map((p) => ({ ...p, variant: 'muted' }));
+  const drivePins: TargetPin[] = driver.pins.map((p) => ({ ...p, variant: 'muted' }));
 
   return (
     <>
@@ -267,36 +349,51 @@ function StatsBody({ view, holeFilter }: { view: StatsView; holeFilter: HoleCoun
 
       {/* Driver dispersion */}
       <Section title="Driver dispersion">
+        <DropdownSelect
+          seed="drive-club"
+          options={driveClubOptions}
+          value={driveClubFilter}
+          onChange={onDriveClubChange}
+          block
+        />
         <View style={styles.targetWrap}>
           <DriverTarget pins={drivePins} width={280} height={420} pinSize={6} />
         </View>
         <ThemedText type="muted" style={[styles.centerText, {marginTop: spacing.md}]}>
-          {stats.driverTotal} drive{stats.driverTotal === 1 ? '' : 's'} · LF{' '}
-          {stats.driverLanes.LF} · CF {stats.driverLanes.CF} · RF {stats.driverLanes.RF}
+          {driver.driverTotal} drive{driver.driverTotal === 1 ? '' : 's'} · LF{' '}
+          {driver.driverLanes.LF} · CF {driver.driverLanes.CF} · RF {driver.driverLanes.RF}
         </ThemedText>
       </Section>
 
-      {/* Approach dispersion */}
+      {/* Approach dispersion — the club filter scopes both approach sections. */}
       <Section title="Approach dispersion">
+        <DropdownSelect
+          seed="club"
+          options={clubOptions}
+          value={clubFilter}
+          onChange={onClubChange}
+          block
+        />
         <View style={styles.targetWrap}>
           <ApproachTarget pins={approachPins} size={320} pinSize={7} />
         </View>
         <ThemedText type="muted" style={styles.centerText}>
-          {stats.approachTotal} approach{stats.approachTotal === 1 ? '' : 'es'}
-          {stats.avgApproachProximity != null
-            ? ` · avg ${Math.round(stats.avgApproachProximity)} ft when on`
+          {approach.approachTotal} approach{approach.approachTotal === 1 ? '' : 'es'}
+          {approach.avgApproachProximity != null
+            ? ` · avg ${Math.round(approach.avgApproachProximity)} ft when on`
             : ''}
         </ThemedText>
       </Section>
 
       {/* Approach distances, split by green hit / missed */}
-      <Section title="Approach distances">
+      <Section
+        title={`Approach distances · ${clubFilter === 'all' ? 'All clubs' : clubFilter}`}>
         <SplitDistanceBars
           seedPrefix="appr"
           successLabel="Green hit"
           failLabel="Missed"
           emptyText="No approach distances logged yet."
-          rows={stats.approachByDistance.map((b) => ({
+          rows={approach.approachByDistance.map((b) => ({
             key: b.label,
             label: b.label,
             success: b.hit,

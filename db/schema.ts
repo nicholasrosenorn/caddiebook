@@ -20,6 +20,7 @@ export const SCHEMA_STATEMENTS = [
     up_and_down INTEGER,
     approach_distance_yds INTEGER,
     approach_club TEXT,
+    drive_club TEXT,
     score INTEGER,
     putts INTEGER,
     chip_shots INTEGER,

@@ -35,6 +35,7 @@ export async function initDb(): Promise<void> {
   await ensureColumn(db, 'holes', 'chip_shots', 'chip_shots INTEGER');
   await ensureColumn(db, 'holes', 'sand_shots', 'sand_shots INTEGER');
   await ensureColumn(db, 'holes', 'penalties', 'penalties INTEGER');
+  await ensureColumn(db, 'holes', 'drive_club', 'drive_club TEXT');
   await ensureColumn(db, 'post_round_reviews', 'most_costly', 'most_costly TEXT');
   await ensureColumn(
     db,

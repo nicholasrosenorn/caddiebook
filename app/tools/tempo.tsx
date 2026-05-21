@@ -201,9 +201,6 @@ export default function TempoScreen() {
         <View style={styles.readout}>
           <ThemedText style={styles.bpm}>{bpm}</ThemedText>
           <ThemedText type="caption">3 : 1 TEMPO</ThemedText>
-          <ThemedText type="muted" style={styles.timing}>
-            backswing {backMs}ms · downswing {downMs}ms
-          </ThemedText>
         </View>
 
         <View style={styles.chips}>

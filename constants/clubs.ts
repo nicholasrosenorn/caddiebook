@@ -32,6 +32,24 @@ export const CLUB_OPTIONS = [
 
 export const OTHER_CLUB = 'Other';
 
+// Tee-club ordering, longest carry → shortest. CLUB_OPTIONS runs shortest →
+// longest with Putter last; reverse it, then push Putter back to the end so the
+// driver leads and the putter trails.
+export const DRIVE_CLUB_ORDER: readonly string[] = [
+  ...[...(CLUB_OPTIONS as readonly string[])].reverse().filter((c) => c !== 'Putter'),
+  'Putter',
+];
+
+// Sort an arbitrary bag by DRIVE_CLUB_ORDER (longest → shortest); clubs not in
+// the canonical order fall to the end, preserving their relative order.
+export function sortByDriveLength(clubs: readonly string[]): string[] {
+  const rank = (c: string) => {
+    const i = DRIVE_CLUB_ORDER.indexOf(c);
+    return i === -1 ? DRIVE_CLUB_ORDER.length : i;
+  };
+  return [...clubs].sort((a, b) => rank(a) - rank(b));
+}
+
 // A wedge is the pitching wedge or any more-lofted (degree-labelled) club —
 // the scoring clubs that get a wedge-grid column.
 export function isWedge(club: string): boolean {

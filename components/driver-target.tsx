@@ -4,7 +4,7 @@ import Svg, { Circle, ClipPath, Defs, G, Path, Rect } from 'react-native-svg';
 
 import { BunkerBlob } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { colors } from '@/constants/theme';
+import { colors, spacing } from '@/constants/theme';
 import { CF_LEFT_EDGE, CF_RIGHT_EDGE, FAIRWAY_INSET } from '@/lib/shots';
 import { fairwayPath, stippleInEllipse, wavyLines } from '@/lib/sketch';
 
@@ -251,6 +251,9 @@ const styles = StyleSheet.create({
     position: 'relative',
     borderWidth: 0.2,
     borderColor: colors.borderStrong,
+    // Reserve room for the LF/CF/RF lane chips, which sit just below the frame
+    // (laneLabels bottom: -25) so siblings don't overlap them.
+    marginBottom: spacing.xl,
   },
   cornerTL: {
     position: 'absolute',

@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, StyleSheet, useWindowDimensions, View } from 'react-native';
 
+import { ClubChips } from '@/components/club-chips';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
 import { ThemedText } from '@/components/themed-text';
+import { CLUB_OPTIONS, sortByDriveLength } from '@/constants/clubs';
 import { colors, radius, spacing } from '@/constants/theme';
-import { updateHole, upsertShot } from '@/db/queries';
+import { getBag, updateHole, upsertShot } from '@/db/queries';
 import type { Hole, Shot } from '@/db/types';
 import { driverLane, isFairwayHit } from '@/lib/shots';
 
@@ -23,6 +26,16 @@ export function DrivePage({ roundId, hole, shotsForRound, onChange }: Props) {
   const targetHeight = Math.min(500, screenHeight * 0.56);
 
   const [position, setPosition] = useState<Position | null>(null);
+  const [bag, setBag] = useState<readonly string[]>(() => sortByDriveLength(CLUB_OPTIONS));
+
+  // Reload on focus so bag edits made elsewhere are reflected on return.
+  useFocusEffect(
+    useCallback(() => {
+      getBag().then((clubs) =>
+        setBag(sortByDriveLength(clubs.length > 0 ? clubs : CLUB_OPTIONS)),
+      );
+    }, []),
+  );
 
   useEffect(() => {
     const drive = shotsForRound.find(
@@ -47,6 +60,15 @@ export function DrivePage({ roundId, hole, shotsForRound, onChange }: Props) {
     } catch (err) {
       console.error(err);
       Alert.alert('Save failed', 'Could not save drive.');
+    }
+  };
+
+  const onClubChange = async (club: string | null) => {
+    try {
+      await updateHole(roundId, hole.holeNumber, { driveClub: club });
+      await onChange();
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -84,6 +106,12 @@ export function DrivePage({ roundId, hole, shotsForRound, onChange }: Props) {
           Tap fairway to mark where your drive landed.
         </ThemedText>
       )}
+      <View style={styles.form}>
+        <View style={styles.formField}>
+          <ThemedText type="caption">CLUB</ThemedText>
+          <ClubChips value={hole.driveClub} onChange={onClubChange} clubs={bag} />
+        </View>
+      </View>
     </View>
   );
 }
@@ -120,8 +148,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.borderStrong,
-    marginTop: spacing.sm,
-    marginVertical: spacing.sm,
+    marginTop: spacing.md,                                                          
+    marginVertical: spacing.sm, 
   },
   badgePositive: {
     backgroundColor: colors.accentMuted,
@@ -139,5 +167,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingTop: spacing.sm,
     marginVertical: spacing.sm,
+  },
+  form: {
+    gap: spacing.md,
+  },
+  formField: {
+    gap: spacing.xs,
   },
 });

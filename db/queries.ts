@@ -22,6 +22,7 @@ type HoleRow = {
   up_and_down: number | null;
   approach_distance_yds: number | null;
   approach_club: string | null;
+  drive_club: string | null;
   score: number | null;
   putts: number | null;
   chip_shots: number | null;
@@ -50,6 +51,7 @@ function rowToHole(row: HoleRow): Hole {
     upAndDown: row.up_and_down == null ? null : row.up_and_down === 1,
     approachDistanceYds: row.approach_distance_yds,
     approachClub: row.approach_club,
+    driveClub: row.drive_club,
     score: row.score,
     putts: row.putts,
     chipShots: row.chip_shots,
@@ -131,7 +133,7 @@ export async function getHolesForRound(roundId: string): Promise<Hole[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<HoleRow>(
     `SELECT id, round_id, hole_number, par, fir, gir, up_and_down,
-            approach_distance_yds, approach_club, score, putts,
+            approach_distance_yds, approach_club, drive_club, score, putts,
             chip_shots, sand_shots, penalties, notes
      FROM holes
      WHERE round_id = ?
@@ -148,7 +150,7 @@ export async function getAllHoles(): Promise<Hole[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<HoleRow>(
     `SELECT id, round_id, hole_number, par, fir, gir, up_and_down,
-            approach_distance_yds, approach_club, score, putts,
+            approach_distance_yds, approach_club, drive_club, score, putts,
             chip_shots, sand_shots, penalties, notes
      FROM holes
      ORDER BY round_id ASC, hole_number ASC;`,
@@ -160,7 +162,7 @@ export async function getHole(roundId: string, holeNumber: number): Promise<Hole
   const db = await getDb();
   const row = await db.getFirstAsync<HoleRow>(
     `SELECT id, round_id, hole_number, par, fir, gir, up_and_down,
-            approach_distance_yds, approach_club, score, putts,
+            approach_distance_yds, approach_club, drive_club, score, putts,
             chip_shots, sand_shots, penalties, notes
      FROM holes
      WHERE round_id = ? AND hole_number = ?;`,
@@ -178,6 +180,7 @@ const FIELD_TO_COLUMN: Record<keyof HoleUpdatableFields, string> = {
   upAndDown: 'up_and_down',
   approachDistanceYds: 'approach_distance_yds',
   approachClub: 'approach_club',
+  driveClub: 'drive_club',
   score: 'score',
   putts: 'putts',
   chipShots: 'chip_shots',

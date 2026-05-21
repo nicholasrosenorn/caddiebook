@@ -320,6 +320,128 @@ export function aggregateStats(
   };
 }
 
+// --- Approach view, filterable by club -------------------------------------
+
+export type ApproachStats = {
+  approachByDistance: { label: string; hit: number; missed: number; total: number }[];
+  approachTotal: number;
+  avgApproachProximity: number | null;
+  /** Normalized pin positions for the approach dispersion target. */
+  pins: { xNorm: number; yNorm: number; key: string }[];
+};
+
+/**
+ * Approach dispersion + distance histogram, optionally narrowed to a single
+ * club. Clubs live on the hole (`approachClub`), so shots are matched back to
+ * their hole via `(roundId, holeNumber)`. `club == null` means "all clubs".
+ *
+ * Kept separate from `aggregateStats` so changing the club filter only
+ * recomputes the approach sections, not scoring/putting/trends.
+ */
+export function aggregateApproach(
+  rounds: Round[],
+  holesByRound: Map<string, Hole[]>,
+  shotsByRound: Map<string, Shot[]>,
+  club: string | null,
+): ApproachStats {
+  const holes = flatten(rounds, holesByRound);
+  const shots = flatten(rounds, shotsByRound);
+
+  // (roundId:holeNumber) → that hole's approach club, for matching shots.
+  const holeClub = new Map<string, string | null>();
+  for (const r of rounds) {
+    for (const h of holesByRound.get(r.id) ?? []) {
+      holeClub.set(`${h.roundId}:${h.holeNumber}`, h.approachClub);
+    }
+  }
+  const matches = (clubValue: string | null) => club == null || clubValue === club;
+
+  const approachByDistance = APPROACH_BUCKETS.map((b) => ({
+    label: b.label,
+    hit: 0,
+    missed: 0,
+    total: 0,
+  }));
+  for (const hole of holes) {
+    if (hole.approachDistanceYds == null) continue;
+    if (!matches(hole.approachClub)) continue;
+    const gir = resolveGir(hole);
+    if (gir == null) continue;
+    const idx = APPROACH_BUCKETS.findIndex((b) => hole.approachDistanceYds! < b.max);
+    const bucket = approachByDistance[idx === -1 ? approachByDistance.length - 1 : idx];
+    bucket.total += 1;
+    if (gir) bucket.hit += 1;
+    else bucket.missed += 1;
+  }
+
+  const pins: ApproachStats['pins'] = [];
+  let approachTotal = 0;
+  let proximitySum = 0;
+  let proximityCount = 0;
+  for (const shot of shots) {
+    if (shot.shotType !== 'approach') continue;
+    if (!matches(holeClub.get(`${shot.roundId}:${shot.holeNumber}`) ?? null)) continue;
+    approachTotal += 1;
+    pins.push({ xNorm: shot.xNorm, yNorm: shot.yNorm, key: shot.id });
+    const res = approachResult(shot.xNorm, shot.yNorm);
+    if (res.onGreen && res.proximityFt != null) {
+      proximitySum += res.proximityFt;
+      proximityCount += 1;
+    }
+  }
+
+  return {
+    approachByDistance,
+    approachTotal,
+    avgApproachProximity: proximityCount > 0 ? proximitySum / proximityCount : null,
+    pins,
+  };
+}
+
+// --- Driver dispersion, filterable by club ---------------------------------
+
+export type DriverStats = {
+  driverLanes: Record<DriverLane, number>;
+  driverTotal: number;
+  /** Normalized pin positions for the driver dispersion target. */
+  pins: { xNorm: number; yNorm: number; key: string }[];
+};
+
+/**
+ * Driver dispersion (lane split + pins), optionally narrowed to a single club.
+ * Like approaches, the tee club lives on the hole (`driveClub`), so driver
+ * shots are matched back via `(roundId, holeNumber)`. `club == null` = all.
+ */
+export function aggregateDriver(
+  rounds: Round[],
+  holesByRound: Map<string, Hole[]>,
+  shotsByRound: Map<string, Shot[]>,
+  club: string | null,
+): DriverStats {
+  const shots = flatten(rounds, shotsByRound);
+
+  const holeClub = new Map<string, string | null>();
+  for (const r of rounds) {
+    for (const h of holesByRound.get(r.id) ?? []) {
+      holeClub.set(`${h.roundId}:${h.holeNumber}`, h.driveClub);
+    }
+  }
+  const matches = (clubValue: string | null) => club == null || clubValue === club;
+
+  const driverLanes: Record<DriverLane, number> = { LF: 0, CF: 0, RF: 0 };
+  const pins: DriverStats['pins'] = [];
+  let driverTotal = 0;
+  for (const shot of shots) {
+    if (shot.shotType !== 'driver') continue;
+    if (!matches(holeClub.get(`${shot.roundId}:${shot.holeNumber}`) ?? null)) continue;
+    driverLanes[driverLane(shot.xNorm, shot.yNorm)] += 1;
+    driverTotal += 1;
+    pins.push({ xNorm: shot.xNorm, yNorm: shot.yNorm, key: shot.id });
+  }
+
+  return { driverLanes, driverTotal, pins };
+}
+
 /**
  * Chronological per-round points (oldest → newest) for the trend sparklines.
  * Carries both raw and per-18 figures so the screen plots the right basis for

@@ -34,6 +34,24 @@ const RANGE_FOCUS = [
 ];
 
 const APPROACH_CLUBS = ['PW', '9i', '8i', '7i', '6i', '52°', '56°'];
+// Tee clubs, weighted toward the driver but spanning woods, hybrids, and high
+// irons so the per-club driver dispersion filter has plenty to slice by.
+const DRIVE_CLUBS = [
+  'Driver',
+  'Driver',
+  'Driver',
+  'Driver',
+  'Mini Driver',
+  '3W',
+  '5W',
+  '7W',
+  '3H',
+  '4H',
+  '5H',
+  '2i',
+  '3i',
+  '4i',
+];
 
 function rand(min: number, max: number): number {
   return min + Math.random() * (max - min);
@@ -85,6 +103,7 @@ type HoleSeed = {
   penalties: number | null;
   approachDistance: number | null;
   approachClub: string | null;
+  driveClub: string | null;
   drive: { x: number; y: number } | null;
   approach: { x: number; y: number };
   puttRows: { distanceFt: number; made: number }[];
@@ -197,6 +216,7 @@ function buildHole(holeNumber: number, par: number, skill: number): HoleSeed {
     penalties,
     approachDistance: randInt(70, 190),
     approachClub: pick(APPROACH_CLUBS),
+    driveClub: drive ? pick(DRIVE_CLUBS) : null,
     drive,
     approach,
     puttRows: buildPuttRows(putts, gir),
@@ -217,9 +237,9 @@ export async function seedSampleRounds(count = 70): Promise<void> {
   await db.withTransactionAsync(async () => {
     const holeStmt = await db.prepareAsync(
       `INSERT INTO holes (id, round_id, hole_number, par, fir, gir, up_and_down,
-        approach_distance_yds, approach_club, score, putts, chip_shots, sand_shots,
+        approach_distance_yds, approach_club, drive_club, score, putts, chip_shots, sand_shots,
         penalties, notes)
-       VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, NULL);`,
+       VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL);`,
     );
     const shotStmt = await db.prepareAsync(
       `INSERT INTO shots (id, round_id, hole_number, shot_type, x_norm, y_norm)
@@ -260,6 +280,7 @@ export async function seedSampleRounds(count = 70): Promise<void> {
             hole.fir,
             hole.approachDistance,
             hole.approachClub,
+            hole.driveClub,
             hole.score,
             hole.putts,
             hole.chipShots,
