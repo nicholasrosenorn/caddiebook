@@ -52,4 +52,7 @@ export async function initDb(): Promise<void> {
     'created_at',
     "created_at TEXT NOT NULL DEFAULT (datetime('now'))",
   );
+  await ensureColumn(db, 'pre_round_goals', 'execution_goal', 'execution_goal TEXT');
+  await ensureColumn(db, 'pre_round_goals', 'strategic_goal', 'strategic_goal TEXT');
+  await ensureColumn(db, 'pre_round_goals', 'mental_goal', 'mental_goal TEXT');
 }

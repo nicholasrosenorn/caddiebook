@@ -1,4 +1,4 @@
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -6,6 +6,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { ApproachTarget } from '@/components/approach-target';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
 import { DropdownSelect, type DropdownOption } from '@/components/dropdown-select';
+import { EdgeSwipeOpener } from '@/components/edge-swipe-opener';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
@@ -295,6 +296,7 @@ export default function StatsScreen() {
           />
         ) : null}
       </ScrollView>
+      <EdgeSwipeOpener />
     </Screen>
   );
 }

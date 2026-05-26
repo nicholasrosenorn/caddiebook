@@ -12,13 +12,15 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { fontFamily, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
 import {
+  getGoals,
   getHolesForRound,
   getPuttsForRound,
   getReview,
   getRound,
   getShotsForRound,
 } from '@/db/queries';
-import type { Hole, PostRoundReview, Putt, Round, Shot } from '@/db/types';
+import type { Hole, PostRoundReview, PreRoundGoals, Putt, Round, Shot } from '@/db/types';
+import { GOAL_CATEGORIES } from '@/lib/goals';
 import {
   labelForCommonMiss,
   labelForMostCostly,
@@ -52,21 +54,24 @@ export default function SummaryScreen() {
   const [shots, setShots] = useState<Shot[]>([]);
   const [putts, setPutts] = useState<Putt[]>([]);
   const [review, setReview] = useState<PostRoundReview | null>(null);
+  const [goals, setGoals] = useState<PreRoundGoals | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
-    const [r, hs, ss, ps, rv] = await Promise.all([
+    const [r, hs, ss, ps, rv, gl] = await Promise.all([
       getRound(id),
       getHolesForRound(id),
       getShotsForRound(id),
       getPuttsForRound(id),
       getReview(id),
+      getGoals(id),
     ]);
     setRound(r);
     setHoles(hs);
     setShots(ss);
     setPutts(ps);
     setReview(rv);
+    setGoals(gl);
   }, [id]);
 
   useFocusEffect(
@@ -202,6 +207,10 @@ export default function SummaryScreen() {
 
         <Section title="Putting">
           <PuttingDistribution putts={putts} />
+        </Section>
+
+        <Section title="Round goals">
+          <RoundGoals goals={goals} />
         </Section>
 
         <Section title="Post-round review">
@@ -393,6 +402,35 @@ function PuttingDistribution({ putts }: { putts: Putt[] }) {
         </View>
       </View>
     </View>
+  );
+}
+
+function RoundGoals({ goals }: { goals: PreRoundGoals | null }) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const rows = GOAL_CATEGORIES.map((c) => ({ label: c.label, value: goals?.[c.key] ?? null })).filter(
+    (r): r is { label: string; value: string } => !!r.value,
+  );
+  if (rows.length === 0) {
+    return (
+      <SketchSurface seed="summary-nogoals" style={styles.reviewCard}>
+        <View style={styles.reviewRow}>
+          <ThemedText type="muted">No goals set for this round.</ThemedText>
+        </View>
+      </SketchSurface>
+    );
+  }
+  return (
+    <SketchSurface seed="summary-goals" style={styles.reviewCard}>
+      {rows.map((row, i) => (
+        <View
+          key={row.label}
+          style={[styles.goalRow, i < rows.length - 1 && styles.reviewRowDivider]}>
+          <ThemedText type="caption">{row.label.toUpperCase()}</ThemedText>
+          <ThemedText style={styles.goalValue}>{row.value}</ThemedText>
+        </View>
+      ))}
+    </SketchSurface>
   );
 }
 
@@ -651,6 +689,16 @@ const makeStyles = (colors: Palette) =>
   reviewRowDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
+  },
+  goalRow: {
+    gap: 4,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  goalValue: {
+    fontFamily: fontFamily.serif,
+    fontSize: 16,
+    color: colors.textPrimary,
   },
   reviewQuestion: {
     flex: 1,

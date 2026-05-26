@@ -1,81 +1,74 @@
-import { router, Tabs } from 'expo-router';
-import { Pressable, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useEffect, useState } from 'react';
+import { Platform, type ImageSourcePropType } from 'react-native';
+import type { AppleIcon } from 'react-native-bottom-tabs';
 
-import { GlassTabBar } from '@/components/glass-tab-bar';
-import { InfoHint } from '@/components/info-hint';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing } from '@/constants/theme';
+import { Tabs } from '@/components/bottom-tabs';
+import { fontFamily } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
 
-function MenuButton() {
-  const colors = useColors();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel="Open menu"
-      onPress={() => router.push('/menu')}
-      hitSlop={12}
-      style={({ pressed }) => ({
-        paddingHorizontal: spacing.md,
-        opacity: pressed ? 0.6 : 1,
-      })}>
-      <IconSymbol name="line.3.horizontal" size={24} color={colors.accent} />
-    </Pressable>
-  );
+type TabIcon = ImageSourcePropType | AppleIcon;
+
+// SF Symbols render natively on iOS; Android needs a rasterized ImageSource, which
+// `@expo/vector-icons` only exposes asynchronously — so resolve those once at mount.
+const ANDROID_ICONS = {
+  rounds: 'format-list-bulleted',
+  stats: 'bar-chart',
+} as const;
+
+function useAndroidTabIcons() {
+  const [icons, setIcons] = useState<Record<keyof typeof ANDROID_ICONS, ImageSourcePropType | null>>({
+    rounds: null,
+    stats: null,
+  });
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    let active = true;
+    Promise.all([
+      MaterialIcons.getImageSource(ANDROID_ICONS.rounds, 26, '#000000'),
+      MaterialIcons.getImageSource(ANDROID_ICONS.stats, 26, '#000000'),
+    ]).then(([rounds, stats]) => {
+      if (active) setIcons({ rounds, stats });
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return icons;
 }
 
 export default function TabLayout() {
   const colors = useColors();
+  const androidIcons = useAndroidTabIcons();
+
+  const icon = (key: keyof typeof ANDROID_ICONS, sfSymbol: AppleIcon['sfSymbol']): TabIcon =>
+    Platform.OS === 'ios' ? { sfSymbol } : (androidIcons[key] as TabIcon);
+
   return (
     <Tabs
-      tabBar={(props) => <GlassTabBar {...props} />}
-      screenOptions={{
-        headerStyle: { backgroundColor: colors.background },
-        headerTitleStyle: {
-          color: colors.textPrimary,
-          fontFamily: fontFamily.serifBold,
-          fontSize: 22,
-        },
-        headerShadowVisible: false,
-      }}>
+      tabBarActiveTintColor={colors.accent}
+      tabBarInactiveTintColor={colors.textMuted}
+      tabBarStyle={{ backgroundColor: colors.surface }}
+      tabLabelStyle={{ fontFamily: fontFamily.serif, fontSize: 11 }}
+      activeIndicatorColor={colors.accentMuted}
+      rippleColor={colors.accentMuted}
+      hapticFeedbackEnabled
+      translucent
+      labeled>
       <Tabs.Screen
-        name="index"
+        name="(rounds)"
         options={{
           title: 'Rounds',
-          tabBarIcon: ({ color }) => <IconSymbol size={26} name="list.bullet" color={color} />,
-          headerLeft: () => <MenuButton />,
-          headerRight: () => (
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: spacing.sm,
-                paddingHorizontal: spacing.md,
-              }}>
-              <InfoHint
-                title="Managing rounds"
-                message="Tap a round to open it. Press and hold a round to delete it."
-                size={22}
-                color={colors.accent}
-              />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="New round"
-                onPress={() => router.push('/round/new')}
-                hitSlop={12}
-                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}>
-                <IconSymbol name="plus" size={24} color={colors.accent} />
-              </Pressable>
-            </View>
-          ),
+          tabBarIcon: () => icon('rounds', 'list.bullet'),
         }}
       />
       <Tabs.Screen
-        name="stats"
+        name="(stats)"
         options={{
           title: 'Stats',
-          tabBarIcon: ({ color }) => <IconSymbol size={26} name="chart.bar.fill" color={color} />,
-          headerLeft: () => <MenuButton />,
+          tabBarIcon: () => icon('stats', 'chart.bar.fill'),
         }}
       />
     </Tabs>

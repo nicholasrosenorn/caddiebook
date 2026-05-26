@@ -34,6 +34,9 @@ const MAPPING = {
   'play.fill': 'play-arrow',
   'stop.fill': 'stop',
   'gearshape': 'settings',
+  'magnifyingglass': 'search',
+  'trash': 'delete-outline',
+  'pencil': 'edit',
 } as IconMapping;
 
 /**

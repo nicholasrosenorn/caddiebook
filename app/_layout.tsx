@@ -7,6 +7,7 @@ import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { fontFamily, themes } from '@/constants/theme';
@@ -68,8 +69,11 @@ function Navigation() {
           name="tools/tempo"
           options={{ title: 'Tempo trainer', headerBackTitle: 'Back' }}
         />
+        <Stack.Screen name="journal/index" options={{ title: 'Journal', headerBackTitle: 'Back' }} />
+        <Stack.Screen name="journal/[id]" options={{ title: 'Note', headerBackTitle: 'Journal' }} />
         <Stack.Screen name="round/new" options={{ title: 'New Round', presentation: 'modal' }} />
         <Stack.Screen name="round/[id]/index" options={{ headerShown: false }} />
+        <Stack.Screen name="round/[id]/goals" options={{ headerShown: false }} />
         <Stack.Screen name="round/[id]/review" options={{ headerShown: false }} />
         <Stack.Screen name="round/[id]/summary" options={{ headerShown: false }} />
       </Stack>
@@ -98,8 +102,10 @@ export default function RootLayout() {
   }
 
   return (
-    <AppThemeProvider>
-      <Navigation />
-    </AppThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AppThemeProvider>
+        <Navigation />
+      </AppThemeProvider>
+    </GestureHandlerRootView>
   );
 }

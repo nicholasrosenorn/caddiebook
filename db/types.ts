@@ -78,6 +78,25 @@ export type PostRoundReview = {
   createdAt: string;
 };
 
+export type PreRoundGoals = {
+  id: string;
+  roundId: string;
+  execution: string | null;
+  strategic: string | null;
+  mental: string | null;
+  createdAt: string;
+};
+
+export type JournalTag = 'swing_thought' | 'practice_session' | 'round_summary';
+
+export type JournalEntry = {
+  id: string;
+  tag: JournalTag;
+  body: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type RoundSummary = {
   holesPlayed: number;
   totalScore: number;

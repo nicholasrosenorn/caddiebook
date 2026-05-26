@@ -65,10 +65,29 @@ export const SCHEMA_STATEMENTS = [
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );`,
 
+  `CREATE TABLE IF NOT EXISTS pre_round_goals (
+    id TEXT PRIMARY KEY NOT NULL,
+    round_id TEXT NOT NULL UNIQUE REFERENCES rounds(id) ON DELETE CASCADE,
+    execution_goal TEXT,
+    strategic_goal TEXT,
+    mental_goal TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );`,
+
   `CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY NOT NULL,
     value TEXT
   );`,
+
+  `CREATE TABLE IF NOT EXISTS journal_entries (
+    id TEXT PRIMARY KEY NOT NULL,
+    tag TEXT NOT NULL CHECK (tag IN ('swing_thought', 'practice_session', 'round_summary')),
+    body TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS idx_journal_updated_at ON journal_entries(updated_at);`,
 
   `CREATE INDEX IF NOT EXISTS idx_holes_round_id ON holes(round_id);`,
   `CREATE INDEX IF NOT EXISTS idx_shots_round_id ON shots(round_id);`,

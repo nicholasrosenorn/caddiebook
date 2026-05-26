@@ -55,7 +55,7 @@ export default function NewRoundScreen() {
         datePlayed: formatIsoDate(date),
         holeCount,
       });
-      router.replace(`/round/${id}` as any);
+      router.replace(`/round/${id}/goals` as any);
     } catch (err) {
       console.error(err);
       Alert.alert('Could not start round', 'Please try again.');

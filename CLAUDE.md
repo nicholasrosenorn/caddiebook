@@ -1,6 +1,6 @@
-# Caddy Book
+# Caddie Book
 
-A local-first golf caddy book for iOS & Android. The product **focus is stat tracking with a visual and spatial design language** — wherever possible, data entry is tap-first on shaped, position-aware surfaces (target maps, par-relative score grids, putt grids) rather than text inputs.
+A local-first golf CaddieBook for iOS & Android. The product **focus is stat tracking with a visual and spatial design language** — wherever possible, data entry is tap-first on shaped, position-aware surfaces (target maps, par-relative score grids, putt grids) rather than text inputs.
 
 ## Stack
 

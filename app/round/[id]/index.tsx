@@ -215,7 +215,7 @@ export default function RoundScreen() {
       </View>
 
       <Pressable
-        onPress={() => router.push('/menu')}
+        onPress={() => router.push(`/menu?roundId=${id}` as any)}
         hitSlop={10}
         accessibilityRole="button"
         accessibilityLabel="Open menu"

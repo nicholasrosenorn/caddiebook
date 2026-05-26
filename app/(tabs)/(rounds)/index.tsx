@@ -1,8 +1,9 @@
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
+import { EdgeSwipeOpener } from '@/components/edge-swipe-opener';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
@@ -83,6 +84,7 @@ export default function RoundsScreen() {
             </SketchSurface>
           </Pressable>
         </View>
+        <EdgeSwipeOpener />
       </Screen>
     );
   }
@@ -134,6 +136,7 @@ export default function RoundsScreen() {
           </Pressable>
         )}
       />
+      <EdgeSwipeOpener />
     </Screen>
   );
 }

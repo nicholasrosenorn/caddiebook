@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import { useCallback, useEffect, useMemo } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
@@ -15,6 +15,9 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { fontFamily, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
+import { getGoals } from '@/db/queries';
+import type { PreRoundGoals } from '@/db/types';
+import { GOAL_CATEGORIES } from '@/lib/goals';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -30,6 +33,7 @@ type ToolItem = {
 
 // Order matches the build-out; routeless items render as "Soon".
 const ITEMS: ToolItem[] = [
+  { key: 'journal', label: 'Journal', hint: 'Swing thoughts, practice, notes', route: '/journal' },
   { key: 'yardages', label: 'Stock yardages', hint: 'Your full carry per club', route: '/tools/yardages' },
   { key: 'wedges', label: 'Wedge grid', hint: 'Full · ¾ · ½ carries', route: '/tools/wedge-grid' },
   { key: 'tempo', label: 'Tempo trainer', hint: '3:1 swing metronome', route: '/tools/tempo' },
@@ -41,6 +45,21 @@ export default function MenuScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const panelWidth = Math.min(320, width * 0.82);
+  // When opened from inside a round, the hamburger passes the active round id so
+  // the menu can surface that round's goals.
+  const { roundId } = useLocalSearchParams<{ roundId?: string }>();
+  const [goals, setGoals] = useState<PreRoundGoals | null>(null);
+
+  useEffect(() => {
+    if (!roundId) return;
+    let cancelled = false;
+    getGoals(roundId).then((g) => {
+      if (!cancelled) setGoals(g);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [roundId]);
 
   // 0 = closed (panel off-screen left, backdrop clear), 1 = fully open.
   const progress = useSharedValue(0);
@@ -76,6 +95,18 @@ export default function MenuScreen() {
   };
 
   const openSettings = () => closeThen(() => router.replace('/settings' as any));
+
+  const openGoals = () => {
+    if (!roundId) return;
+    closeThen(() => router.replace(`/round/${roundId}/goals` as any));
+  };
+
+  const goalRows = goals
+    ? GOAL_CATEGORIES.map((c) => ({ label: c.label, value: goals[c.key] })).filter(
+        (r): r is { label: string; value: string } => !!r.value,
+      )
+    : [];
+  const hasGoals = goalRows.length > 0;
 
   const panelStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: (progress.value - 1) * panelWidth }],
@@ -115,6 +146,33 @@ export default function MenuScreen() {
           <ThemedText type="caption">CADDIE BOOK</ThemedText>
           <ThemedText style={styles.title}>Tools</ThemedText>
         </View>
+
+        {roundId ? (
+          <Pressable
+            onPress={openGoals}
+            accessibilityRole="button"
+            accessibilityLabel={hasGoals ? 'Edit round goals' : 'Set round goals'}
+            style={({ pressed }) => [styles.focusCard, pressed && styles.rowPressed]}>
+            <View style={styles.focusHeader}>
+              <ThemedText type="caption">THIS ROUND&apos;S FOCUS</ThemedText>
+              <IconSymbol name="chevron.right" size={16} color={colors.textMuted} />
+            </View>
+            {hasGoals ? (
+              <View style={styles.focusList}>
+                {goalRows.map((row) => (
+                  <View key={row.label} style={styles.focusRow}>
+                    <ThemedText style={styles.focusLabel}>{row.label}</ThemedText>
+                    <ThemedText style={styles.focusValue}>{row.value}</ThemedText>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <ThemedText type="muted" style={styles.focusEmpty}>
+                Set goals to keep this round focused
+              </ThemedText>
+            )}
+          </Pressable>
+        ) : null}
 
         <View style={styles.list}>
           {ITEMS.map((item, i) => {
@@ -210,6 +268,42 @@ const makeStyles = (colors: Palette) =>
       fontSize: 20,
       color: colors.textPrimary,
       marginTop: 5,
+    },
+    focusCard: {
+      gap: spacing.sm,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+      marginBottom: spacing.md,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.borderStrong,
+      backgroundColor: colors.surfaceAlt,
+    },
+    focusHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    focusList: {
+      gap: spacing.sm,
+    },
+    focusRow: {
+      gap: 1,
+    },
+    focusLabel: {
+      fontFamily: fontFamily.sans,
+      fontSize: 10,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      color: colors.textMuted,
+    },
+    focusValue: {
+      fontFamily: fontFamily.serif,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    focusEmpty: {
+      fontSize: 13,
     },
     list: {
       gap: 0,

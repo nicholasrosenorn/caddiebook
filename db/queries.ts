@@ -2,8 +2,11 @@ import { getDb } from './client';
 import type {
   CommonMiss,
   Hole,
+  JournalEntry,
+  JournalTag,
   MostCostly,
   PostRoundReview,
+  PreRoundGoals,
   Putt,
   RangeFocus,
   Round,
@@ -529,6 +532,69 @@ export async function upsertReview(input: UpsertReviewInput): Promise<void> {
   }
 }
 
+// --- Pre-round goals -------------------------------------------------------
+
+type PreRoundGoalsRow = {
+  id: string;
+  round_id: string;
+  execution_goal: string | null;
+  strategic_goal: string | null;
+  mental_goal: string | null;
+  created_at: string;
+};
+
+function rowToGoals(row: PreRoundGoalsRow): PreRoundGoals {
+  return {
+    id: row.id,
+    roundId: row.round_id,
+    execution: row.execution_goal,
+    strategic: row.strategic_goal,
+    mental: row.mental_goal,
+    createdAt: row.created_at,
+  };
+}
+
+export async function getGoals(roundId: string): Promise<PreRoundGoals | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<PreRoundGoalsRow>(
+    `SELECT id, round_id, execution_goal, strategic_goal, mental_goal, created_at
+     FROM pre_round_goals
+     WHERE round_id = ?;`,
+    [roundId],
+  );
+  return row ? rowToGoals(row) : null;
+}
+
+export type UpsertGoalsInput = {
+  roundId: string;
+  execution: string | null;
+  strategic: string | null;
+  mental: string | null;
+};
+
+export async function upsertGoals(input: UpsertGoalsInput): Promise<void> {
+  const db = await getDb();
+  const existing = await db.getFirstAsync<{ id: string }>(
+    `SELECT id FROM pre_round_goals WHERE round_id = ?;`,
+    [input.roundId],
+  );
+  if (existing) {
+    await db.runAsync(
+      `UPDATE pre_round_goals
+       SET execution_goal = ?, strategic_goal = ?, mental_goal = ?
+       WHERE round_id = ?;`,
+      [input.execution, input.strategic, input.mental, input.roundId],
+    );
+  } else {
+    await db.runAsync(
+      `INSERT INTO pre_round_goals
+         (id, round_id, execution_goal, strategic_goal, mental_goal)
+       VALUES (?, ?, ?, ?, ?);`,
+      [uuid(), input.roundId, input.execution, input.strategic, input.mental],
+    );
+  }
+}
+
 // --- App settings (global, not per-round) ---------------------------------
 
 const BAG_KEY = 'bag';
@@ -620,6 +686,88 @@ export async function setSetting(key: string, value: string): Promise<void> {
      ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
     [key, value],
   );
+}
+
+// --- Journal (standalone, not per-round) -----------------------------------
+
+type JournalEntryRow = {
+  id: string;
+  tag: string;
+  body: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+function rowToJournalEntry(row: JournalEntryRow): JournalEntry {
+  return {
+    id: row.id,
+    tag: row.tag as JournalTag,
+    body: row.body,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function listJournalEntries(): Promise<JournalEntry[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<JournalEntryRow>(
+    `SELECT id, tag, body, created_at, updated_at
+     FROM journal_entries
+     ORDER BY updated_at DESC, created_at DESC;`,
+  );
+  return rows.map(rowToJournalEntry);
+}
+
+export async function getJournalEntry(id: string): Promise<JournalEntry | null> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<JournalEntryRow>(
+    `SELECT id, tag, body, created_at, updated_at
+     FROM journal_entries WHERE id = ?;`,
+    [id],
+  );
+  return row ? rowToJournalEntry(row) : null;
+}
+
+export async function createJournalEntry(input: {
+  tag: JournalTag;
+  body: string | null;
+}): Promise<string> {
+  const db = await getDb();
+  const id = uuid();
+  await db.runAsync(
+    `INSERT INTO journal_entries (id, tag, body) VALUES (?, ?, ?);`,
+    [id, input.tag, input.body ?? null],
+  );
+  return id;
+}
+
+export async function updateJournalEntry(
+  id: string,
+  patch: { tag?: JournalTag; body?: string | null },
+): Promise<void> {
+  const sets: string[] = [];
+  const values: (string | null)[] = [];
+  if (patch.tag !== undefined) {
+    sets.push('tag = ?');
+    values.push(patch.tag);
+  }
+  if (patch.body !== undefined) {
+    sets.push('body = ?');
+    values.push(patch.body);
+  }
+  if (sets.length === 0) return;
+  sets.push("updated_at = datetime('now')");
+
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE journal_entries SET ${sets.join(', ')} WHERE id = ?;`,
+    [...values, id],
+  );
+}
+
+export async function deleteJournalEntry(id: string): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(`DELETE FROM journal_entries WHERE id = ?;`, [id]);
 }
 
 const WEDGE_PARTIALS_KEY = 'wedge_partials';
