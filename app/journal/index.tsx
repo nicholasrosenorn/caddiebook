@@ -73,17 +73,19 @@ export default function JournalScreen() {
       <Stack.Screen
         options={{
           headerRight: () => (
-            <InfoHint
-              title="Using the journal"
-              message={
-                'Capture quick notes between rounds and range sessions.\n\n' +
-                '• Tap + to add an entry, then pick a tag: Swing thought, Practice session, or Round summary.\n' +
-                '• Notes save automatically — just tap Done when you’re finished.\n' +
-                '• Filter by tag or search the text to find an entry.\n' +
-                '• Tap an entry to edit it; long-press to delete.'
-              }
-              size={22}
-            />
+            <View style={styles.headerRight}>
+              <InfoHint
+                title="Using the journal"
+                message={
+                  'Capture quick notes between rounds and range sessions.\n\n' +
+                  '• Tap + to add an entry, then pick a tag: Swing thought, Practice session, or Round summary.\n' +
+                  '• Notes save automatically — just tap Done when you’re finished.\n' +
+                  '• Filter by tag or search the text to find an entry.\n' +
+                  '• Tap an entry to edit it; long-press to delete.'
+                }
+                size={22}
+              />
+            </View>
           ),
         }}
       />
@@ -185,6 +187,9 @@ function formatDate(iso: string): string {
 
 const makeStyles = (colors: Palette) =>
   StyleSheet.create({
+    headerRight: {
+      paddingHorizontal: spacing.md,
+    },
     header: {
       paddingHorizontal: spacing.md,
       paddingTop: spacing.md,

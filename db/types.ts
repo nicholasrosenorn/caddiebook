@@ -23,6 +23,7 @@ export type Hole = {
   chipShots: number | null;
   sandShots: number | null;
   penalties: number | null;
+  greenBlocked: boolean | null;
   notes: string | null;
 };
 

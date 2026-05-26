@@ -146,6 +146,8 @@ export type LifetimeStats = {
 
   driverLanes: Record<DriverLane, number>;
   driverTotal: number;
+  /** Par-4+ holes where the player couldn't reach the green (no real approach). */
+  noApproachHoles: number;
   approachTotal: number;
   avgApproachProximity: number | null;
 };
@@ -205,9 +207,11 @@ export function aggregateStats(
   let penaltiesTotal = 0;
   let sandShots = 0;
   let chipShots = 0;
+  let noApproachHoles = 0;
 
   for (const hole of holes) {
     if (hole.score != null) holesScored += 1;
+    if (hole.greenBlocked && hole.par != null && hole.par >= 4) noApproachHoles += 1;
 
     const gir = resolveGir(hole);
     if (gir != null) {
@@ -243,6 +247,7 @@ export function aggregateStats(
     total: 0,
   }));
   for (const hole of holes) {
+    if (hole.greenBlocked) continue; // no genuine approach to measure
     if (hole.approachDistanceYds == null) continue;
     const gir = resolveGir(hole);
     if (gir == null) continue;
@@ -315,6 +320,7 @@ export function aggregateStats(
     approachByDistance,
     driverLanes,
     driverTotal,
+    noApproachHoles,
     approachTotal,
     avgApproachProximity: proximityCount > 0 ? proximitySum / proximityCount : null,
   };
@@ -363,6 +369,7 @@ export function aggregateApproach(
     total: 0,
   }));
   for (const hole of holes) {
+    if (hole.greenBlocked) continue; // no genuine approach to measure
     if (hole.approachDistanceYds == null) continue;
     if (!matches(hole.approachClub)) continue;
     const gir = resolveGir(hole);

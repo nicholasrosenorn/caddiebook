@@ -433,6 +433,11 @@ function StatsBody({
           {driver.driverTotal} drive{driver.driverTotal === 1 ? '' : 's'} · LF{' '}
           {driver.driverLanes.LF} · CF {driver.driverLanes.CF} · RF {driver.driverLanes.RF}
         </ThemedText>
+        {stats.noApproachHoles > 0 ? (
+          <ThemedText type="muted" style={[styles.centerText, { marginTop: spacing.xs }]}>
+            {stats.noApproachHoles} left no shot at the green
+          </ThemedText>
+        ) : null}
       </Section>
 
       {/* Approach dispersion — the club filter scopes both approach sections. */}

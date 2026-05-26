@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { InfoHint } from '@/components/info-hint';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { fontFamily, spacing, type Palette } from '@/constants/theme';
@@ -68,11 +69,17 @@ export function ParPage({ roundId, hole, onChange, onPicked }: Props) {
         })}
       </View>
 
-      <ThemedText type="muted" style={styles.hint}>
-        {hole.par != null
-          ? `Par ${hole.par} · swipe up for ${hole.par === 3 ? 'approach' : 'drive'}`
-          : 'Tap to set par'}
-      </ThemedText>
+      <View style={styles.hintRow}>
+        <InfoHint
+          title="Setting the par"
+          message="Tap a button to set this hole's par. The flow then advances automatically — par 3s skip the drive page and go straight to your approach; par 4s and 5s start with the drive. Swipe up to move between the pages of a hole."
+        />
+        <ThemedText type="muted" style={styles.hint}>
+          {hole.par != null
+            ? `Par ${hole.par} · swipe up for ${hole.par === 3 ? 'approach' : 'drive'}`
+            : 'Tap to set par'}
+        </ThemedText>
+      </View>
     </View>
   );
 }
@@ -127,7 +134,15 @@ const makeStyles = (colors: Palette) =>
     color: colors.accentOn,
     opacity: 0.85,
   },
+  hintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
   hint: {
+    flexShrink: 1,
     textAlign: 'center',
+    color: colors.textMuted,
   },
 });

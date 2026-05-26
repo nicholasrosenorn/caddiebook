@@ -10,6 +10,10 @@ export function deriveGir(
 }
 
 export function resolveGir(hole: Hole): boolean | null {
+  // A blocked approach (couldn't access the green) isn't a fair test of greens
+  // in regulation, so it's excluded from GIR entirely rather than counted as a
+  // miss. It still counts as a missed green for up & down — see resolveUpAndDown.
+  if (hole.greenBlocked) return null;
   if (hole.gir != null) return hole.gir;
   return deriveGir(hole.par, hole.score, hole.putts);
 }
@@ -25,10 +29,12 @@ export function deriveUpAndDown(
 }
 
 export function resolveUpAndDown(hole: Hole): boolean | null {
-  const gir = resolveGir(hole);
-  if (gir !== false) return null;
+  // Eligible whenever the green was missed — either a genuine missed approach
+  // (resolveGir === false) or a blocked one (couldn't reach the green at all).
+  const missedGreen = hole.greenBlocked === true || resolveGir(hole) === false;
+  if (!missedGreen) return null;
   if (hole.upAndDown != null) return hole.upAndDown;
-  return deriveUpAndDown(hole.par, hole.score, gir);
+  return deriveUpAndDown(hole.par, hole.score, false);
 }
 
 export function computeRoundSummary(holes: Hole[]): RoundSummary {
@@ -169,6 +175,16 @@ export function computePuttingStats(holes: Hole[]): PuttingStats {
     perHole: holesWithPutts > 0 ? total / holesWithPutts : null,
     threePuttCount,
   };
+}
+
+// Holes where the player couldn't reach the green — surfaced as a driving
+// consequence ("drives that left no shot at the green"), so gated to par 4+.
+export function countGreenBlocked(holes: Hole[]): number {
+  let count = 0;
+  for (const hole of holes) {
+    if (hole.greenBlocked && hole.par != null && hole.par >= 4) count += 1;
+  }
+  return count;
 }
 
 export function totalPenalties(holes: Hole[]): number {

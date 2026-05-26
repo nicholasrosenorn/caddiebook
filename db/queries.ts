@@ -31,6 +31,7 @@ type HoleRow = {
   chip_shots: number | null;
   sand_shots: number | null;
   penalties: number | null;
+  green_blocked: number | null;
   notes: string | null;
 };
 
@@ -60,6 +61,7 @@ function rowToHole(row: HoleRow): Hole {
     chipShots: row.chip_shots,
     sandShots: row.sand_shots,
     penalties: row.penalties,
+    greenBlocked: row.green_blocked == null ? null : row.green_blocked === 1,
     notes: row.notes,
   };
 }
@@ -137,7 +139,7 @@ export async function getHolesForRound(roundId: string): Promise<Hole[]> {
   const rows = await db.getAllAsync<HoleRow>(
     `SELECT id, round_id, hole_number, par, fir, gir, up_and_down,
             approach_distance_yds, approach_club, drive_club, score, putts,
-            chip_shots, sand_shots, penalties, notes
+            chip_shots, sand_shots, penalties, green_blocked, notes
      FROM holes
      WHERE round_id = ?
      ORDER BY hole_number ASC;`,
@@ -154,7 +156,7 @@ export async function getAllHoles(): Promise<Hole[]> {
   const rows = await db.getAllAsync<HoleRow>(
     `SELECT id, round_id, hole_number, par, fir, gir, up_and_down,
             approach_distance_yds, approach_club, drive_club, score, putts,
-            chip_shots, sand_shots, penalties, notes
+            chip_shots, sand_shots, penalties, green_blocked, notes
      FROM holes
      ORDER BY round_id ASC, hole_number ASC;`,
   );
@@ -166,7 +168,7 @@ export async function getHole(roundId: string, holeNumber: number): Promise<Hole
   const row = await db.getFirstAsync<HoleRow>(
     `SELECT id, round_id, hole_number, par, fir, gir, up_and_down,
             approach_distance_yds, approach_club, drive_club, score, putts,
-            chip_shots, sand_shots, penalties, notes
+            chip_shots, sand_shots, penalties, green_blocked, notes
      FROM holes
      WHERE round_id = ? AND hole_number = ?;`,
     [roundId, holeNumber],
@@ -189,12 +191,13 @@ const FIELD_TO_COLUMN: Record<keyof HoleUpdatableFields, string> = {
   chipShots: 'chip_shots',
   sandShots: 'sand_shots',
   penalties: 'penalties',
+  greenBlocked: 'green_blocked',
   notes: 'notes',
 };
 
 function toSqlValue(field: keyof HoleUpdatableFields, value: unknown): unknown {
   if (value == null) return null;
-  if (field === 'fir' || field === 'gir' || field === 'upAndDown') {
+  if (field === 'fir' || field === 'gir' || field === 'upAndDown' || field === 'greenBlocked') {
     return value ? 1 : 0;
   }
   return value;

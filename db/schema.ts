@@ -26,6 +26,7 @@ export const SCHEMA_STATEMENTS = [
     chip_shots INTEGER,
     sand_shots INTEGER,
     penalties INTEGER,
+    green_blocked INTEGER,
     notes TEXT,
     UNIQUE (round_id, hole_number)
   );`,

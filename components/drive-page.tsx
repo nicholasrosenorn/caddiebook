@@ -4,6 +4,7 @@ import { Alert, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { ClubChips } from '@/components/club-chips';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
+import { InfoHint } from '@/components/info-hint';
 import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS, sortByDriveLength } from '@/constants/clubs';
 import { radius, spacing, type Palette } from '@/constants/theme';
@@ -105,9 +106,15 @@ export function DrivePage({ roundId, hole, shotsForRound, onChange }: Props) {
           </ThemedText>
         </View>
       ) : (
-        <ThemedText type="muted" style={styles.hint}>
-          Tap fairway to mark where your drive landed.
-        </ThemedText>
+        <View style={styles.hintRow}>
+          <InfoHint
+            title="Marking your drive"
+            message="Tap the fairway oval where your drive came to rest. Left, center, or right lane sets the line; the center lane counts as a fairway hit (FIR). Tap again to move it. The club chips below record what you hit."
+          />
+          <ThemedText type="muted" style={styles.hint}>
+            Tap fairway to mark where your drive landed.
+          </ThemedText>
+        </View>
       )}
       <View style={styles.form}>
         <View style={styles.formField}>
@@ -167,10 +174,18 @@ const makeStyles = (colors: Palette) =>
   badgeTextPositive: {
     color: colors.accent,
   },
-  hint: {
-    textAlign: 'center',
+  hintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
     paddingTop: spacing.sm,
     marginVertical: spacing.sm,
+  },
+  hint: {
+    flexShrink: 1,
+    textAlign: 'center',
+    color: colors.textMuted,
   },
   form: {
     gap: spacing.md,

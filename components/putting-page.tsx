@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Circle, G, Line, Path, Polygon } from 'react-native-svg';
 
+import { InfoHint } from '@/components/info-hint';
 import { ThemedText } from '@/components/themed-text';
 import { fontFamily, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
@@ -79,9 +80,15 @@ export function PuttingPage({ roundId, hole, putts, onChange }: Props) {
         />
       </View>
 
-      <ThemedText type="muted" style={styles.hint}>
-        Tap the made or miss side of a distance to log a putt · tap a putt to remove it.
-      </ThemedText>
+      <View style={styles.hintRow}>
+        <InfoHint
+          title="Logging putts"
+          message="Each lane is a distance band, ordered far to near with the cup at the bottom. Tap the MADE or MISS column to add a putt at that distance — a filled disc for made, an open ring for missed. Tap a glyph to remove it. The hole's putt count updates automatically."
+        />
+        <ThemedText type="muted" style={styles.hint}>
+          Tap the made or miss side of a distance to log a putt · tap a putt to remove it.
+        </ThemedText>
+      </View>
     </View>
   );
 }
@@ -383,8 +390,16 @@ const makeStyles = (colors: Palette) =>
     alignItems: 'center',
     paddingTop: 4,
   },
-  hint: {
-    textAlign: 'center',
+  hintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
     paddingTop: spacing.sm,
+  },
+  hint: {
+    flexShrink: 1,
+    textAlign: 'center',
+    color: colors.textMuted,
   },
 });

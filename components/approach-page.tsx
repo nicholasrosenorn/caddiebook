@@ -1,16 +1,19 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { ApproachTarget } from '@/components/approach-target';
 import { ClubChips } from '@/components/club-chips';
 import type { TargetPin } from '@/components/driver-target';
+import { InfoHint } from '@/components/info-hint';
+import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { YardageRuler } from '@/components/yardage-ruler';
 import { CLUB_OPTIONS } from '@/constants/clubs';
 import { radius, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
-import { getBag, getClubYardages, updateHole, upsertShot } from '@/db/queries';
+import { deleteShot, getBag, getClubYardages, updateHole, upsertShot } from '@/db/queries';
 import type { Hole, Shot } from '@/db/types';
 import { approachResult } from '@/lib/shots';
 
@@ -95,6 +98,31 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) 
     }
   };
 
+  const blocked = hole.greenBlocked === true;
+
+  const onToggleBlocked = async () => {
+    try {
+      if (!blocked) {
+        // Couldn't reach the green: drop any placed approach + its derived data
+        // so the hole is excluded from GIR and approach-execution stats.
+        await deleteShot(roundId, hole.holeNumber, 'approach');
+        setPosition(null);
+        await updateHole(roundId, hole.holeNumber, {
+          greenBlocked: true,
+          gir: null,
+          approachDistanceYds: null,
+          approachClub: null,
+        });
+      } else {
+        await updateHole(roundId, hole.holeNumber, { greenBlocked: false });
+      }
+      await onChange();
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Save failed', 'Could not update the hole.');
+    }
+  };
+
   const otherApproaches: TargetPin[] = shotsForRound
     .filter((s) => s.shotType === 'approach' && s.holeNumber !== hole.holeNumber)
     .map((s) => ({ key: s.id, xNorm: s.xNorm, yNorm: s.yNorm, variant: 'muted' }));
@@ -112,38 +140,84 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) 
         <ThemedText type="caption">APPROACH</ThemedText>
       </View>
       <View style={styles.targetWrap}>
-        <ApproachTarget pins={pins} onTap={handleTap} size={targetSize} />
+        <View
+          style={blocked && styles.targetDimmed}
+          pointerEvents={blocked ? 'none' : 'auto'}>
+          <ApproachTarget
+            pins={blocked ? [] : pins}
+            onTap={blocked ? undefined : handleTap}
+            size={targetSize}
+          />
+        </View>
       </View>
-      {position ? (
+      {blocked ? (
+        <View style={styles.blockedNote}>
+          <ThemedText type="muted" style={styles.hint}>
+            No approach to the green.
+          </ThemedText>
+        </View>
+      ) : position ? (
         <View style={[styles.badge, isOnGreen && styles.badgePositive]}>
           <ThemedText style={[styles.badgeText, isOnGreen && styles.badgeTextPositive]}>
             {result}
           </ThemedText>
         </View>
       ) : (
-        <ThemedText type="muted" style={styles.hint}>
-          Tap to mark where your approach landed.
-        </ThemedText>
-      )}
-      <View style={styles.form}>
-        <View style={styles.formField}>
-          <ThemedText type="caption">CLUB</ThemedText>
-          <ClubChips value={hole.approachClub} onChange={onClubChange} clubs={bag} />
-        </View>
-        <View style={styles.formField}>
-          <ThemedText type="caption">YARDS IN</ThemedText>
-          {/* Remount on club change so the ruler picks up the freshly-written
-              value with a clean `touched` state; keyed by club (not value) so
-              nudging within the same club doesn't reset mid-edit. */}
-          <YardageRuler
-            key={`ruler-${hole.approachClub ?? 'none'}`}
-            value={hole.approachDistanceYds}
-            onCommit={onYardsCommit}
-            max={350}
-            defaultValue={rulerDefault}
+        <View style={styles.hintRow}>
+          <InfoHint
+            title="Marking your approach"
+            message="Tap the ring target where your approach finished, relative to the pin at center. Distance from center sets proximity; landing inside the rings counts as a green in regulation (GIR). Tap again to move it. Set the club and yards-in below."
           />
+          <ThemedText type="muted" style={styles.hint}>
+            Tap to mark where your approach landed.
+          </ThemedText>
         </View>
-      </View>
+      )}
+
+      <Pressable
+        onPress={onToggleBlocked}
+        accessibilityRole="button"
+        accessibilityState={{ selected: blocked }}
+        style={({ pressed }) => [styles.blockToggle, pressed && styles.blockTogglePressed]}>
+        <SketchSurface
+          seed="approach-blocked"
+          fill={blocked ? colors.accent : colors.surface}
+          stroke={blocked ? colors.accent : colors.borderStrong}
+          grain={blocked}
+          style={styles.blockToggleSurface}>
+          <IconSymbol
+            name={blocked ? 'checkmark' : 'xmark'}
+            size={16}
+            color={blocked ? colors.accentOn : colors.textSecondary}
+          />
+          <ThemedText
+            style={[styles.blockToggleLabel, blocked && styles.blockToggleLabelActive]}>
+            Couldn&apos;t reach the green
+          </ThemedText>
+        </SketchSurface>
+      </Pressable>
+
+      {!blocked && (
+        <View style={styles.form}>
+          <View style={styles.formField}>
+            <ThemedText type="caption">CLUB</ThemedText>
+            <ClubChips value={hole.approachClub} onChange={onClubChange} clubs={bag} />
+          </View>
+          <View style={styles.formField}>
+            <ThemedText type="caption">YARDS IN</ThemedText>
+            {/* Remount on club change so the ruler picks up the freshly-written
+                value with a clean `touched` state; keyed by club (not value) so
+                nudging within the same club doesn't reset mid-edit. */}
+            <YardageRuler
+              key={`ruler-${hole.approachClub ?? 'none'}`}
+              value={hole.approachDistanceYds}
+              onCommit={onYardsCommit}
+              max={350}
+              defaultValue={rulerDefault}
+            />
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -171,9 +245,47 @@ const makeStyles = (colors: Palette) =>
     alignItems: 'center',
     paddingVertical: spacing.sm,
   },
-  hint: {
-    textAlign: 'center',
+  targetDimmed: {
+    opacity: 0.35,
+  },
+  blockedNote: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.md,
+  },
+  blockToggle: {
+    alignSelf: 'center',
+    marginBottom: spacing.md,
+  },
+  blockTogglePressed: {
+    opacity: 0.6,
+  },
+  blockToggleSurface: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  blockToggleLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  blockToggleLabelActive: {
+    color: colors.accentOn,
+  },
+  hintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
     paddingBottom: spacing.md,
+  },
+  hint: {
+    flexShrink: 1,
+    textAlign: 'center',
+    color: colors.textMuted,
   },
   badge: {
     alignSelf: 'center',

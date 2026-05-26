@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useMemo } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { BinaryChoice } from '@/components/binary-choice';
 import { OptionRow } from '@/components/option-row';
@@ -10,7 +10,7 @@ import { fontFamily, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
 import { updateHole } from '@/db/queries';
 import type { Hole } from '@/db/types';
-import { computeRoundSummary, deriveGir, formatPct, resolveUpAndDown } from '@/lib/stats';
+import { computeRoundSummary, deriveGir, formatPct, resolveGir, resolveUpAndDown } from '@/lib/stats';
 
 type HoleField = keyof Omit<Hole, 'id' | 'roundId' | 'holeNumber'>;
 
@@ -24,11 +24,6 @@ type Props = {
 export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [notesDraft, setNotesDraft] = useState(hole.notes ?? '');
-
-  useEffect(() => {
-    setNotesDraft(hole.notes ?? '');
-  }, [hole.notes, hole.id]);
 
   const update = async <K extends HoleField>(field: K, value: Hole[K]) => {
     try {
@@ -39,17 +34,14 @@ export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
     }
   };
 
-  const commitNotes = () => {
-    const next = notesDraft.trim() === '' ? null : notesDraft;
-    if (next !== (hole.notes ?? null)) update('notes', next);
-  };
-
   const summary = computeRoundSummary(holes);
-  const showFir = hole.par != null && hole.par >= 4;
+  const showFir = hole.par == null || hole.par >= 4;
+  const blocked = hole.greenBlocked === true;
   const derivedGir = deriveGir(hole.par, hole.score, hole.putts);
-  const resolvedGir = hole.gir != null ? hole.gir : derivedGir;
+  const resolvedGir = resolveGir(hole);
   const girIsAuto = hole.gir == null;
-  const showUd = resolvedGir === false;
+  // Blocked greens are excluded from GIR but still missed for U&D purposes.
+  const showUd = resolvedGir === false || blocked;
   const resolvedUd = resolveUpAndDown(hole);
   const udIsAuto = hole.upAndDown == null;
 
@@ -105,9 +97,9 @@ export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
       <BinaryChoice
         label="Green in Regulation (GIR)"
         hint={
-          derivedGir == null
-            ? 'Enter score & putts to auto-fill'
-            : girIsAuto
+          blocked
+            ? "Couldn't reach green — excluded from GIR"
+            : girIsAuto && derivedGir != null
               ? 'Auto from score − putts'
               : undefined
         }
@@ -118,13 +110,7 @@ export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
       {showUd && (
         <BinaryChoice
           label="Up & Down"
-          hint={
-            resolvedUd == null
-              ? 'Enter score to auto-fill'
-              : udIsAuto
-                ? 'Auto from score ≤ par'
-                : undefined
-          }
+          hint={udIsAuto && resolvedUd != null ? 'Auto from score ≤ par' : undefined}
           value={resolvedUd}
           onChange={(v) => update('upAndDown', v)}
         />
@@ -145,21 +131,6 @@ export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
         value={hole.penalties}
         onChange={(v) => update('penalties', v)}
       />
-
-      <View style={styles.notesWrap}>
-        <ThemedText style={styles.notesLabel}>Notes</ThemedText>
-        <SketchSurface seed="stats-notes" style={styles.notesSurface}>
-          <TextInput
-            value={notesDraft}
-            onChangeText={setNotesDraft}
-            onBlur={commitNotes}
-            multiline
-            placeholder="Anything to remember about this hole…"
-            placeholderTextColor={colors.textMuted}
-            style={styles.notesInput}
-          />
-        </SketchSurface>
-      </View>
     </ScrollView>
   );
 }
@@ -206,24 +177,5 @@ const makeStyles = (colors: Palette) =>
     fontFamily: fontFamily.serifBold,
     fontSize: 18,
     color: colors.textPrimary,
-  },
-  notesWrap: {
-    gap: spacing.sm,
-  },
-  notesLabel: {
-    fontFamily: fontFamily.serif,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  notesSurface: {
-    minHeight: 88,
-  },
-  notesInput: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    fontSize: 16,
-    color: colors.textPrimary,
-    minHeight: 88,
-    textAlignVertical: 'top',
   },
 });

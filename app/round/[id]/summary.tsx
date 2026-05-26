@@ -31,6 +31,7 @@ import {
   computePuttingStats,
   computeRoundSummary,
   computeScoreDistribution,
+  countGreenBlocked,
   formatPct,
   totalPar,
   totalPenalties,
@@ -89,6 +90,7 @@ export default function SummaryScreen() {
   const perPar = computePerParAverages(holes);
   const puttingStats = computePuttingStats(holes);
   const penalties = totalPenalties(holes);
+  const noApproachHoles = countGreenBlocked(holes);
 
   const drivePins: TargetPin[] = shots
     .filter((s) => s.shotType === 'driver')
@@ -189,10 +191,11 @@ export default function SummaryScreen() {
           <View style={[styles.targetWrap, { marginBottom: spacing.md }]}>
             <DriverTarget pins={drivePins} width={233} height={350} />
           </View>
-          {/* <ThemedText type="muted" style={[styles.centerText, { marginTop: spacing.md }]}>
-            {drivePins.length} drive{drivePins.length === 1 ? '' : 's'} ·
-            {' '}FIR {formatPct(summary.firPct)}
-          </ThemedText> */}
+          {noApproachHoles > 0 ? (
+            <ThemedText type="muted" style={styles.centerText}>
+              {noApproachHoles} drive{noApproachHoles === 1 ? '' : 's'} left no shot at the green
+            </ThemedText>
+          ) : null}
         </Section>
 
         <Section title="Approach dispersion">
