@@ -5,18 +5,27 @@ import {
 } from '@expo-google-fonts/fraunces';
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
+import { Intro } from '@/components/intro';
 import { fontFamily, themes } from '@/constants/theme';
 import { ThemeProvider as AppThemeProvider, useColors, useTheme } from '@/constants/theme-context';
 import { initDb } from '@/db/client';
+import { getSetting, setSetting } from '@/db/queries';
+
+const INTRO_SEEN_KEY = 'intro_seen';
 
 export const unstable_settings = {
   anchor: '(tabs)',
 };
+
+// Keep the native splash up until fonts + DB are ready (otherwise the
+// first render returns null and the splash auto-hides into a blank flash).
+SplashScreen.preventAutoHideAsync();
 
 function Navigation() {
   const colors = useColors();
@@ -84,6 +93,8 @@ function Navigation() {
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
+  // null = not yet known (keep the splash up until the flag is read).
+  const [introSeen, setIntroSeen] = useState<boolean | null>(null);
   const [fontsLoaded] = useFonts({
     Fraunces_500Medium,
     Fraunces_700Bold,
@@ -91,20 +102,37 @@ export default function RootLayout() {
 
   useEffect(() => {
     initDb()
+      .then(() => getSetting(INTRO_SEEN_KEY))
+      .then((seen) => setIntroSeen(seen === '1'))
       .catch((err) => {
-        console.error('Failed to initialize database', err);
+        console.error('Failed to initialize app', err);
+        // Don't trap the user on the splash if the read fails — skip the intro.
+        setIntroSeen(true);
       })
       .finally(() => setReady(true));
   }, []);
 
-  if (!ready || !fontsLoaded) {
+  useEffect(() => {
+    if (ready && fontsLoaded) {
+      SplashScreen.hideAsync();
+    }
+  }, [ready, fontsLoaded]);
+
+  const dismissIntro = () => {
+    setIntroSeen(true);
+    setSetting(INTRO_SEEN_KEY, '1').catch((err) =>
+      console.error('Failed to persist intro flag', err),
+    );
+  };
+
+  if (!ready || !fontsLoaded || introSeen === null) {
     return null;
   }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AppThemeProvider>
-        <Navigation />
+        {introSeen ? <Navigation /> : <Intro onDone={dismissIntro} />}
       </AppThemeProvider>
     </GestureHandlerRootView>
   );

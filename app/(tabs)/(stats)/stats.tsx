@@ -1,7 +1,7 @@
 import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { ApproachTarget } from '@/components/approach-target';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
@@ -22,7 +22,6 @@ import {
   listRounds,
 } from '@/db/queries';
 import type { Hole, PostRoundReview, Putt, Round, Shot } from '@/db/types';
-import { clearAllRounds, seedSampleRounds } from '@/lib/dev-seed';
 import {
   aggregateApproach,
   aggregateDriver,
@@ -118,7 +117,6 @@ export default function StatsScreen() {
   const [roundsFilter, setRoundsFilter] = useState<RoundsFilter>(20);
   const [clubFilter, setClubFilter] = useState<ClubFilter>('all');
   const [driveClubFilter, setDriveClubFilter] = useState<ClubFilter>('all');
-  const [devBusy, setDevBusy] = useState(false);
 
   const load = useCallback(async () => {
     const [rounds, holes, shots, putts, reviews] = await Promise.all([
@@ -143,19 +141,6 @@ export default function StatsScreen() {
     useCallback(() => {
       load();
     }, [load]),
-  );
-
-  const runDev = useCallback(
-    async (fn: () => Promise<void>) => {
-      setDevBusy(true);
-      try {
-        await fn();
-        await load();
-      } finally {
-        setDevBusy(false);
-      }
-    },
-    [load],
   );
 
   // Rounds matching the hole-count + recency filters; shared by every section.
@@ -254,14 +239,6 @@ export default function StatsScreen() {
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + spacing.lg }]}
         showsVerticalScrollIndicator={false}>
-
-        {__DEV__ ? (
-          <DevBar
-            busy={devBusy}
-            onSeed={() => runDev(() => seedSampleRounds(70))}
-            onClear={() => runDev(clearAllRounds)}
-          />
-        ) : null}
 
         <View style={styles.filters}>
           <DropdownSelect
@@ -518,41 +495,6 @@ function StatsBody({
 
       <View style={{ height: spacing.xl }} />
     </>
-  );
-}
-
-// Dev-only seeding controls — gated by __DEV__ at the call site.
-function DevBar({
-  busy,
-  onSeed,
-  onClear,
-}: {
-  busy: boolean;
-  onSeed: () => void;
-  onClear: () => void;
-}) {
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  return (
-    <View style={styles.devBar}>
-      <Pressable style={styles.devBtn} disabled={busy} onPress={onSeed}>
-        <SketchSurface
-          seed="dev-seed"
-          fill={colors.accent}
-          stroke={colors.accent}
-          radius={8}
-          style={styles.devSurface}>
-          <ThemedText style={styles.devSeedLabel}>
-            {busy ? 'Working…' : 'Seed 70 rounds'}
-          </ThemedText>
-        </SketchSurface>
-      </Pressable>
-      <Pressable style={styles.devBtn} disabled={busy} onPress={onClear}>
-        <SketchSurface seed="dev-clear" radius={8} style={styles.devSurface}>
-          <ThemedText style={styles.devClearLabel}>Clear all</ThemedText>
-        </SketchSurface>
-      </Pressable>
-    </View>
   );
 }
 
@@ -900,29 +842,6 @@ const makeStyles = (colors: Palette) =>
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-  },
-  devBar: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  devBtn: {
-    flex: 1,
-  },
-  devSurface: {
-    minHeight: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.sm,
-  },
-  devSeedLabel: {
-    fontFamily: fontFamily.serif,
-    fontSize: 14,
-    color: colors.accentOn,
-  },
-  devClearLabel: {
-    fontFamily: fontFamily.serif,
-    fontSize: 14,
-    color: colors.textSecondary,
   },
   sampleLine: {
     marginTop: -spacing.sm,

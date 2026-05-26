@@ -23,6 +23,9 @@ import { getBag, getClubYardages, setBag, setClubYardage } from '@/db/queries';
 const DEFAULT_YDS = 100;
 const BAND_HEIGHT = 76;
 const FAN_HEIGHT = 132;
+// Extra vertical room around the arc that still counts as "on the flag" — keeps
+// the drag from being lost when the finger drifts off the line a little.
+const BAND_TOUCH_SLOP = 28;
 
 // Derive the in-play club list (Putter excluded, longest → shortest) from a bag.
 function clubsFromBag(bag: string[]): string[] {
@@ -168,6 +171,9 @@ function ArcCard({
         onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (_e, g) =>
           Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 3,
+        // Once we own the gesture, don't let the parent ScrollView reclaim it
+        // mid-drag — the flag should stay glued to the finger until release.
+        onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: (e) => setDrag(xToCarry(e.nativeEvent.locationX, widthRef.current)),
         onPanResponderMove: (e) => setDrag(xToCarry(e.nativeEvent.locationX, widthRef.current)),
         onPanResponderRelease: (e) => {
@@ -290,6 +296,11 @@ const makeStyles = (colors: Palette) =>
     color: colors.textMuted,
   },
   band: {
-    height: BAND_HEIGHT,
+    // Touch area is taller than the visible arc, but negative margins keep the
+    // arc's on-screen position and the card's layout unchanged.
+    height: BAND_HEIGHT + BAND_TOUCH_SLOP * 2,
+    paddingVertical: BAND_TOUCH_SLOP,
+    marginVertical: -BAND_TOUCH_SLOP,
+    justifyContent: 'center',
   },
 });

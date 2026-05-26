@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { DevSettings, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
@@ -7,11 +7,23 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { fontFamily, spacing, themes, THEME_ORDER, type Palette, type ThemeId } from '@/constants/theme';
 import { useColors, useTheme } from '@/constants/theme-context';
+import { setSetting } from '@/db/queries';
+import { clearAllRounds, seedSampleRounds } from '@/lib/dev-seed';
 
 export default function SettingsScreen() {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { themeId, setTheme } = useTheme();
+  const [devBusy, setDevBusy] = useState(false);
+
+  const runDev = useCallback(async (fn: () => Promise<void>) => {
+    setDevBusy(true);
+    try {
+      await fn();
+    } finally {
+      setDevBusy(false);
+    }
+  }, []);
 
   return (
     <Screen>
@@ -34,6 +46,60 @@ export default function SettingsScreen() {
             />
           ))}
         </View>
+
+        {__DEV__ && (
+          <View style={styles.devSection}>
+            <ThemedText type="caption">DEVELOPER</ThemedText>
+
+            <View style={styles.devBar}>
+              <Pressable
+                style={styles.devBtn}
+                disabled={devBusy}
+                accessibilityRole="button"
+                accessibilityLabel="Seed 70 sample rounds"
+                onPress={() => runDev(() => seedSampleRounds(70))}>
+                <SketchSurface
+                  seed="dev-seed"
+                  fill={colors.accent}
+                  stroke={colors.accent}
+                  radius={8}
+                  style={styles.devSurface}>
+                  <ThemedText style={styles.devSeedLabel}>
+                    {devBusy ? 'Working…' : 'Seed 70 rounds'}
+                  </ThemedText>
+                </SketchSurface>
+              </Pressable>
+              <Pressable
+                style={styles.devBtn}
+                disabled={devBusy}
+                accessibilityRole="button"
+                accessibilityLabel="Clear all rounds"
+                onPress={() => runDev(clearAllRounds)}>
+                <SketchSurface seed="dev-clear" radius={8} style={styles.devSurface}>
+                  <ThemedText style={styles.devClearLabel}>Clear all</ThemedText>
+                </SketchSurface>
+              </Pressable>
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Replay intro"
+              onPress={async () => {
+                // Clear the one-time flag, then reload so the root layout
+                // re-reads it and shows the intro again.
+                await setSetting('intro_seen', '0');
+                DevSettings.reload();
+              }}
+              style={({ pressed }) => pressed && styles.cardPressed}>
+              <SketchSurface seed="dev-replay-intro" radius={12} style={styles.devRow}>
+                <ThemedText style={styles.cardLabel}>Replay intro</ThemedText>
+                <ThemedText type="muted" style={styles.cardHint}>
+                  Resets the first-launch flag and reloads
+                </ThemedText>
+              </SketchSurface>
+            </Pressable>
+          </View>
+        )}
       </ScrollView>
     </Screen>
   );
@@ -159,5 +225,38 @@ const makeStyles = (colors: Palette) =>
     checkPlaceholder: {
       width: 20,
       height: 20,
+    },
+    devSection: {
+      gap: spacing.sm,
+    },
+    devRow: {
+      gap: 2,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+      minHeight: 60,
+      justifyContent: 'center',
+    },
+    devBar: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+    },
+    devBtn: {
+      flex: 1,
+    },
+    devSurface: {
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: spacing.sm,
+    },
+    devSeedLabel: {
+      fontFamily: fontFamily.serif,
+      fontSize: 14,
+      color: colors.accentOn,
+    },
+    devClearLabel: {
+      fontFamily: fontFamily.serif,
+      fontSize: 14,
+      color: colors.textSecondary,
     },
   });

@@ -93,7 +93,7 @@ export function PuttingPage({ roundId, hole, putts, onChange }: Props) {
   );
 }
 
-function Board({
+export function Board({
   width,
   putts,
   holeNumber,
