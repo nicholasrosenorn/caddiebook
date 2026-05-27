@@ -66,7 +66,9 @@ export type RangeFocus =
   | 'chipping'
   | 'putting'
   | 'pre_shot_routine'
-  | 'short_game';
+  | 'short_game'
+  | 'driving'
+  ;
 
 export type PostRoundReview = {
   id: string;

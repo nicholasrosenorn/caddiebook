@@ -5,6 +5,7 @@ import { ScoreGlyph, type ScoreIndicator } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
+import { scoreIndicator } from '@/lib/stats';
 
 const ROWS: number[][] = [
   [1, 2, 3],
@@ -58,7 +59,7 @@ function ScoreCell({
 }) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const indicator: ScoreIndicator = par != null ? getIndicator(n, par) : 'none';
+  const indicator: ScoreIndicator = par != null ? scoreIndicator(n, par) : 'none';
   const shapeColor = selected ? colors.accentOn : colors.borderStrong;
   return (
     <Pressable
@@ -87,16 +88,6 @@ function ScoreCell({
       )}
     </Pressable>
   );
-}
-
-function getIndicator(score: number, par: number): ScoreIndicator {
-  const delta = score - par;
-  if (delta <= -2) return 'doubleCircle';
-  if (delta === -1) return 'circle';
-  if (delta === 0) return 'par';
-  if (delta === 1) return 'square';
-  if (delta === 2) return 'doubleSquare';
-  return 'tripleSquare';
 }
 
 const makeStyles = (colors: Palette) =>

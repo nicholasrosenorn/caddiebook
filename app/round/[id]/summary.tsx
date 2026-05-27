@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApproachTarget } from '@/components/approach-target';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
+import { Scorecard } from '@/components/scorecard';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
@@ -118,11 +119,6 @@ export default function SummaryScreen() {
         <View style={styles.header}>
           <ThemedText type="caption">{formatDate(round.datePlayed)}</ThemedText>
           <ThemedText type="title">{round.courseName}</ThemedText>
-          {round.completedAt ? (
-            <ThemedText type="muted">
-              ✓ Completed {formatDate(round.completedAt.slice(0, 10))}
-            </ThemedText>
-          ) : null}
         </View>
 
         <SketchSurface seed="summary-score" style={styles.scoreCard}>
@@ -148,6 +144,13 @@ export default function SummaryScreen() {
             </ThemedText>
           </View>
         </SketchSurface>
+
+        <Section title="Scorecard">
+          <Scorecard
+            holes={holes}
+            onPressHole={(n) => router.push(`/round/${id}?hole=${n}&page=stats` as any)}
+          />
+        </Section>
 
         <View style={styles.statGrid}>
           <View style={styles.statRow}>
@@ -355,7 +358,6 @@ function PuttingDistribution({ putts }: { putts: Putt[] }) {
     const misses = inBucket.length - makes;
     return { ...b, makes, misses, total: inBucket.length };
   });
-  const maxTotal = Math.max(1, ...buckets.map((b) => b.total));
 
   if (putts.length === 0) {
     return <ThemedText type="muted">No putts logged.</ThemedText>;
@@ -364,8 +366,8 @@ function PuttingDistribution({ putts }: { putts: Putt[] }) {
   return (
     <View style={styles.puttingList}>
       {buckets.map((b) => {
-        const makesPct = b.total > 0 ? b.makes / maxTotal : 0;
-        const missesPct = b.total > 0 ? b.misses / maxTotal : 0;
+        const makesFrac = b.total > 0 ? b.makes / b.total : 0;
+        const missesFrac = b.total > 0 ? b.misses / b.total : 0;
         return (
           <View key={b.ft} style={styles.puttRow}>
             <ThemedText style={styles.puttLabel}>{b.label}</ThemedText>
@@ -377,20 +379,33 @@ function PuttingDistribution({ putts }: { putts: Putt[] }) {
               <View
                 style={[
                   styles.puttBarMake,
-                  { flex: makesPct, minWidth: b.makes > 0 ? 6 : 0 },
+                  { flex: makesFrac, minWidth: b.makes > 0 ? 6 : 0 },
                 ]}
               />
               <View
                 style={[
                   styles.puttBarMiss,
-                  { flex: missesPct, minWidth: b.misses > 0 ? 6 : 0 },
+                  { flex: missesFrac, minWidth: b.misses > 0 ? 6 : 0 },
                 ]}
               />
-              <View style={{ flex: Math.max(0, 1 - makesPct - missesPct) }} />
+              <View style={{ flex: Math.max(0, 1 - makesFrac - missesFrac) }} />
             </SketchSurface>
-            <ThemedText type="muted" style={styles.puttCounts}>
-              {b.makes}/{b.total}
-            </ThemedText>
+            <View style={styles.puttCounts}>
+              {b.total > 0 ? (
+                <>
+                  <ThemedText style={styles.puttPct} numberOfLines={1}>
+                    {Math.round(makesFrac * 100)}%
+                  </ThemedText>
+                  <ThemedText type="muted" style={styles.puttFraction} numberOfLines={1}>
+                    {b.makes}/{b.total}
+                  </ThemedText>
+                </>
+              ) : (
+                <ThemedText type="muted" style={styles.puttPct}>
+                  —
+                </ThemedText>
+              )}
+            </View>
           </View>
         );
       })}
@@ -660,8 +675,16 @@ const makeStyles = (colors: Palette) =>
     height: '100%',
   },
   puttCounts: {
-    width: 52,
-    textAlign: 'right',
+    width: 72,
+    alignItems: 'flex-end',
+  },
+  puttPct: {
+    fontFamily: fontFamily.serif,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  puttFraction: {
+    fontSize: 12,
   },
   puttLegend: {
     flexDirection: 'row',

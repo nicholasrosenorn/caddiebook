@@ -1,7 +1,7 @@
-import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
+import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 
 import { ApproachTarget } from '@/components/approach-target';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
@@ -489,7 +489,7 @@ function StatsBody({
       {/* Review insights */}
       {review.count > 0 || empty ? (
         <Section title="Mental Game">
-          <ReviewInsightsCard review={review} />
+          <MentalGameCard review={review} empty={empty} />
         </Section>
       ) : null}
 
@@ -742,9 +742,22 @@ function SplitDistanceBars({
               />
               <View style={{ flex: Math.max(0, 1 - successFrac - missFrac) }} />
             </SketchSurface>
-            <ThemedText type="muted" style={styles.splitCounts}>
-              {r.total > 0 ? `${Math.round(successFrac * 100)}% (${r.success}/${r.total})` : '—'}
-            </ThemedText>
+            <View style={styles.splitCounts}>
+              {r.total > 0 ? (
+                <>
+                  <ThemedText style={styles.splitPct} numberOfLines={1}>
+                    {Math.round(successFrac * 100)}%
+                  </ThemedText>
+                  <ThemedText type="muted" style={styles.splitFraction} numberOfLines={1}>
+                    {r.success}/{r.total}
+                  </ThemedText>
+                </>
+              ) : (
+                <ThemedText type="muted" style={styles.splitPct}>
+                  —
+                </ThemedText>
+              )}
+            </View>
           </View>
         );
       })}
@@ -762,58 +775,115 @@ function SplitDistanceBars({
   );
 }
 
-function ReviewInsightsCard({ review }: { review: ReturnType<typeof aggregateReview> }) {
+function MentalGameCard({ review, empty }: { review: ReviewInsights; empty: boolean }) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const rows: { question: string; answer: string | null; emphasis?: boolean }[] = [
-    {
-      question: 'Most often costs you strokes',
-      answer: review.topMostCostly
-        ? `${review.topMostCostly.label} (${review.topMostCostly.count}×)`
-        : null,
-    },
-    {
-      question: 'Most common miss',
-      answer: review.topCommonMiss
-        ? `${review.topCommonMiss.label} (${review.topCommonMiss.count}×)`
-        : null,
-    },
-    {
-      question: 'Most-cited range focus',
-      answer: review.topRangeFocus
-        ? `${review.topRangeFocus.label} (${review.topRangeFocus.count}×)`
-        : null,
-    },
-    {
-      question: 'Avg decision making',
-      answer: review.avgDecision != null ? `${review.avgDecision.toFixed(1)}/10` : null,
-      emphasis: true,
-    },
-    {
-      question: 'Avg round rating',
-      answer: review.avgOverall != null ? `${review.avgOverall.toFixed(1)}/10` : null,
-      emphasis: true,
-    },
-  ];
+
+  if (empty || review.count === 0) {
+    return (
+      <ThemedText type="muted" style={styles.centerText}>
+        Add post-round reviews to see your mental game.
+      </ThemedText>
+    );
+  }
+
+  const decisionPoints = review.decisionTrend.filter((v): v is number => v != null);
+  const overallPoints = review.overallTrend.filter((v): v is number => v != null);
+
   return (
-    <SketchSurface seed="stats-review" style={styles.reviewCard}>
-      {rows.map((row, i) => (
-        <View
-          key={row.question}
-          style={[styles.reviewRow, i < rows.length - 1 && styles.reviewRowDivider]}>
-          <ThemedText style={styles.reviewQuestion}>{row.question}</ThemedText>
-          <ThemedText
-            style={[
-              styles.reviewAnswer,
-              row.answer == null && styles.reviewAnswerEmpty,
-              row.emphasis && styles.reviewAnswerRating,
-            ]}
-            numberOfLines={1}>
-            {row.answer ?? '—'}
-          </ThemedText>
+    <View style={styles.mentalBody}>
+      {/* Ratings + trends — standard within-section spacing */}
+      <View style={styles.sectionBody}>
+        <ThemedText type="caption" style={styles.sampleLine}>
+          {review.count} {review.count === 1 ? 'REVIEW' : 'REVIEWS'}
+        </ThemedText>
+
+        {/* Self-rated averages */}
+        <View style={styles.statRow}>
+          <StatTile
+            label="Decision Making AVG"
+            value={review.avgDecision != null ? `${review.avgDecision.toFixed(1)}/10` : '—'}
+          />
+          <StatTile
+            label="Round Rating AVG"
+            value={review.avgOverall != null ? `${review.avgOverall.toFixed(1)}/10` : '—'}
+          />
         </View>
-      ))}
-    </SketchSurface>
+
+        {/* Rating trends — each self-hides below 2 points */}
+        <TrendCard
+          title="Decision making"
+          caption="/10"
+          points={decisionPoints}
+          formatValue={(n) => n.toFixed(1)}
+        />
+        <TrendCard
+          title="Round rating"
+          caption="/10"
+          points={overallPoints}
+          formatValue={(n) => n.toFixed(1)}
+        />
+      </View>
+
+      {/* Categorical frequency breakdowns */}
+      <FrequencyBars
+        caption="Costs you most strokes"
+        seedPrefix="costly"
+        rows={review.mostCostly}
+      />
+      <FrequencyBars caption="Common miss" seedPrefix="miss" rows={review.commonMiss} />
+      <FrequencyBars caption="Range focus" seedPrefix="focus" rows={review.rangeFocus} />
+    </View>
+  );
+}
+
+// Single-accent count bars for a categorical review breakdown (modeled on
+// ScoreDistributionBars). Renders nothing when there's no data for the field.
+function FrequencyBars<T extends string>({
+  caption,
+  seedPrefix,
+  rows,
+}: {
+  caption: string;
+  seedPrefix: string;
+  rows: { value: T; label: string; count: number }[];
+}) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  if (rows.length === 0) return null;
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  return (
+    <View style={styles.freqBlock}>
+      <ThemedText type="caption">{caption.toUpperCase()}</ThemedText>
+      <View style={styles.barList}>
+        {rows.map((row) => {
+          const frac = row.count / max;
+          return (
+            <View key={row.value} style={styles.barRow}>
+              <ThemedText style={[styles.barLabel, styles.freqLabel]}>{row.label}</ThemedText>
+              <SketchSurface
+                seed={`stats-freq-${seedPrefix}-${row.value}`}
+                radius={7}
+                fill={colors.surfaceAlt}
+                style={styles.barTrack}>
+                <View
+                  style={{
+                    flex: frac,
+                    backgroundColor: colors.accent,
+                    minWidth: 6,
+                    height: '100%',
+                  }}
+                />
+                <View style={{ flex: Math.max(0, 1 - frac) }} />
+              </SketchSurface>
+              <ThemedText type="muted" style={styles.barCount}>
+                {row.count}
+              </ThemedText>
+            </View>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -1001,8 +1071,16 @@ const makeStyles = (colors: Palette) =>
     textAlign: 'right',
   },
   splitCounts: {
-    width: 92,
-    textAlign: 'right',
+    width: 72,
+    alignItems: 'flex-end',
+  },
+  splitPct: {
+    fontFamily: fontFamily.serif,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  splitFraction: {
+    fontSize: 12,
   },
   legend: {
     flexDirection: 'row',
@@ -1026,37 +1104,13 @@ const makeStyles = (colors: Palette) =>
   centerText: {
     textAlign: 'center',
   },
-  reviewCard: {
-    paddingHorizontal: spacing.xs,
+  mentalBody: {
+    gap: spacing.lg,
   },
-  reviewRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    gap: spacing.md,
+  freqBlock: {
+    gap: spacing.sm,
   },
-  reviewRowDivider: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  reviewQuestion: {
-    flex: 1,
-    fontSize: 15,
-    color: colors.textSecondary,
-  },
-  reviewAnswer: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    textAlign: 'right',
-  },
-  reviewAnswerEmpty: {
-    color: colors.textMuted,
-    fontWeight: '400',
-  },
-  reviewAnswerRating: {
-    color: colors.accent,
+  freqLabel: {
+    width: 96,
   },
 });

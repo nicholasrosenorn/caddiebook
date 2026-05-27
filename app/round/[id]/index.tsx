@@ -1,6 +1,7 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
@@ -26,8 +27,10 @@ import { useColors } from '@/constants/theme-context';
 import {
   getHolesForRound,
   getPuttsForRound,
+  getReview,
   getRound,
   getShotsForRound,
+  setRoundCompletedAt,
 } from '@/db/queries';
 import type { Hole, Putt, Round, Shot } from '@/db/types';
 
@@ -36,15 +39,23 @@ const NAV_HEIGHT = 96;
 export default function RoundScreen() {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, hole, page } = useLocalSearchParams<{
+    id: string;
+    hole?: string;
+    page?: string;
+  }>();
   const [round, setRound] = useState<Round | null>(null);
   const [holes, setHoles] = useState<Hole[]>([]);
   const [shots, setShots] = useState<Shot[]>([]);
   const [putts, setPutts] = useState<Putt[]>([]);
-  const [holeNumber, setHoleNumber] = useState(1);
+  const [holeNumber, setHoleNumber] = useState(() => {
+    const n = parseInt(hole ?? '', 10);
+    return Number.isFinite(n) && n >= 1 ? n : 1;
+  });
   const [pageHeight, setPageHeight] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
+  const didInitialJump = useRef(false);
   const insets = useSafeAreaInsets();
 
   const load = useCallback(async () => {
@@ -78,6 +89,20 @@ export default function RoundScreen() {
   const totalPages = isPar3 ? 4 : 5;
   const isStatsPage = currentPage === totalPages - 1;
 
+  // Deep-link (?hole=N&page=stats from the summary scorecard): once the pages
+  // are measured and the target hole is loaded, jump straight to its Stats page.
+  // Guarded by a ref so manual paging works freely afterwards.
+  useEffect(() => {
+    if (didInitialJump.current) return;
+    if (pageHeight == null || !currentHole) return;
+    if (page === 'stats') {
+      const target = totalPages - 1;
+      scrollRef.current?.scrollTo({ y: target * pageHeight, animated: false });
+      setCurrentPage(target);
+    }
+    didInitialJump.current = true;
+  }, [pageHeight, currentHole, page, totalPages]);
+
   const goToHole = useCallback((n: number) => {
     setHoleNumber(n);
     setCurrentPage(0);
@@ -101,12 +126,46 @@ export default function RoundScreen() {
   const onFinish = () => {
     router.replace(`/round/${id}/review` as any);
   };
-  const onClose = () => {
+
+  const closeNow = useCallback(() => {
     if (router.canGoBack()) {
       router.back();
     } else {
       router.replace('/' as any);
     }
+  }, []);
+
+  const completeRound = useCallback(async () => {
+    if (!id) return;
+    const review = await getReview(id);
+    const reviewComplete =
+      review != null &&
+      review.mostCostly != null &&
+      review.decisionMakingRating != null &&
+      review.commonMiss != null &&
+      review.rangeFocus != null &&
+      review.overallRating != null;
+    if (reviewComplete) {
+      if (!round?.completedAt) {
+        await setRoundCompletedAt(id, new Date().toISOString());
+      }
+      router.replace(`/round/${id}/summary` as any);
+    } else {
+      router.replace(`/round/${id}/review` as any);
+    }
+  }, [id, round]);
+
+  const onClose = () => {
+    // Already-completed rounds (opened via "Edit round") just close.
+    if (round?.completedAt) {
+      closeNow();
+      return;
+    }
+    Alert.alert('This round is unfinished. How would you like to proceed?', undefined, [
+      { text: 'Save and finish later', onPress: closeNow },
+      { text: 'Complete round', onPress: completeRound },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   };
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -182,16 +241,23 @@ export default function RoundScreen() {
               </View>
             </ScrollView>
 
-            <PageDots totalPages={totalPages} currentPage={currentPage} />
+            <PageDots
+              totalPages={totalPages}
+              currentPage={currentPage}
+              onJump={scrollToPage}
+            />
 
             {isStatsPage ? (
               <StickyHoleNav
                 holeNumber={holeNumber}
                 par={currentHole.par}
+                holeCount={round.holeCount}
+                holes={holes}
                 isFirstHole={isFirstHole}
                 isLastHole={isLastHole}
                 onPrev={onPrevHole}
                 onNext={onNextHole}
+                onJump={goToHole}
                 onFinish={onFinish}
               />
             ) : (
@@ -199,10 +265,14 @@ export default function RoundScreen() {
                 <HoleStepper
                   holeNumber={holeNumber}
                   par={currentHole.par}
+                  holeCount={round.holeCount}
+                  holes={holes}
                   isFirstHole={isFirstHole}
                   isLastHole={isLastHole}
                   onPrev={onPrevHole}
                   onNext={onNextHole}
+                  onJump={goToHole}
+                  onFinish={onFinish}
                 />
                 <ScrollHint
                   onPress={() => scrollToPage(Math.min(totalPages - 1, currentPage + 1))}
@@ -250,19 +320,25 @@ export default function RoundScreen() {
 function PageDots({
   totalPages,
   currentPage,
+  onJump,
 }: {
   totalPages: number;
   currentPage: number;
+  onJump: (page: number) => void;
 }) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
-    <View style={styles.dotsContainer} pointerEvents="none">
+    <View style={styles.dotsContainer}>
       {Array.from({ length: totalPages }).map((_, i) => (
-        <View
+        <Pressable
           key={i}
-          style={[styles.dot, currentPage === i && styles.dotActive]}
-        />
+          onPress={() => onJump(i)}
+          hitSlop={{ top: 6, bottom: 6, left: 16, right: 16 }}
+          accessibilityRole="button"
+          accessibilityLabel={`Go to page ${i + 1}`}>
+          <View style={[styles.dot, currentPage === i && styles.dotActive]} />
+        </Pressable>
       ))}
     </View>
   );
@@ -304,7 +380,7 @@ const makeStyles = (colors: Palette) =>
     top: 0,
     bottom: NAV_HEIGHT,
     justifyContent: 'center',
-    gap: 8,
+    gap: 14,
   },
   dot: {
     width: 6,

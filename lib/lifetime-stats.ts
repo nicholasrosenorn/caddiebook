@@ -9,9 +9,10 @@ import type {
   Shot,
 } from '@/db/types';
 import {
-  labelForCommonMiss,
-  labelForMostCostly,
-  labelForRangeFocus,
+  COMMON_MISS_OPTIONS,
+  MOST_COSTLY_OPTIONS,
+  RANGE_FOCUS_OPTIONS,
+  type Option,
 } from '@/lib/review';
 import { approachResult, driverLane, type DriverLane } from '@/lib/shots';
 import {
@@ -469,34 +470,56 @@ export function perRoundTrend(
 
 // --- Post-round review insights -------------------------------------------
 
-export type ReviewInsights = {
+export type ReviewBreakdownItem<T extends string> = {
+  value: T;
+  label: string;
   count: number;
-  topMostCostly: { value: MostCostly; label: string; count: number } | null;
-  topCommonMiss: { value: CommonMiss; label: string; count: number } | null;
-  topRangeFocus: { value: RangeFocus; label: string; count: number } | null;
-  avgDecision: number | null;
-  avgOverall: number | null;
 };
 
-function topOf<T extends string>(
+export type ReviewInsights = {
+  /** Number of reviews in the round set. */
+  count: number;
+  /** Full frequency breakdowns (cited values only, count desc, ties by canonical order). */
+  mostCostly: ReviewBreakdownItem<MostCostly>[];
+  commonMiss: ReviewBreakdownItem<CommonMiss>[];
+  rangeFocus: ReviewBreakdownItem<RangeFocus>[];
+  avgDecision: number | null;
+  decisionCount: number;
+  avgOverall: number | null;
+  overallCount: number;
+  /** Chronological (oldest→newest) rating series; null = round had no review/rating. */
+  decisionTrend: (number | null)[];
+  overallTrend: (number | null)[];
+};
+
+/**
+ * Tally a categorical review field into a sorted frequency breakdown. Only
+ * cited values appear; ties break by the field's canonical option order so the
+ * result is deterministic.
+ */
+function breakdownOf<T extends string>(
   values: (T | null)[],
-  labeler: (v: T) => string,
-): { value: T; label: string; count: number } | null {
+  options: Option<T>[],
+): ReviewBreakdownItem<T>[] {
   const counts = new Map<T, number>();
   for (const v of values) {
     if (v == null) continue;
     counts.set(v, (counts.get(v) ?? 0) + 1);
   }
-  let best: { value: T; count: number } | null = null;
-  for (const [value, count] of counts) {
-    if (!best || count > best.count) best = { value, count };
-  }
-  return best ? { value: best.value, label: labeler(best.value), count: best.count } : null;
+  const rank = (v: T) => options.findIndex((o) => o.value === v);
+  const label = (v: T) => options.find((o) => o.value === v)?.label ?? v;
+  return [...counts.entries()]
+    .map(([value, count]) => ({ value, label: label(value), count }))
+    .sort((a, b) => b.count - a.count || rank(a.value) - rank(b.value));
 }
 
 function avgOf(values: (number | null)[]): number | null {
   const nums = values.filter((v): v is number => v != null);
   return nums.length > 0 ? nums.reduce((s, v) => s + v, 0) / nums.length : null;
+}
+
+function countOf(values: (number | null)[]): number {
+  return values.filter((v): v is number => v != null).length;
 }
 
 export function aggregateReview(
@@ -508,13 +531,30 @@ export function aggregateReview(
     const rv = reviewsByRound.get(r.id);
     if (rv) reviews.push(rv);
   }
+
+  // Chronological rating series (oldest→newest), same ordering as perRoundTrend.
+  const chronological = [...rounds].sort((a, b) => {
+    const byDate = a.datePlayed.localeCompare(b.datePlayed);
+    return byDate !== 0 ? byDate : a.createdAt.localeCompare(b.createdAt);
+  });
+  const decisionTrend = chronological.map(
+    (r) => reviewsByRound.get(r.id)?.decisionMakingRating ?? null,
+  );
+  const overallTrend = chronological.map(
+    (r) => reviewsByRound.get(r.id)?.overallRating ?? null,
+  );
+
   return {
     count: reviews.length,
-    topMostCostly: topOf(reviews.map((r) => r.mostCostly), labelForMostCostly),
-    topCommonMiss: topOf(reviews.map((r) => r.commonMiss), labelForCommonMiss),
-    topRangeFocus: topOf(reviews.map((r) => r.rangeFocus), labelForRangeFocus),
+    mostCostly: breakdownOf(reviews.map((r) => r.mostCostly), MOST_COSTLY_OPTIONS),
+    commonMiss: breakdownOf(reviews.map((r) => r.commonMiss), COMMON_MISS_OPTIONS),
+    rangeFocus: breakdownOf(reviews.map((r) => r.rangeFocus), RANGE_FOCUS_OPTIONS),
     avgDecision: avgOf(reviews.map((r) => r.decisionMakingRating)),
+    decisionCount: countOf(reviews.map((r) => r.decisionMakingRating)),
     avgOverall: avgOf(reviews.map((r) => r.overallRating)),
+    overallCount: countOf(reviews.map((r) => r.overallRating)),
+    decisionTrend,
+    overallTrend,
   };
 }
 

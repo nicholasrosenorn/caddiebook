@@ -2,21 +2,38 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { GlassSurface } from '@/components/glass-surface';
+import { HoleJumpPicker } from '@/components/hole-jump-picker';
 import { ThemedText } from '@/components/themed-text';
 import { fontFamily, radius, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
+import type { Hole } from '@/db/types';
 
 type Props = {
   holeNumber: number;
   par: number | null;
+  holeCount: number;
+  holes: Hole[];
   isFirstHole: boolean;
   isLastHole: boolean;
   onPrev: () => void;
   onNext: () => void;
+  onJump: (n: number) => void;
+  onFinish: () => void;
 };
 
 // Floating top-center pill for jumping between holes while entering data.
-export function HoleStepper({ holeNumber, par, isFirstHole, isLastHole, onPrev, onNext }: Props) {
+export function HoleStepper({
+  holeNumber,
+  par,
+  holeCount,
+  holes,
+  isFirstHole,
+  isLastHole,
+  onPrev,
+  onNext,
+  onJump,
+  onFinish,
+}: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
@@ -37,10 +54,17 @@ export function HoleStepper({ holeNumber, par, isFirstHole, isLastHole, onPrev, 
           <ThemedText style={styles.chevronLabel}>‹</ThemedText>
         </Pressable>
 
-        <ThemedText style={styles.title}>
-          Hole {holeNumber}
-          {par != null ? ` · Par ${par}` : ''}
-        </ThemedText>
+        <HoleJumpPicker
+          holeNumber={holeNumber}
+          holeCount={holeCount}
+          holes={holes}
+          onJump={onJump}
+          onFinish={onFinish}>
+          <ThemedText style={styles.title}>
+            Hole {holeNumber}
+            {par != null ? ` · Par ${par}` : ''}
+          </ThemedText>
+        </HoleJumpPicker>
 
         <Pressable
           onPress={onNext}

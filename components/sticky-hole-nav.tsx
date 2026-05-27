@@ -3,28 +3,36 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GlassSurface } from '@/components/glass-surface';
+import { HoleJumpPicker } from '@/components/hole-jump-picker';
 import { SketchDivider, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { fontFamily, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
+import type { Hole } from '@/db/types';
 
 type Props = {
   holeNumber: number;
   par: number | null;
+  holeCount: number;
+  holes: Hole[];
   isFirstHole: boolean;
   isLastHole: boolean;
   onPrev: () => void;
   onNext: () => void;
+  onJump: (n: number) => void;
   onFinish: () => void;
 };
 
 export function StickyHoleNav({
   holeNumber,
   par,
+  holeCount,
+  holes,
   isFirstHole,
   isLastHole,
   onPrev,
   onNext,
+  onJump,
   onFinish,
 }: Props) {
   const colors = useColors();
@@ -53,7 +61,14 @@ export function StickyHoleNav({
           </SketchSurface>
         </Pressable>
 
-        <View style={styles.title}>
+        <HoleJumpPicker
+          holeNumber={holeNumber}
+          holeCount={holeCount}
+          holes={holes}
+          onJump={onJump}
+          onFinish={onFinish}
+          placement="above"
+          triggerStyle={styles.title}>
           <ThemedText style={styles.titleText}>
             Hole {holeNumber}
             {par != null ? ` · Par ${par}` : ''}
@@ -61,7 +76,7 @@ export function StickyHoleNav({
           {isLastHole ? (
             <ThemedText style={styles.subTitle}>Finish round</ThemedText>
           ) : null}
-        </View>
+        </HoleJumpPicker>
 
         <Pressable
           onPress={isLastHole ? onFinish : onNext}

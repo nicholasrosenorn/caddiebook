@@ -1,4 +1,17 @@
+import type { ScoreIndicator } from '@/components/sketch';
 import type { Hole, RoundSummary } from '@/db/types';
+
+// Maps a raw score against par to the par-relative glyph vocabulary
+// (circle = under par, square = over) used by the score grid and scorecard.
+export function scoreIndicator(score: number, par: number): ScoreIndicator {
+  const delta = score - par;
+  if (delta <= -2) return 'doubleCircle';
+  if (delta === -1) return 'circle';
+  if (delta === 0) return 'par';
+  if (delta === 1) return 'square';
+  if (delta === 2) return 'doubleSquare';
+  return 'tripleSquare';
+}
 
 export function deriveGir(
   par: number | null,
