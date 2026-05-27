@@ -6,6 +6,7 @@ import { OptionRow } from '@/components/option-row';
 import { ScoreGrid } from '@/components/score-grid';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { fontFamily, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
 import { updateHole } from '@/db/queries';
@@ -94,18 +95,28 @@ export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
         />
       )}
 
-      <BinaryChoice
-        label="Green in Regulation (GIR)"
-        hint={
-          blocked
-            ? "Couldn't reach green — excluded from GIR"
-            : girIsAuto && derivedGir != null
-              ? 'Auto from score − putts'
-              : undefined
-        }
-        value={resolvedGir}
-        onChange={(v) => update('gir', v)}
-      />
+      {blocked ? (
+        <View style={styles.girStatus}>
+          <ThemedText style={styles.girStatusLabel}>Green in Regulation (GIR)</ThemedText>
+          <SketchSurface
+            seed="gir-blocked"
+            fill={colors.surfaceAlt}
+            stroke={colors.borderStrong}
+            style={styles.girStatusSurface}>
+            <IconSymbol name="info.circle" size={20} color={colors.textMuted} />
+            <ThemedText style={styles.girStatusText}>
+              Excluded — couldn&apos;t reach the green
+            </ThemedText>
+          </SketchSurface>
+        </View>
+      ) : (
+        <BinaryChoice
+          label="Green in Regulation (GIR)"
+          hint={girIsAuto && derivedGir != null ? 'Auto from score − putts' : undefined}
+          value={resolvedGir}
+          onChange={(v) => update('gir', v)}
+        />
+      )}
 
       {showUd && (
         <BinaryChoice
@@ -177,5 +188,25 @@ const makeStyles = (colors: Palette) =>
     fontFamily: fontFamily.serifBold,
     fontSize: 18,
     color: colors.textPrimary,
+  },
+  girStatus: {
+    gap: spacing.sm,
+  },
+  girStatusLabel: {
+    fontFamily: fontFamily.serif,
+    fontSize: 15,
+    color: colors.textPrimary,
+  },
+  girStatusSurface: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  girStatusText: {
+    flexShrink: 1,
+    fontSize: 14,
+    color: colors.textSecondary,
   },
 });
