@@ -35,6 +35,12 @@ export async function initDb(): Promise<void> {
   await ensureColumn(db, 'rounds', 'tee_name', 'tee_name TEXT');
   await ensureColumn(db, 'rounds', 'course_rating', 'course_rating REAL');
   await ensureColumn(db, 'rounds', 'slope_rating', 'slope_rating REAL');
+  await ensureColumn(
+    db,
+    'rounds',
+    'include_in_handicap',
+    'include_in_handicap INTEGER NOT NULL DEFAULT 1',
+  );
   await ensureColumn(db, 'holes', 'chip_shots', 'chip_shots INTEGER');
   await ensureColumn(db, 'holes', 'sand_shots', 'sand_shots INTEGER');
   await ensureColumn(db, 'holes', 'penalties', 'penalties INTEGER');

@@ -10,6 +10,7 @@ export const SCHEMA_STATEMENTS = [
     tee_name TEXT,
     course_rating REAL,
     slope_rating REAL,
+    include_in_handicap INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );`,
 

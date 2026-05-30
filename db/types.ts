@@ -10,6 +10,8 @@ export type Round = {
    *  rewrite history. Null = unrated → handicap math defaults to par / 113. */
   courseRating: number | null;
   slopeRating: number | null;
+  /** Whether this round posts a differential to the Handicap Index. */
+  includeInHandicap: boolean;
   createdAt: string;
 };
 

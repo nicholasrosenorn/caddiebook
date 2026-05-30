@@ -579,15 +579,18 @@ function toHandicapRound(round: Round, holes: Hole[]): HandicapRound {
 
 /**
  * Handicap Index history for a set of rounds (intended to be the player's
- * completed rounds). The index always reflects the most recent 20 differentials
- * regardless of any stats-screen filters, so callers pass the full set.
+ * completed rounds). Rounds flagged `includeInHandicap = false` are dropped so
+ * they post no differential. The index always reflects the most recent 20
+ * differentials regardless of any stats-screen filters, so callers pass the full set.
  */
 export function handicapHistoryFor(
   rounds: Round[],
   holesByRound: Map<string, Hole[]>,
 ): HandicapHistory {
   return computeHandicapHistory(
-    rounds.map((r) => toHandicapRound(r, holesByRound.get(r.id) ?? [])),
+    rounds
+      .filter((r) => r.includeInHandicap)
+      .map((r) => toHandicapRound(r, holesByRound.get(r.id) ?? [])),
   );
 }
 

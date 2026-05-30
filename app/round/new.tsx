@@ -49,6 +49,7 @@ export default function NewRoundScreen() {
   const [teeName, setTeeName] = useState('');
   const [rating, setRating] = useState('');
   const [slope, setSlope] = useState('');
+  const [includeInHandicap, setIncludeInHandicap] = useState(true);
 
   useEffect(() => {
     getBag().then((stored) => {
@@ -98,8 +99,9 @@ export default function NewRoundScreen() {
     try {
       const ratingNum = parseNum(rating);
       const slopeNum = parseNum(slope);
-      const hasRatingSlope = ratingNum != null && slopeNum != null;
-      const trimmedTee = teeName.trim();
+      const hasRatingSlope =
+        includeInHandicap && ratingNum != null && slopeNum != null;
+      const trimmedTee = includeInHandicap ? teeName.trim() : '';
 
       // Persist the course + tee so next time this autofills.
       const courseId = await findOrCreateCourse(courseName);
@@ -124,6 +126,7 @@ export default function NewRoundScreen() {
         teeName: trimmedTee || null,
         courseRating: hasRatingSlope ? ratingNum : null,
         slopeRating: hasRatingSlope ? slopeNum : null,
+        includeInHandicap,
       });
       router.replace(`/round/${id}/goals` as any);
     } catch (err) {
@@ -236,6 +239,34 @@ export default function NewRoundScreen() {
           </View>
 
           <View style={styles.field}>
+            <Pressable
+              style={styles.toggleRow}
+              onPress={() => setIncludeInHandicap((v) => !v)}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: includeInHandicap }}>
+              <ThemedText type="caption">INCLUDE IN HANDICAP?</ThemedText>
+              <SketchSurface
+                seed="new-handicap-toggle"
+                radius={999}
+                fill={includeInHandicap ? colors.accent : colors.surface}
+                stroke={includeInHandicap ? colors.accent : colors.borderStrong}
+                grain={includeInHandicap}
+                style={[
+                  styles.toggleTrack,
+                  includeInHandicap ? styles.toggleTrackOn : styles.toggleTrackOff,
+                ]}>
+                <View
+                  style={[
+                    styles.toggleKnob,
+                    { backgroundColor: includeInHandicap ? colors.accentOn : colors.borderStrong },
+                  ]}
+                />
+              </SketchSurface>
+            </Pressable>
+          </View>
+
+          {includeInHandicap ? (
+          <View style={styles.field}>
             <ThemedText type="caption">TEE & RATING</ThemedText>
             <ThemedText style={styles.hint}>
               * Optional for handicap calculation.
@@ -305,6 +336,7 @@ export default function NewRoundScreen() {
               </View>
             </View>
           </View>
+          ) : null}
 
           <View style={styles.field}>
             <ThemedText type="caption">YOUR BAG</ThemedText>
@@ -417,6 +449,28 @@ const makeStyles = (colors: Palette) =>
   hint: {
     fontSize: 13,
     color: colors.textMuted,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  toggleTrack: {
+    width: 52,
+    height: 30,
+    justifyContent: 'center',
+  },
+  toggleTrackOn: {
+    alignItems: 'flex-end',
+  },
+  toggleTrackOff: {
+    alignItems: 'flex-start',
+  },
+  toggleKnob: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    marginHorizontal: 3,
   },
   iosDateRow: {
     flexDirection: 'row',

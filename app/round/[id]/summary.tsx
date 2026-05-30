@@ -21,6 +21,7 @@ import {
   getRound,
   getShotsForRound,
   listRounds,
+  setRoundIncludeInHandicap,
 } from '@/db/queries';
 import type { Hole, PostRoundReview, PreRoundGoals, Putt, Round, Shot } from '@/db/types';
 import { GOAL_CATEGORIES } from '@/lib/goals';
@@ -133,6 +134,11 @@ export default function SummaryScreen() {
     }
   };
 
+  const onToggleHandicap = async () => {
+    await setRoundIncludeInHandicap(round.id, !round.includeInHandicap);
+    await load();
+  };
+
   return (
     <Screen padded={false}>
       <ScrollView
@@ -190,6 +196,43 @@ export default function SummaryScreen() {
             </View>
           </SketchSurface>
         ) : null}
+
+        <Pressable
+          onPress={onToggleHandicap}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: round.includeInHandicap }}>
+          <SketchSurface seed="summary-hcp-toggle" style={styles.handicapToggleCard}>
+            <View style={styles.handicapToggleText}>
+              <ThemedText type="caption">INCLUDE IN HANDICAP</ThemedText>
+              <ThemedText style={styles.handicapToggleHint}>
+                {round.includeInHandicap
+                  ? 'This round counts toward your index.'
+                  : 'Excluded — posts no differential.'}
+              </ThemedText>
+            </View>
+            <SketchSurface
+              seed="summary-hcp-switch"
+              radius={999}
+              fill={round.includeInHandicap ? colors.accent : colors.surface}
+              stroke={round.includeInHandicap ? colors.accent : colors.borderStrong}
+              grain={round.includeInHandicap}
+              style={[
+                styles.toggleTrack,
+                round.includeInHandicap ? styles.toggleTrackOn : styles.toggleTrackOff,
+              ]}>
+              <View
+                style={[
+                  styles.toggleKnob,
+                  {
+                    backgroundColor: round.includeInHandicap
+                      ? colors.accentOn
+                      : colors.borderStrong,
+                  },
+                ]}
+              />
+            </SketchSurface>
+          </SketchSurface>
+        </Pressable>
 
         <Section title="Scorecard">
           <Scorecard
@@ -593,6 +636,39 @@ const makeStyles = (colors: Palette) =>
     alignItems: 'center',
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
+  },
+  handicapToggleCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    gap: spacing.md,
+  },
+  handicapToggleText: {
+    flex: 1,
+    gap: 4,
+  },
+  handicapToggleHint: {
+    fontSize: 13,
+    color: colors.textMuted,
+  },
+  toggleTrack: {
+    width: 52,
+    height: 30,
+    justifyContent: 'center',
+  },
+  toggleTrackOn: {
+    alignItems: 'flex-end',
+  },
+  toggleTrackOff: {
+    alignItems: 'flex-start',
+  },
+  toggleKnob: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    marginHorizontal: 3,
   },
   scoreCardCol: {
     flex: 1,

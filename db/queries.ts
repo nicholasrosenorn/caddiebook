@@ -46,6 +46,7 @@ type RoundRow = {
   tee_name: string | null;
   course_rating: number | null;
   slope_rating: number | null;
+  include_in_handicap: number;
   created_at: string;
 };
 
@@ -81,6 +82,7 @@ function rowToRound(row: RoundRow): Round {
     teeName: row.tee_name,
     courseRating: row.course_rating,
     slopeRating: row.slope_rating,
+    includeInHandicap: row.include_in_handicap === 1,
     createdAt: row.created_at,
   };
 }
@@ -92,6 +94,7 @@ export type CreateRoundInput = {
   teeName?: string | null;
   courseRating?: number | null;
   slopeRating?: number | null;
+  includeInHandicap?: boolean;
 };
 
 export async function createRound(input: CreateRoundInput): Promise<string> {
@@ -100,8 +103,8 @@ export async function createRound(input: CreateRoundInput): Promise<string> {
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO rounds
-         (id, course_name, date_played, hole_count, tee_name, course_rating, slope_rating)
-       VALUES (?, ?, ?, ?, ?, ?, ?);`,
+         (id, course_name, date_played, hole_count, tee_name, course_rating, slope_rating, include_in_handicap)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
       [
         id,
         input.courseName,
@@ -110,6 +113,7 @@ export async function createRound(input: CreateRoundInput): Promise<string> {
         input.teeName ?? null,
         input.courseRating ?? null,
         input.slopeRating ?? null,
+        (input.includeInHandicap ?? true) ? 1 : 0,
       ],
     );
     for (let n = 1; n <= input.holeCount; n++) {
@@ -126,7 +130,7 @@ export async function listRounds(): Promise<Round[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<RoundRow>(
     `SELECT id, course_name, date_played, hole_count, completed_at,
-            tee_name, course_rating, slope_rating, created_at
+            tee_name, course_rating, slope_rating, include_in_handicap, created_at
      FROM rounds
      ORDER BY date_played DESC, created_at DESC;`,
   );
@@ -137,7 +141,7 @@ export async function getRound(id: string): Promise<Round | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<RoundRow>(
     `SELECT id, course_name, date_played, hole_count, completed_at,
-            tee_name, course_rating, slope_rating, created_at
+            tee_name, course_rating, slope_rating, include_in_handicap, created_at
      FROM rounds WHERE id = ?;`,
     [id],
   );
@@ -150,6 +154,17 @@ export async function setRoundCompletedAt(
 ): Promise<void> {
   const db = await getDb();
   await db.runAsync(`UPDATE rounds SET completed_at = ? WHERE id = ?;`, [completedAt, id]);
+}
+
+export async function setRoundIncludeInHandicap(
+  id: string,
+  include: boolean,
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(`UPDATE rounds SET include_in_handicap = ? WHERE id = ?;`, [
+    include ? 1 : 0,
+    id,
+  ]);
 }
 
 export async function deleteRound(id: string): Promise<void> {
