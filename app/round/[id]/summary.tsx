@@ -13,15 +13,18 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { fontFamily, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
 import {
+  getAllHoles,
   getGoals,
   getHolesForRound,
   getPuttsForRound,
   getReview,
   getRound,
   getShotsForRound,
+  listRounds,
 } from '@/db/queries';
 import type { Hole, PostRoundReview, PreRoundGoals, Putt, Round, Shot } from '@/db/types';
 import { GOAL_CATEGORIES } from '@/lib/goals';
+import { formatHandicapIndex, handicapHistoryFor } from '@/lib/lifetime-stats';
 import {
   labelForCommonMiss,
   labelForMostCostly,
@@ -57,16 +60,20 @@ export default function SummaryScreen() {
   const [putts, setPutts] = useState<Putt[]>([]);
   const [review, setReview] = useState<PostRoundReview | null>(null);
   const [goals, setGoals] = useState<PreRoundGoals | null>(null);
+  // New Handicap Index after this round + how it moved from the index carried in.
+  const [hcp, setHcp] = useState<{ newHcp: number; delta: number | null } | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
-    const [r, hs, ss, ps, rv, gl] = await Promise.all([
+    const [r, hs, ss, ps, rv, gl, allRounds, allHoles] = await Promise.all([
       getRound(id),
       getHolesForRound(id),
       getShotsForRound(id),
       getPuttsForRound(id),
       getReview(id),
       getGoals(id),
+      listRounds(),
+      getAllHoles(),
     ]);
     setRound(r);
     setHoles(hs);
@@ -74,6 +81,24 @@ export default function SummaryScreen() {
     setPutts(ps);
     setReview(rv);
     setGoals(gl);
+
+    const completed = allRounds.filter((cr) => cr.completedAt != null);
+    const holesByRound = new Map<string, Hole[]>();
+    for (const h of allHoles) {
+      const arr = holesByRound.get(h.roundId);
+      if (arr) arr.push(h);
+      else holesByRound.set(h.roundId, [h]);
+    }
+    const history = handicapHistoryFor(completed, holesByRound);
+    const i = history.points.findIndex((p) => p.roundId === id);
+    if (i === -1) {
+      setHcp(null);
+    } else {
+      const newHcp = history.points[i].index;
+      const before = i > 0 ? history.points[i - 1].index : null;
+      const delta = before == null ? null : Math.round((newHcp - before) * 10) / 10;
+      setHcp({ newHcp, delta });
+    }
   }, [id]);
 
   useFocusEffect(
@@ -144,6 +169,22 @@ export default function SummaryScreen() {
             </ThemedText>
           </View>
         </SketchSurface>
+
+        {hcp ? (
+          <SketchSurface seed="summary-hcp" style={styles.scoreCard}>
+            <View style={styles.scoreCardCol}>
+              <ThemedText type="caption">HCP INDEX</ThemedText>
+              <ThemedText style={styles.bigScore}>{formatHandicapIndex(hcp.newHcp)}</ThemedText>
+            </View>
+            <View style={styles.scoreCardDivider} />
+            <View style={styles.scoreCardCol}>
+              <ThemedText type="caption">CHANGE</ThemedText>
+              <ThemedText style={styles.bigScore}>
+                {hcp.delta == null ? '—' : formatDelta(hcp.delta)}
+              </ThemedText>
+            </View>
+          </SketchSurface>
+        ) : null}
 
         <Section title="Scorecard">
           <Scorecard
@@ -526,6 +567,11 @@ function formatToPar(toPar: number): string {
   if (toPar === 0) return 'Even par';
   if (toPar > 0) return `+${toPar}`;
   return `${toPar}`;
+}
+
+// Signed handicap change, one decimal: "+0.4", "-0.3", "0.0".
+function formatDelta(delta: number): string {
+  return delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1);
 }
 
 const makeStyles = (colors: Palette) =>

@@ -7,8 +7,29 @@ export const SCHEMA_STATEMENTS = [
     date_played TEXT NOT NULL,
     hole_count INTEGER NOT NULL DEFAULT 18,
     completed_at TEXT,
+    tee_name TEXT,
+    course_rating REAL,
+    slope_rating REAL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );`,
+
+  `CREATE TABLE IF NOT EXISTS courses (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );`,
+
+  `CREATE TABLE IF NOT EXISTS tees (
+    id TEXT PRIMARY KEY NOT NULL,
+    course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    course_rating REAL NOT NULL,
+    slope_rating REAL NOT NULL,
+    par INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );`,
+
+  `CREATE INDEX IF NOT EXISTS idx_tees_course_id ON tees(course_id);`,
 
   `CREATE TABLE IF NOT EXISTS holes (
     id TEXT PRIMARY KEY NOT NULL,

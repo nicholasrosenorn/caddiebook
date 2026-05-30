@@ -27,7 +27,9 @@ import {
   aggregateDriver,
   aggregateReview,
   aggregateStats,
+  formatHandicapIndex,
   formatToPar,
+  handicapHistoryFor,
   perRoundTrend,
   type ApproachStats,
   type DriverStats,
@@ -37,6 +39,7 @@ import {
   type RoundDerived,
   type RoundsFilter,
 } from '@/lib/lifetime-stats';
+import type { HandicapHistory } from '@/lib/handicap';
 import { formatPct } from '@/lib/stats';
 
 type Data = {
@@ -152,6 +155,14 @@ export default function StatsScreen() {
     return rounds;
   }, [data, holeFilter, roundsFilter]);
 
+  // Always computed across the player's full history so the scoring-bar value is
+  // their true current index and each chart point is the index they actually held
+  // at that round. The recency dropdown only windows the chart (in StatsBody).
+  const handicap = useMemo<HandicapHistory | null>(() => {
+    if (!data) return null;
+    return handicapHistoryFor(data.rounds, data.holesByRound);
+  }, [data]);
+
   const view = useMemo<StatsView | null>(() => {
     if (!data || !filteredRounds) return null;
     const rounds = filteredRounds;
@@ -256,9 +267,11 @@ export default function StatsScreen() {
           />
         </View>
 
-        {view && approach && driver ? (
+        {view && approach && driver && handicap ? (
           <StatsBody
             view={view}
+            handicap={handicap}
+            roundsFilter={roundsFilter}
             empty={view.stats.roundCount === 0}
             hasAny={!isEmpty}
             holeFilter={holeFilter}
@@ -280,6 +293,8 @@ export default function StatsScreen() {
 
 function StatsBody({
   view,
+  handicap,
+  roundsFilter,
   empty,
   hasAny,
   holeFilter,
@@ -293,6 +308,8 @@ function StatsBody({
   onDriveClubChange,
 }: {
   view: StatsView;
+  handicap: HandicapHistory;
+  roundsFilter: RoundsFilter;
   /** No rounds matched the active filters — render the dashed skeleton. */
   empty: boolean;
   /** Whether any completed rounds exist at all (drives the empty hint copy). */
@@ -310,7 +327,12 @@ function StatsBody({
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { stats, trend, review } = view;
-  const showTrends = trend.length >= 2;
+  // Full-history points (true index at each round), windowed to the recency
+  // dropdown only — the scoring-bar value stays the unfiltered current index.
+  const windowedHandicap =
+    roundsFilter === 'all' ? handicap.points : handicap.points.slice(-roundsFilter);
+  const handicapPoints = windowedHandicap.map((p) => p.index);
+  const showTrends = trend.length >= 2 || handicapPoints.length >= 2;
   const uniform = stats.uniformLength;
   const approachPins: TargetPin[] = approach.pins.map((p) => ({ ...p, variant: 'muted' }));
   const drivePins: TargetPin[] = driver.pins.map((p) => ({ ...p, variant: 'muted' }));
@@ -331,7 +353,7 @@ function StatsBody({
         {stats.roundCount} {stats.roundCount === 1 ? 'ROUND' : 'ROUNDS'} ·{' '}
         {stats.holesTracked} {stats.holesTracked === 1 ? 'HOLE' : 'HOLES'}
       </ThemedText>
-        <ScoringCard stats={stats} holeFilter={holeFilter} />
+        <ScoringCard stats={stats} holeFilter={holeFilter} handicapIndex={handicap.current} />
         {stats.bestRound ? (
           <BestRoundCallout best={stats.bestRound} uniform={uniform} />
         ) : null}
@@ -364,6 +386,12 @@ function StatsBody({
       {/* Trends over time */}
       {showTrends ? (
         <Section title="Over time">
+          <TrendCard
+            title="Handicap index"
+            caption="index"
+            points={handicapPoints}
+            formatValue={formatHandicapIndex}
+          />
           <TrendCard
             title="Scoring"
             caption={uniform ? 'to par' : 'to par · per 18'}
@@ -501,9 +529,11 @@ function StatsBody({
 function ScoringCard({
   stats,
   holeFilter,
+  handicapIndex,
 }: {
   stats: LifetimeStats;
   holeFilter: HoleCountFilter;
+  handicapIndex: number | null;
 }) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -530,6 +560,13 @@ function ScoringCard({
       <View style={styles.scoringCol}>
         <ThemedText type="caption">{single ? 'TO PAR' : 'TO PAR / ROUND'}</ThemedText>
         <ThemedText style={styles.bigScore}>{secondaryValue}</ThemedText>
+      </View>
+      <View style={styles.scoringDivider} />
+      <View style={styles.scoringCol}>
+        <ThemedText type="caption">HCP INDEX</ThemedText>
+        <ThemedText style={styles.bigScore}>
+          {handicapIndex != null ? formatHandicapIndex(handicapIndex) : '—'}
+        </ThemedText>
       </View>
     </SketchSurface>
   );
@@ -940,9 +977,9 @@ const makeStyles = (colors: Palette) =>
   },
   bigScore: {
     fontFamily: fontFamily.serifBold,
-    fontSize: 34,
+    fontSize: 28,
     color: colors.textPrimary,
-    lineHeight: 38,
+    lineHeight: 32,
   },
   bestCard: {
     flexDirection: 'row',

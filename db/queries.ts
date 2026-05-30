@@ -1,6 +1,7 @@
 import { getDb } from './client';
 import type {
   CommonMiss,
+  Course,
   Hole,
   JournalEntry,
   JournalTag,
@@ -12,6 +13,7 @@ import type {
   Round,
   Shot,
   ShotType,
+  Tee,
 } from './types';
 import { uuid } from '@/lib/uuid';
 
@@ -41,6 +43,9 @@ type RoundRow = {
   date_played: string;
   hole_count: number;
   completed_at: string | null;
+  tee_name: string | null;
+  course_rating: number | null;
+  slope_rating: number | null;
   created_at: string;
 };
 
@@ -73,6 +78,9 @@ function rowToRound(row: RoundRow): Round {
     datePlayed: row.date_played,
     holeCount: row.hole_count,
     completedAt: row.completed_at,
+    teeName: row.tee_name,
+    courseRating: row.course_rating,
+    slopeRating: row.slope_rating,
     createdAt: row.created_at,
   };
 }
@@ -81,6 +89,9 @@ export type CreateRoundInput = {
   courseName: string;
   datePlayed: string;
   holeCount: number;
+  teeName?: string | null;
+  courseRating?: number | null;
+  slopeRating?: number | null;
 };
 
 export async function createRound(input: CreateRoundInput): Promise<string> {
@@ -88,8 +99,18 @@ export async function createRound(input: CreateRoundInput): Promise<string> {
   const id = uuid();
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `INSERT INTO rounds (id, course_name, date_played, hole_count) VALUES (?, ?, ?, ?);`,
-      [id, input.courseName, input.datePlayed, input.holeCount],
+      `INSERT INTO rounds
+         (id, course_name, date_played, hole_count, tee_name, course_rating, slope_rating)
+       VALUES (?, ?, ?, ?, ?, ?, ?);`,
+      [
+        id,
+        input.courseName,
+        input.datePlayed,
+        input.holeCount,
+        input.teeName ?? null,
+        input.courseRating ?? null,
+        input.slopeRating ?? null,
+      ],
     );
     for (let n = 1; n <= input.holeCount; n++) {
       await db.runAsync(
@@ -104,7 +125,8 @@ export async function createRound(input: CreateRoundInput): Promise<string> {
 export async function listRounds(): Promise<Round[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<RoundRow>(
-    `SELECT id, course_name, date_played, hole_count, completed_at, created_at
+    `SELECT id, course_name, date_played, hole_count, completed_at,
+            tee_name, course_rating, slope_rating, created_at
      FROM rounds
      ORDER BY date_played DESC, created_at DESC;`,
   );
@@ -114,7 +136,8 @@ export async function listRounds(): Promise<Round[]> {
 export async function getRound(id: string): Promise<Round | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<RoundRow>(
-    `SELECT id, course_name, date_played, hole_count, completed_at, created_at
+    `SELECT id, course_name, date_played, hole_count, completed_at,
+            tee_name, course_rating, slope_rating, created_at
      FROM rounds WHERE id = ?;`,
     [id],
   );
@@ -132,6 +155,88 @@ export async function setRoundCompletedAt(
 export async function deleteRound(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync(`DELETE FROM rounds WHERE id = ?;`, [id]);
+}
+
+// --- Saved courses + tees (for handicap rating/slope autofill) -------------
+
+type CourseRow = { id: string; name: string; created_at: string };
+
+function rowToCourse(row: CourseRow): Course {
+  return { id: row.id, name: row.name, createdAt: row.created_at };
+}
+
+type TeeRow = {
+  id: string;
+  course_id: string;
+  name: string;
+  course_rating: number;
+  slope_rating: number;
+  par: number | null;
+  created_at: string;
+};
+
+function rowToTee(row: TeeRow): Tee {
+  return {
+    id: row.id,
+    courseId: row.course_id,
+    name: row.name,
+    courseRating: row.course_rating,
+    slopeRating: row.slope_rating,
+    par: row.par,
+    createdAt: row.created_at,
+  };
+}
+
+export async function getCourses(): Promise<Course[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<CourseRow>(
+    `SELECT id, name, created_at FROM courses ORDER BY name COLLATE NOCASE ASC;`,
+  );
+  return rows.map(rowToCourse);
+}
+
+export async function getTeesForCourse(courseId: string): Promise<Tee[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<TeeRow>(
+    `SELECT id, course_id, name, course_rating, slope_rating, par, created_at
+     FROM tees WHERE course_id = ? ORDER BY course_rating DESC, created_at ASC;`,
+    [courseId],
+  );
+  return rows.map(rowToTee);
+}
+
+// Find an existing course by name (case-insensitive) or create it. Returns the
+// course id so a tee can be attached.
+export async function findOrCreateCourse(name: string): Promise<string> {
+  const db = await getDb();
+  const trimmed = name.trim();
+  const existing = await db.getFirstAsync<{ id: string }>(
+    `SELECT id FROM courses WHERE name = ? COLLATE NOCASE;`,
+    [trimmed],
+  );
+  if (existing) return existing.id;
+  const id = uuid();
+  await db.runAsync(`INSERT INTO courses (id, name) VALUES (?, ?);`, [id, trimmed]);
+  return id;
+}
+
+export type CreateTeeInput = {
+  courseId: string;
+  name: string;
+  courseRating: number;
+  slopeRating: number;
+  par?: number | null;
+};
+
+export async function createTee(input: CreateTeeInput): Promise<string> {
+  const db = await getDb();
+  const id = uuid();
+  await db.runAsync(
+    `INSERT INTO tees (id, course_id, name, course_rating, slope_rating, par)
+     VALUES (?, ?, ?, ?, ?, ?);`,
+    [id, input.courseId, input.name.trim(), input.courseRating, input.slopeRating, input.par ?? null],
+  );
+  return id;
 }
 
 export async function getHolesForRound(roundId: string): Promise<Hole[]> {

@@ -4,6 +4,28 @@ export type Round = {
   datePlayed: string;
   holeCount: number;
   completedAt: string | null;
+  /** Tee set played, snapshot from the course's tee at round creation. */
+  teeName: string | null;
+  /** Course/Slope Rating used for handicap, snapshot so later tee edits don't
+   *  rewrite history. Null = unrated → handicap math defaults to par / 113. */
+  courseRating: number | null;
+  slopeRating: number | null;
+  createdAt: string;
+};
+
+export type Course = {
+  id: string;
+  name: string;
+  createdAt: string;
+};
+
+export type Tee = {
+  id: string;
+  courseId: string;
+  name: string;
+  courseRating: number;
+  slopeRating: number;
+  par: number | null;
   createdAt: string;
 };
 

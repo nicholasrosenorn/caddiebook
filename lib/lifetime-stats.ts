@@ -14,6 +14,11 @@ import {
   RANGE_FOCUS_OPTIONS,
   type Option,
 } from '@/lib/review';
+import {
+  computeHandicapHistory,
+  type HandicapHistory,
+  type HandicapRound,
+} from '@/lib/handicap';
 import { approachResult, driverLane, type DriverLane } from '@/lib/shots';
 import {
   computePerParAverages,
@@ -556,6 +561,40 @@ export function aggregateReview(
     decisionTrend,
     overallTrend,
   };
+}
+
+// --- Handicap Index --------------------------------------------------------
+
+function toHandicapRound(round: Round, holes: Hole[]): HandicapRound {
+  return {
+    id: round.id,
+    holeCount: round.holeCount,
+    courseRating: round.courseRating,
+    slopeRating: round.slopeRating,
+    datePlayed: round.datePlayed,
+    createdAt: round.createdAt,
+    holes: holes.map((h) => ({ par: h.par, score: h.score })),
+  };
+}
+
+/**
+ * Handicap Index history for a set of rounds (intended to be the player's
+ * completed rounds). The index always reflects the most recent 20 differentials
+ * regardless of any stats-screen filters, so callers pass the full set.
+ */
+export function handicapHistoryFor(
+  rounds: Round[],
+  holesByRound: Map<string, Hole[]>,
+): HandicapHistory {
+  return computeHandicapHistory(
+    rounds.map((r) => toHandicapRound(r, holesByRound.get(r.id) ?? [])),
+  );
+}
+
+/** Display form for a Handicap Index: negatives are "plus" handicaps (+2.1). */
+export function formatHandicapIndex(index: number): string {
+  const v = Math.abs(index).toFixed(1);
+  return index < 0 ? `+${v}` : v;
 }
 
 export function formatToPar(toPar: number, decimals = 0): string {

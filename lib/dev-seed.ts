@@ -6,14 +6,16 @@ import { uuid } from '@/lib/uuid';
 // over-time trends actually have a story to tell. Never shipped (gated by
 // __DEV__ at the call site).
 
-const COURSES = [
-  'Pebble Creek',
-  'Highland Links',
-  'Riverbend G&CC',
-  'Oakmont Muni',
-  'Cypress Hollow',
-  'The Meadows',
-  'Stonebridge',
+// Each course carries a tee with an 18-hole Course/Slope Rating so the handicap
+// section has realistic inputs. 9-hole rounds snapshot roughly half the rating.
+const COURSES: { name: string; tee: string; rating: number; slope: number }[] = [
+  { name: 'Pebble Creek', tee: 'Blue', rating: 71.2, slope: 128 },
+  { name: 'Highland Links', tee: 'White', rating: 70.1, slope: 122 },
+  { name: 'Riverbend G&CC', tee: 'Blue', rating: 72.4, slope: 134 },
+  { name: 'Oakmont Muni', tee: 'White', rating: 69.3, slope: 118 },
+  { name: 'Cypress Hollow', tee: 'Gold', rating: 73.0, slope: 140 },
+  { name: 'The Meadows', tee: 'White', rating: 68.8, slope: 113 },
+  { name: 'Stonebridge', tee: 'Blue', rating: 71.8, slope: 131 },
 ];
 
 // Standard par layouts. 9-hole rounds use the front nine (par 36).
@@ -235,6 +237,27 @@ export async function seedSampleRounds(count = 70): Promise<void> {
   let cursor = new Date(today.getTime() - count * 7 * 86400000 - 7 * 86400000);
 
   await db.withTransactionAsync(async () => {
+    // Seed the saved courses + tees so the New Round picker is populated.
+    for (const c of COURSES) {
+      await db.runAsync(
+        `INSERT INTO courses (id, name)
+         SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM courses WHERE name = ? COLLATE NOCASE);`,
+        [uuid(), c.name, c.name],
+      );
+      const row = await db.getFirstAsync<{ id: string }>(
+        `SELECT id FROM courses WHERE name = ? COLLATE NOCASE;`,
+        [c.name],
+      );
+      if (row) {
+        await db.runAsync(
+          `INSERT INTO tees (id, course_id, name, course_rating, slope_rating, par)
+           SELECT ?, ?, ?, ?, ?, ?
+           WHERE NOT EXISTS (SELECT 1 FROM tees WHERE course_id = ? AND name = ?);`,
+          [uuid(), row.id, c.tee, c.rating, c.slope, 72, row.id, c.tee],
+        );
+      }
+    }
+
     const holeStmt = await db.prepareAsync(
       `INSERT INTO holes (id, round_id, hole_number, par, fir, gir, up_and_down,
         approach_distance_yds, approach_club, drive_club, score, putts, chip_shots, sand_shots,
@@ -264,10 +287,26 @@ export async function seedSampleRounds(count = 70): Promise<void> {
         const pars = holeCount === 18 ? PARS_18 : FRONT_NINE;
 
         const roundId = uuid();
+        const course = pick(COURSES);
+        // 9-hole rounds snapshot roughly half the 18-hole rating.
+        const rating =
+          holeCount === 18 ? course.rating : Math.round((course.rating / 2) * 10) / 10;
         await db.runAsync(
-          `INSERT INTO rounds (id, course_name, date_played, hole_count, completed_at, created_at)
-           VALUES (?, ?, ?, ?, ?, ?);`,
-          [roundId, pick(COURSES), date, holeCount, `${date}T20:30:00.000Z`, `${date} 12:00:00`],
+          `INSERT INTO rounds
+             (id, course_name, date_played, hole_count, completed_at, created_at,
+              tee_name, course_rating, slope_rating)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+          [
+            roundId,
+            course.name,
+            date,
+            holeCount,
+            `${date}T20:30:00.000Z`,
+            `${date} 12:00:00`,
+            course.tee,
+            rating,
+            course.slope,
+          ],
         );
 
         for (let h = 0; h < pars.length; h++) {
