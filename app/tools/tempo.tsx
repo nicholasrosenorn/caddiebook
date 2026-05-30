@@ -77,8 +77,12 @@ export default function TempoScreen() {
     (tone: Tone) => {
       const isAccent = tone === 'high';
       const p = tone === 'low' ? low : tone === 'mid' ? mid : high;
-      p.seekTo(0).catch(() => {});
-      p.play();
+      // seekTo is async: rewind to the start *then* play. Calling play()
+      // before the seek resolves replays from the clip's end (parked there
+      // after the previous hit) → silent. This is the intermittent drop.
+      p.seekTo(0)
+        .then(() => p.play())
+        .catch(() => {});
       flash.value = withSequence(
         withTiming(isAccent ? 1 : 0.5, { duration: 50 }),
         withTiming(0, { duration: 170 }),

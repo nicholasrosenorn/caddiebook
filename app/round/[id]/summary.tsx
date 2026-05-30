@@ -179,7 +179,12 @@ export default function SummaryScreen() {
             <View style={styles.scoreCardDivider} />
             <View style={styles.scoreCardCol}>
               <ThemedText type="caption">CHANGE</ThemedText>
-              <ThemedText style={styles.bigScore}>
+              <ThemedText
+                style={[
+                  styles.bigScore,
+                  hcp.delta != null && hcp.delta < 0 && { color: colors.accent },
+                  hcp.delta != null && hcp.delta > 0 && { color: colors.textMuted },
+                ]}>
                 {hcp.delta == null ? '—' : formatDelta(hcp.delta)}
               </ThemedText>
             </View>
