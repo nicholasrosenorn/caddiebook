@@ -1,6 +1,19 @@
 import * as SQLite from 'expo-sqlite';
 
-import { SCHEMA_STATEMENTS } from './schema';
+import { SCHEMA_STATEMENTS, SYNCABLE_TABLES } from './schema';
+
+// Syncable tables that already carry a created_at we can seed updated_at from
+// during the one-time backfill. The rest (holes, shots, app_settings) have no
+// natural timestamp, so their backfill falls back to datetime('now').
+const TABLES_WITH_CREATED_AT = new Set([
+  'rounds',
+  'courses',
+  'tees',
+  'putts',
+  'post_round_reviews',
+  'pre_round_goals',
+  'journal_entries',
+]);
 
 const DATABASE_NAME = 'caddy-book.db';
 
@@ -65,4 +78,31 @@ export async function initDb(): Promise<void> {
   await ensureColumn(db, 'pre_round_goals', 'execution_goal', 'execution_goal TEXT');
   await ensureColumn(db, 'pre_round_goals', 'strategic_goal', 'strategic_goal TEXT');
   await ensureColumn(db, 'pre_round_goals', 'mental_goal', 'mental_goal TEXT');
+
+  await ensureSyncColumns(db);
+}
+
+// Add the sync trio (updated_at / deleted_at / dirty) to every syncable table
+// on existing installs, then backfill updated_at once. SQLite forbids a
+// non-constant default in ALTER TABLE ADD COLUMN, so updated_at is added
+// nullable here (fresh installs get the NOT NULL DEFAULT from schema.ts) and
+// populated by the backfill below. dirty defaults to 1 so the first sync pushes
+// the user's entire pre-existing history up to the server.
+async function ensureSyncColumns(db: SQLite.SQLiteDatabase): Promise<void> {
+  for (const table of SYNCABLE_TABLES) {
+    // journal_entries already had updated_at before sync; don't re-add it.
+    if (table !== 'journal_entries') {
+      await ensureColumn(db, table, 'updated_at', 'updated_at TEXT');
+    }
+    await ensureColumn(db, table, 'deleted_at', 'deleted_at TEXT');
+    await ensureColumn(db, table, 'dirty', 'dirty INTEGER NOT NULL DEFAULT 1');
+
+    // Idempotent backfill: only touches rows added before the column existed.
+    const seed = TABLES_WITH_CREATED_AT.has(table)
+      ? "COALESCE(created_at, datetime('now'))"
+      : "datetime('now')";
+    await db.execAsync(
+      `UPDATE ${table} SET updated_at = ${seed} WHERE updated_at IS NULL;`,
+    );
+  }
 }

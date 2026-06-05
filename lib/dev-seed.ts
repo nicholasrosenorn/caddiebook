@@ -240,8 +240,9 @@ export async function seedSampleRounds(count = 70): Promise<void> {
     // Seed the saved courses + tees so the New Round picker is populated.
     for (const c of COURSES) {
       await db.runAsync(
-        `INSERT INTO courses (id, name)
-         SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM courses WHERE name = ? COLLATE NOCASE);`,
+        `INSERT INTO courses (id, name, updated_at, dirty)
+         SELECT ?, ?, datetime('now'), 1
+         WHERE NOT EXISTS (SELECT 1 FROM courses WHERE name = ? COLLATE NOCASE);`,
         [uuid(), c.name, c.name],
       );
       const row = await db.getFirstAsync<{ id: string }>(
@@ -250,8 +251,8 @@ export async function seedSampleRounds(count = 70): Promise<void> {
       );
       if (row) {
         await db.runAsync(
-          `INSERT INTO tees (id, course_id, name, course_rating, slope_rating, par)
-           SELECT ?, ?, ?, ?, ?, ?
+          `INSERT INTO tees (id, course_id, name, course_rating, slope_rating, par, updated_at, dirty)
+           SELECT ?, ?, ?, ?, ?, ?, datetime('now'), 1
            WHERE NOT EXISTS (SELECT 1 FROM tees WHERE course_id = ? AND name = ?);`,
           [uuid(), row.id, c.tee, c.rating, c.slope, 72, row.id, c.tee],
         );
@@ -261,16 +262,16 @@ export async function seedSampleRounds(count = 70): Promise<void> {
     const holeStmt = await db.prepareAsync(
       `INSERT INTO holes (id, round_id, hole_number, par, fir, gir, up_and_down,
         approach_distance_yds, approach_club, drive_club, score, putts, chip_shots, sand_shots,
-        penalties, notes)
-       VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL);`,
+        penalties, notes, updated_at, dirty)
+       VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, datetime('now'), 1);`,
     );
     const shotStmt = await db.prepareAsync(
-      `INSERT INTO shots (id, round_id, hole_number, shot_type, x_norm, y_norm)
-       VALUES (?, ?, ?, ?, ?, ?);`,
+      `INSERT INTO shots (id, round_id, hole_number, shot_type, x_norm, y_norm, updated_at, dirty)
+       VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 1);`,
     );
     const puttStmt = await db.prepareAsync(
-      `INSERT INTO putts (id, round_id, hole_number, distance_ft, made, created_at)
-       VALUES (?, ?, ?, ?, ?, ?);`,
+      `INSERT INTO putts (id, round_id, hole_number, distance_ft, made, created_at, updated_at, dirty)
+       VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 1);`,
     );
 
     try {
@@ -294,8 +295,8 @@ export async function seedSampleRounds(count = 70): Promise<void> {
         await db.runAsync(
           `INSERT INTO rounds
              (id, course_name, date_played, hole_count, completed_at, created_at,
-              tee_name, course_rating, slope_rating)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+              tee_name, course_rating, slope_rating, updated_at, dirty)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 1);`,
           [
             roundId,
             course.name,
@@ -362,8 +363,8 @@ export async function seedSampleRounds(count = 70): Promise<void> {
         await db.runAsync(
           `INSERT INTO post_round_reviews
             (id, round_id, most_costly, decision_making_rating, common_miss,
-             range_focus, overall_rating, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+             range_focus, overall_rating, created_at, updated_at, dirty)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 1);`,
           [
             uuid(),
             roundId,
@@ -386,6 +387,12 @@ export async function seedSampleRounds(count = 70): Promise<void> {
 
 export async function clearAllRounds(): Promise<void> {
   const db = await getDb();
-  // FK cascade (foreign_keys = ON in initDb) removes holes/shots/putts/reviews.
+  // Dev reset: a real hard wipe, not a user soft-delete. FK cascade
+  // (foreign_keys = ON in initDb) removes holes/shots/putts/reviews.
   await db.runAsync(`DELETE FROM rounds;`);
+  // Drop the local sync cursor too (keys arrive in Phase 2; this is a harmless
+  // no-op until then) so a reseed forces a clean re-pull from the server.
+  await db.runAsync(
+    `DELETE FROM app_settings WHERE key IN ('sync_cursor', 'sync_last_synced_at');`,
+  );
 }

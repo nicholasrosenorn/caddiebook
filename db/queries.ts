@@ -17,6 +17,16 @@ import type {
 } from './types';
 import { uuid } from '@/lib/uuid';
 
+// Appended to the SET clause of every local UPDATE/soft-delete so the row is
+// re-pushed on the next sync. Inserts stamp the same pair inline
+// (`updated_at, dirty` → `datetime('now'), 1`). The Phase 2 pull/apply path
+// writes updated_at explicitly with dirty = 0 and must NOT use this.
+const TOUCH = "updated_at = datetime('now'), dirty = 1";
+
+// Soft-delete: tombstone the row (and re-push it) instead of removing it, so the
+// deletion can propagate to other devices. Used in place of `DELETE`.
+const SOFT_DELETE = `deleted_at = datetime('now'), ${TOUCH}`;
+
 type HoleRow = {
   id: string;
   round_id: string;
@@ -103,8 +113,8 @@ export async function createRound(input: CreateRoundInput): Promise<string> {
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO rounds
-         (id, course_name, date_played, hole_count, tee_name, course_rating, slope_rating, include_in_handicap)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+         (id, course_name, date_played, hole_count, tee_name, course_rating, slope_rating, include_in_handicap, updated_at, dirty)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 1);`,
       [
         id,
         input.courseName,
@@ -118,7 +128,8 @@ export async function createRound(input: CreateRoundInput): Promise<string> {
     );
     for (let n = 1; n <= input.holeCount; n++) {
       await db.runAsync(
-        `INSERT INTO holes (id, round_id, hole_number) VALUES (?, ?, ?);`,
+        `INSERT INTO holes (id, round_id, hole_number, updated_at, dirty)
+         VALUES (?, ?, ?, datetime('now'), 1);`,
         [uuid(), id, n],
       );
     }
@@ -132,6 +143,7 @@ export async function listRounds(): Promise<Round[]> {
     `SELECT id, course_name, date_played, hole_count, completed_at,
             tee_name, course_rating, slope_rating, include_in_handicap, created_at
      FROM rounds
+     WHERE deleted_at IS NULL
      ORDER BY date_played DESC, created_at DESC;`,
   );
   return rows.map(rowToRound);
@@ -142,7 +154,7 @@ export async function getRound(id: string): Promise<Round | null> {
   const row = await db.getFirstAsync<RoundRow>(
     `SELECT id, course_name, date_played, hole_count, completed_at,
             tee_name, course_rating, slope_rating, include_in_handicap, created_at
-     FROM rounds WHERE id = ?;`,
+     FROM rounds WHERE id = ? AND deleted_at IS NULL;`,
     [id],
   );
   return row ? rowToRound(row) : null;
@@ -153,7 +165,10 @@ export async function setRoundCompletedAt(
   completedAt: string | null,
 ): Promise<void> {
   const db = await getDb();
-  await db.runAsync(`UPDATE rounds SET completed_at = ? WHERE id = ?;`, [completedAt, id]);
+  await db.runAsync(`UPDATE rounds SET completed_at = ?, ${TOUCH} WHERE id = ?;`, [
+    completedAt,
+    id,
+  ]);
 }
 
 export async function setRoundIncludeInHandicap(
@@ -161,7 +176,7 @@ export async function setRoundIncludeInHandicap(
   include: boolean,
 ): Promise<void> {
   const db = await getDb();
-  await db.runAsync(`UPDATE rounds SET include_in_handicap = ? WHERE id = ?;`, [
+  await db.runAsync(`UPDATE rounds SET include_in_handicap = ?, ${TOUCH} WHERE id = ?;`, [
     include ? 1 : 0,
     id,
   ]);
@@ -175,16 +190,30 @@ export async function setRoundRatingSlope(
   slopeRating: number | null,
 ): Promise<void> {
   const db = await getDb();
-  await db.runAsync(`UPDATE rounds SET course_rating = ?, slope_rating = ? WHERE id = ?;`, [
-    courseRating,
-    slopeRating,
-    id,
-  ]);
+  await db.runAsync(
+    `UPDATE rounds SET course_rating = ?, slope_rating = ?, ${TOUCH} WHERE id = ?;`,
+    [courseRating, slopeRating, id],
+  );
 }
+
+// Soft-delete the round and cascade to its children. The FK ON DELETE CASCADE
+// no longer fires (we don't hard-delete the parent), so each child table is
+// tombstoned explicitly in the same transaction.
+const ROUND_CHILD_TABLES = ['holes', 'shots', 'putts', 'post_round_reviews', 'pre_round_goals'];
 
 export async function deleteRound(id: string): Promise<void> {
   const db = await getDb();
-  await db.runAsync(`DELETE FROM rounds WHERE id = ?;`, [id]);
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(`UPDATE rounds SET ${SOFT_DELETE} WHERE id = ? AND deleted_at IS NULL;`, [
+      id,
+    ]);
+    for (const table of ROUND_CHILD_TABLES) {
+      await db.runAsync(
+        `UPDATE ${table} SET ${SOFT_DELETE} WHERE round_id = ? AND deleted_at IS NULL;`,
+        [id],
+      );
+    }
+  });
 }
 
 // --- Saved courses + tees (for handicap rating/slope autofill) -------------
@@ -220,7 +249,8 @@ function rowToTee(row: TeeRow): Tee {
 export async function getCourses(): Promise<Course[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<CourseRow>(
-    `SELECT id, name, created_at FROM courses ORDER BY name COLLATE NOCASE ASC;`,
+    `SELECT id, name, created_at FROM courses
+     WHERE deleted_at IS NULL ORDER BY name COLLATE NOCASE ASC;`,
   );
   return rows.map(rowToCourse);
 }
@@ -229,7 +259,8 @@ export async function getTeesForCourse(courseId: string): Promise<Tee[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<TeeRow>(
     `SELECT id, course_id, name, course_rating, slope_rating, par, created_at
-     FROM tees WHERE course_id = ? ORDER BY course_rating DESC, created_at ASC;`,
+     FROM tees WHERE course_id = ? AND deleted_at IS NULL
+     ORDER BY course_rating DESC, created_at ASC;`,
     [courseId],
   );
   return rows.map(rowToTee);
@@ -241,12 +272,15 @@ export async function findOrCreateCourse(name: string): Promise<string> {
   const db = await getDb();
   const trimmed = name.trim();
   const existing = await db.getFirstAsync<{ id: string }>(
-    `SELECT id FROM courses WHERE name = ? COLLATE NOCASE;`,
+    `SELECT id FROM courses WHERE name = ? COLLATE NOCASE AND deleted_at IS NULL;`,
     [trimmed],
   );
   if (existing) return existing.id;
   const id = uuid();
-  await db.runAsync(`INSERT INTO courses (id, name) VALUES (?, ?);`, [id, trimmed]);
+  await db.runAsync(
+    `INSERT INTO courses (id, name, updated_at, dirty) VALUES (?, ?, datetime('now'), 1);`,
+    [id, trimmed],
+  );
   return id;
 }
 
@@ -262,8 +296,8 @@ export async function createTee(input: CreateTeeInput): Promise<string> {
   const db = await getDb();
   const id = uuid();
   await db.runAsync(
-    `INSERT INTO tees (id, course_id, name, course_rating, slope_rating, par)
-     VALUES (?, ?, ?, ?, ?, ?);`,
+    `INSERT INTO tees (id, course_id, name, course_rating, slope_rating, par, updated_at, dirty)
+     VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 1);`,
     [id, input.courseId, input.name.trim(), input.courseRating, input.slopeRating, input.par ?? null],
   );
   return id;
@@ -276,7 +310,7 @@ export async function getHolesForRound(roundId: string): Promise<Hole[]> {
             approach_distance_yds, approach_club, drive_club, score, putts,
             chip_shots, sand_shots, penalties, green_blocked, notes
      FROM holes
-     WHERE round_id = ?
+     WHERE round_id = ? AND deleted_at IS NULL
      ORDER BY hole_number ASC;`,
     [roundId],
   );
@@ -293,6 +327,7 @@ export async function getAllHoles(): Promise<Hole[]> {
             approach_distance_yds, approach_club, drive_club, score, putts,
             chip_shots, sand_shots, penalties, green_blocked, notes
      FROM holes
+     WHERE deleted_at IS NULL
      ORDER BY round_id ASC, hole_number ASC;`,
   );
   return rows.map(rowToHole);
@@ -305,7 +340,7 @@ export async function getHole(roundId: string, holeNumber: number): Promise<Hole
             approach_distance_yds, approach_club, drive_club, score, putts,
             chip_shots, sand_shots, penalties, green_blocked, notes
      FROM holes
-     WHERE round_id = ? AND hole_number = ?;`,
+     WHERE round_id = ? AND hole_number = ? AND deleted_at IS NULL;`,
     [roundId, holeNumber],
   );
   return row ? rowToHole(row) : null;
@@ -353,7 +388,7 @@ export async function updateHole(
 
   const db = await getDb();
   await db.runAsync(
-    `UPDATE holes SET ${setClause} WHERE round_id = ? AND hole_number = ?;`,
+    `UPDATE holes SET ${setClause}, ${TOUCH} WHERE round_id = ? AND hole_number = ?;`,
     [...(values as (string | number | null)[]), roundId, holeNumber],
   );
 }
@@ -397,13 +432,15 @@ export async function upsertShot(input: UpsertShotInput): Promise<string> {
   const db = await getDb();
   const id = uuid();
   await db.withTransactionAsync(async () => {
+    // Tombstone any existing live shot in this slot, then insert the replacement.
     await db.runAsync(
-      `DELETE FROM shots WHERE round_id = ? AND hole_number = ? AND shot_type = ?;`,
+      `UPDATE shots SET ${SOFT_DELETE}
+       WHERE round_id = ? AND hole_number = ? AND shot_type = ? AND deleted_at IS NULL;`,
       [input.roundId, input.holeNumber, input.shotType],
     );
     await db.runAsync(
-      `INSERT INTO shots (id, round_id, hole_number, shot_type, x_norm, y_norm, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?);`,
+      `INSERT INTO shots (id, round_id, hole_number, shot_type, x_norm, y_norm, notes, updated_at, dirty)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), 1);`,
       [
         id,
         input.roundId,
@@ -425,7 +462,8 @@ export async function deleteShot(
 ): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    `DELETE FROM shots WHERE round_id = ? AND hole_number = ? AND shot_type = ?;`,
+    `UPDATE shots SET ${SOFT_DELETE}
+     WHERE round_id = ? AND hole_number = ? AND shot_type = ? AND deleted_at IS NULL;`,
     [roundId, holeNumber, shotType],
   );
 }
@@ -435,7 +473,7 @@ export async function getShotsForRound(roundId: string): Promise<Shot[]> {
   const rows = await db.getAllAsync<ShotRow>(
     `SELECT id, round_id, hole_number, shot_type, x_norm, y_norm,
             intended_x_norm, intended_y_norm, notes
-     FROM shots WHERE round_id = ?
+     FROM shots WHERE round_id = ? AND deleted_at IS NULL
      ORDER BY hole_number ASC, shot_type ASC;`,
     [roundId],
   );
@@ -448,6 +486,7 @@ export async function getAllShots(): Promise<Shot[]> {
     `SELECT id, round_id, hole_number, shot_type, x_norm, y_norm,
             intended_x_norm, intended_y_norm, notes
      FROM shots
+     WHERE deleted_at IS NULL
      ORDER BY round_id ASC, hole_number ASC, shot_type ASC;`,
   );
   return rows.map(rowToShot);
@@ -461,7 +500,7 @@ export async function getShotsForHole(
   const rows = await db.getAllAsync<ShotRow>(
     `SELECT id, round_id, hole_number, shot_type, x_norm, y_norm,
             intended_x_norm, intended_y_norm, notes
-     FROM shots WHERE round_id = ? AND hole_number = ?;`,
+     FROM shots WHERE round_id = ? AND hole_number = ? AND deleted_at IS NULL;`,
     [roundId, holeNumber],
   );
   return rows.map(rowToShot);
@@ -500,11 +539,12 @@ async function syncHolePuttsCount(
   holeNumber: number,
 ): Promise<void> {
   const result = await db.getFirstAsync<{ c: number }>(
-    `SELECT COUNT(*) as c FROM putts WHERE round_id = ? AND hole_number = ?;`,
+    `SELECT COUNT(*) as c FROM putts
+     WHERE round_id = ? AND hole_number = ? AND deleted_at IS NULL;`,
     [roundId, holeNumber],
   );
   await db.runAsync(
-    `UPDATE holes SET putts = ? WHERE round_id = ? AND hole_number = ?;`,
+    `UPDATE holes SET putts = ?, ${TOUCH} WHERE round_id = ? AND hole_number = ?;`,
     [result?.c ?? 0, roundId, holeNumber],
   );
 }
@@ -514,8 +554,8 @@ export async function createPutt(input: CreatePuttInput): Promise<string> {
   const id = uuid();
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `INSERT INTO putts (id, round_id, hole_number, distance_ft, made)
-       VALUES (?, ?, ?, ?, ?);`,
+      `INSERT INTO putts (id, round_id, hole_number, distance_ft, made, updated_at, dirty)
+       VALUES (?, ?, ?, ?, ?, datetime('now'), 1);`,
       [id, input.roundId, input.holeNumber, input.distanceFt, input.made ? 1 : 0],
     );
     await syncHolePuttsCount(db, input.roundId, input.holeNumber);
@@ -527,11 +567,11 @@ export async function deletePutt(id: string): Promise<void> {
   const db = await getDb();
   await db.withTransactionAsync(async () => {
     const row = await db.getFirstAsync<{ round_id: string; hole_number: number }>(
-      `SELECT round_id, hole_number FROM putts WHERE id = ?;`,
+      `SELECT round_id, hole_number FROM putts WHERE id = ? AND deleted_at IS NULL;`,
       [id],
     );
     if (!row) return;
-    await db.runAsync(`DELETE FROM putts WHERE id = ?;`, [id]);
+    await db.runAsync(`UPDATE putts SET ${SOFT_DELETE} WHERE id = ?;`, [id]);
     await syncHolePuttsCount(db, row.round_id, row.hole_number);
   });
 }
@@ -540,7 +580,7 @@ export async function getPuttsForRound(roundId: string): Promise<Putt[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<PuttRow>(
     `SELECT id, round_id, hole_number, distance_ft, made, created_at
-     FROM putts WHERE round_id = ?
+     FROM putts WHERE round_id = ? AND deleted_at IS NULL
      ORDER BY created_at ASC;`,
     [roundId],
   );
@@ -552,6 +592,7 @@ export async function getAllPutts(): Promise<Putt[]> {
   const rows = await db.getAllAsync<PuttRow>(
     `SELECT id, round_id, hole_number, distance_ft, made, created_at
      FROM putts
+     WHERE deleted_at IS NULL
      ORDER BY round_id ASC, created_at ASC;`,
   );
   return rows.map(rowToPutt);
@@ -564,7 +605,7 @@ export async function getPuttsForHole(
   const db = await getDb();
   const rows = await db.getAllAsync<PuttRow>(
     `SELECT id, round_id, hole_number, distance_ft, made, created_at
-     FROM putts WHERE round_id = ? AND hole_number = ?
+     FROM putts WHERE round_id = ? AND hole_number = ? AND deleted_at IS NULL
      ORDER BY created_at ASC;`,
     [roundId, holeNumber],
   );
@@ -604,7 +645,7 @@ export async function getReview(roundId: string): Promise<PostRoundReview | null
     `SELECT id, round_id, most_costly, decision_making_rating, common_miss,
             range_focus, overall_rating, created_at
      FROM post_round_reviews
-     WHERE round_id = ?;`,
+     WHERE round_id = ? AND deleted_at IS NULL;`,
     [roundId],
   );
   return row ? rowToReview(row) : null;
@@ -615,7 +656,8 @@ export async function getAllReviews(): Promise<PostRoundReview[]> {
   const rows = await db.getAllAsync<PostRoundReviewRow>(
     `SELECT id, round_id, most_costly, decision_making_rating, common_miss,
             range_focus, overall_rating, created_at
-     FROM post_round_reviews;`,
+     FROM post_round_reviews
+     WHERE deleted_at IS NULL;`,
   );
   return rows.map(rowToReview);
 }
@@ -640,7 +682,7 @@ export async function upsertReview(input: UpsertReviewInput): Promise<void> {
     await db.runAsync(
       `UPDATE post_round_reviews
        SET most_costly = ?, decision_making_rating = ?, common_miss = ?,
-           range_focus = ?, overall_rating = ?
+           range_focus = ?, overall_rating = ?, ${TOUCH}
        WHERE round_id = ?;`,
       [
         input.mostCostly,
@@ -655,8 +697,8 @@ export async function upsertReview(input: UpsertReviewInput): Promise<void> {
     await db.runAsync(
       `INSERT INTO post_round_reviews
          (id, round_id, most_costly, decision_making_rating, common_miss,
-          range_focus, overall_rating)
-       VALUES (?, ?, ?, ?, ?, ?, ?);`,
+          range_focus, overall_rating, updated_at, dirty)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), 1);`,
       [
         uuid(),
         input.roundId,
@@ -697,7 +739,7 @@ export async function getGoals(roundId: string): Promise<PreRoundGoals | null> {
   const row = await db.getFirstAsync<PreRoundGoalsRow>(
     `SELECT id, round_id, execution_goal, strategic_goal, mental_goal, created_at
      FROM pre_round_goals
-     WHERE round_id = ?;`,
+     WHERE round_id = ? AND deleted_at IS NULL;`,
     [roundId],
   );
   return row ? rowToGoals(row) : null;
@@ -719,15 +761,15 @@ export async function upsertGoals(input: UpsertGoalsInput): Promise<void> {
   if (existing) {
     await db.runAsync(
       `UPDATE pre_round_goals
-       SET execution_goal = ?, strategic_goal = ?, mental_goal = ?
+       SET execution_goal = ?, strategic_goal = ?, mental_goal = ?, ${TOUCH}
        WHERE round_id = ?;`,
       [input.execution, input.strategic, input.mental, input.roundId],
     );
   } else {
     await db.runAsync(
       `INSERT INTO pre_round_goals
-         (id, round_id, execution_goal, strategic_goal, mental_goal)
-       VALUES (?, ?, ?, ?, ?);`,
+         (id, round_id, execution_goal, strategic_goal, mental_goal, updated_at, dirty)
+       VALUES (?, ?, ?, ?, ?, datetime('now'), 1);`,
       [uuid(), input.roundId, input.execution, input.strategic, input.mental],
     );
   }
@@ -742,7 +784,7 @@ const BAG_KEY = 'bag';
 export async function getBag(): Promise<string[]> {
   const db = await getDb();
   const row = await db.getFirstAsync<{ value: string | null }>(
-    `SELECT value FROM app_settings WHERE key = ?;`,
+    `SELECT value FROM app_settings WHERE key = ? AND deleted_at IS NULL;`,
     [BAG_KEY],
   );
   if (!row?.value) return [];
@@ -757,8 +799,9 @@ export async function getBag(): Promise<string[]> {
 export async function setBag(clubs: string[]): Promise<void> {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO app_settings (key, value) VALUES (?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
+    `INSERT INTO app_settings (key, value, updated_at, dirty)
+       VALUES (?, ?, datetime('now'), 1)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, ${TOUCH};`,
     [BAG_KEY, JSON.stringify(clubs)],
   );
 }
@@ -772,7 +815,7 @@ const CLUB_YARDAGES_KEY = 'club_yardages';
 export async function getClubYardages(): Promise<Record<string, number>> {
   const db = await getDb();
   const row = await db.getFirstAsync<{ value: string | null }>(
-    `SELECT value FROM app_settings WHERE key = ?;`,
+    `SELECT value FROM app_settings WHERE key = ? AND deleted_at IS NULL;`,
     [CLUB_YARDAGES_KEY],
   );
   if (!row?.value) return {};
@@ -800,8 +843,9 @@ export async function setClubYardage(club: string, yds: number | null): Promise<
   }
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO app_settings (key, value) VALUES (?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
+    `INSERT INTO app_settings (key, value, updated_at, dirty)
+       VALUES (?, ?, datetime('now'), 1)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, ${TOUCH};`,
     [CLUB_YARDAGES_KEY, JSON.stringify(map)],
   );
 }
@@ -811,18 +855,26 @@ export async function setClubYardage(club: string, yds: number | null): Promise<
 export async function getSetting(key: string): Promise<string | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<{ value: string | null }>(
-    `SELECT value FROM app_settings WHERE key = ?;`,
+    `SELECT value FROM app_settings WHERE key = ? AND deleted_at IS NULL;`,
     [key],
   );
   return row?.value ?? null;
 }
 
+// Settings that must NOT sync: the sync engine's own bookkeeping (cursor +
+// last-synced timestamp) is inherently per-device. Everything else in
+// app_settings (bag, yardages, theme, intro-seen, …) syncs. These keys don't
+// exist until Phase 2, but the guard lives here so the denylist is in place.
+const LOCAL_ONLY_SETTING_KEYS = new Set(['sync_cursor', 'sync_last_synced_at']);
+
 export async function setSetting(key: string, value: string): Promise<void> {
   const db = await getDb();
+  const dirty = LOCAL_ONLY_SETTING_KEYS.has(key) ? 0 : 1;
   await db.runAsync(
-    `INSERT INTO app_settings (key, value) VALUES (?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value;`,
-    [key, value],
+    `INSERT INTO app_settings (key, value, updated_at, dirty)
+       VALUES (?, ?, datetime('now'), ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now'), dirty = ?;`,
+    [key, value, dirty, dirty],
   );
 }
 
@@ -851,6 +903,7 @@ export async function listJournalEntries(): Promise<JournalEntry[]> {
   const rows = await db.getAllAsync<JournalEntryRow>(
     `SELECT id, tag, body, created_at, updated_at
      FROM journal_entries
+     WHERE deleted_at IS NULL
      ORDER BY updated_at DESC, created_at DESC;`,
   );
   return rows.map(rowToJournalEntry);
@@ -860,7 +913,7 @@ export async function getJournalEntry(id: string): Promise<JournalEntry | null> 
   const db = await getDb();
   const row = await db.getFirstAsync<JournalEntryRow>(
     `SELECT id, tag, body, created_at, updated_at
-     FROM journal_entries WHERE id = ?;`,
+     FROM journal_entries WHERE id = ? AND deleted_at IS NULL;`,
     [id],
   );
   return row ? rowToJournalEntry(row) : null;
@@ -895,6 +948,7 @@ export async function updateJournalEntry(
   }
   if (sets.length === 0) return;
   sets.push("updated_at = datetime('now')");
+  sets.push('dirty = 1');
 
   const db = await getDb();
   await db.runAsync(
@@ -905,7 +959,9 @@ export async function updateJournalEntry(
 
 export async function deleteJournalEntry(id: string): Promise<void> {
   const db = await getDb();
-  await db.runAsync(`DELETE FROM journal_entries WHERE id = ?;`, [id]);
+  await db.runAsync(`UPDATE journal_entries SET ${SOFT_DELETE} WHERE id = ? AND deleted_at IS NULL;`, [
+    id,
+  ]);
 }
 
 const WEDGE_PARTIALS_KEY = 'wedge_partials';

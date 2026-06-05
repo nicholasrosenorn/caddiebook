@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: caddiebook
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d caddiebook']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Host port 5433 avoids clashing with a local Postgres on 5432. Containers
+    # still reach it as postgres:5432 over the compose network.
+    ports:
+      - '5433:5432'
+
+  api:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/caddiebook
+      PORT: '8080'
+      # Override these for a real deployment. Defaults let `docker compose up`
+      # work out of the box for local testing.
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-please}
+      APPLE_BUNDLE_ID: ${APPLE_BUNDLE_ID:-com.caddiebook.app}
+      GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
+      DEV_AUTH: ${DEV_AUTH:-0}
+    ports:
+      - '8080:8080'
+
+volumes:
+  pgdata:
