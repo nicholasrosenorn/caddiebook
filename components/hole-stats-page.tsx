@@ -41,8 +41,8 @@ export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
   const derivedGir = deriveGir(hole.par, hole.score, hole.putts);
   const resolvedGir = resolveGir(hole);
   const girIsAuto = hole.gir == null;
-  // Blocked greens are excluded from GIR but still missed for U&D purposes.
-  const showUd = resolvedGir === false || blocked;
+  // Blocked greens (no realistic shot at the green) are excluded from U&D too.
+  const showUd = resolvedGir === false;
   const resolvedUd = resolveUpAndDown(hole);
   const udIsAuto = hole.upAndDown == null;
 

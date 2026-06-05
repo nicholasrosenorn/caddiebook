@@ -22,13 +22,14 @@ Expo SDK 54 docs are authoritative — when in doubt see https://docs.expo.dev/v
 Rounds tab ──► + New Round (modal) ──► /round/[id]
                                           │
                                           ├─ Par picker      (page 0)
-                                          ├─ Drive target    (page 1, par 4+)
-                                          ├─ Approach target (page 2)
-                                          ├─ Putting grid    (page 3)
-                                          └─ Stats           (page 4)  ← final
+                                          ├─ Score grid      (page 1)
+                                          ├─ Drive target    (page 2, par 4+)
+                                          ├─ Approach target (page 3)
+                                          ├─ Putting grid    (page 4)
+                                          └─ Stats           (page 5)  ← final
 ```
 
-A round is **one screen with 4 or 5 vertically-paged sub-pages**. Par 3 holes skip the Drive page. Navigation between holes happens via a sticky bottom nav with ‹ / › chevrons; navigation between pages within a hole happens via vertical swipe.
+A round is **one screen with 5 or 6 vertically-paged sub-pages**. Par 3 holes skip the Drive page. Navigation between holes happens via a sticky bottom nav with ‹ / › chevrons; navigation between pages within a hole happens via vertical swipe.
 
 The round screen's nav header is hidden (`headerShown: false`); a floating X (close) button replaces it to reclaim vertical space.
 
@@ -37,10 +38,11 @@ The round screen's nav header is hidden (`headerShown: false`); a floating X (cl
 | Page | File | Purpose |
 | --- | --- | --- |
 | Par | `components/par-page.tsx` | Three big tap buttons (Par 3 / 4 / 5). Auto-advances to next page on selection. |
+| Score | `components/score-page.tsx` | Centered dedicated score entry: the shared 3×3 `ScoreGrid` (par-relative circle/square glyphs) writing `hole.score`. Auto-advances on selection (not on tap-again deselect). Mirrors the Par page's layout. |
 | Drive | `components/drive-page.tsx` | Tall fairway "oval" with **LF / CF / RF** lanes. Tap to place the drive. CF zone is the inner 40% (0.3–0.7 x-normalized). Tap → `upsertShot('driver')` + write-through `hole.fir = isFairwayHit(lane)`. Below: a **club chip row** (`ClubChips`, fed from the bag sorted longest→shortest via `sortByDriveLength`) writing `hole.drive_club`. |
 | Approach | `components/approach-page.tsx` | Concentric ring target (3 / 5 / 10 / 20 / 30 ft) with a pin at center. Tap places shot; computes `onGreen` + `proximityFt`. Tap → `upsertShot('approach')` + write-through `hole.gir`. Below the target: an inline **club chip row** (`ClubChips`, fed from the player's bag via `getBag()`, falling back to all clubs) + a tap-first **yardage ruler** (`YardageRuler`, snaps to 5 yds, parks at 125). |
 | Putting | `components/putting-page.tsx` | A drawn beige-green **putt board** (fringe + stipple, same palette as the targets): five horizontal distance lanes `25+ / 15–25 / 10–15 / 3–10 / <3 ft` ordered far→near with the cup + flag at the bottom. Each lane is split into a **MADE** and a **MISS** tap column; tapping a column appends a putt glyph there (filled disc = made, open ring = miss) with a live count. Tap a glyph to remove it. Distance + made/miss is all that's stored — no putt coordinates. Each tap inserts/deletes a `putts` row and auto-syncs `hole.putts` count. |
-| Stats | `components/hole-stats-page.tsx` | Tap-first form: score grid (3×3, par-relative indicators — single/double circle for birdie/eagle, "Par" label, single/double/triple square for bogey/double/triple), count rows for Putts/Chip Shots/Greenside Sand/Penalties, ✓/✗ toggles for FIR/GIR/U&D, notes. Round-wide summary bar at top. |
+| Stats | `components/hole-stats-page.tsx` | Tap-first form, **autofilled from the earlier pages** (score from Score, putts from Putting, FIR from Drive, GIR from Approach) and still editable here: score grid (3×3, par-relative indicators — single/double circle for birdie/eagle, "Par" label, single/double/triple square for bogey/double/triple), count rows for Putts/Chip Shots/Greenside Sand/Penalties, ✓/✗ toggles for FIR/GIR/U&D, notes. Round-wide summary bar at top. |
 
 ### Visual + spatial design principles
 
@@ -105,7 +107,7 @@ The **stats page is the only one that scrolls internally** (its content is talle
 | Table | Key columns | Notes |
 | --- | --- | --- |
 | `rounds` | `id`, `course_name`, `date_played`, `hole_count`, `created_at` | One row per round. |
-| `holes` | `id`, `round_id` FK, `hole_number`, `par`, `score`, `putts`, `fir`, `gir`, `up_and_down`, `approach_distance_yds`, `approach_club`, `drive_club`, `chip_shots`, `sand_shots`, `penalties`, `green_blocked`, `notes` | Pre-created on round insert (1 row per hole). `fir/gir/up_and_down/green_blocked` are nullable booleans (0/1, NULL = unset → use derived). `green_blocked` = "couldn't reach the green" (punched out, etc.): excluded from GIR and approach-execution stats, but still counts as a missed green for U&D — see `resolveGir`/`resolveUpAndDown` in `lib/stats.ts`. Surfaced in the Drive dispersion sections as "drives that left no shot at the green". Clubs (`approach_club`, `drive_club`) live on the hole, not the shot — so club-filtered shot stats join shots back to holes via `(round_id, hole_number)`. |
+| `holes` | `id`, `round_id` FK, `hole_number`, `par`, `score`, `putts`, `fir`, `gir`, `up_and_down`, `approach_distance_yds`, `approach_club`, `drive_club`, `chip_shots`, `sand_shots`, `penalties`, `green_blocked`, `notes` | Pre-created on round insert (1 row per hole). `fir/gir/up_and_down/green_blocked` are nullable booleans (0/1, NULL = unset → use derived). `green_blocked` = "couldn't reach the green" (punched out, etc.): excluded from GIR, approach-execution stats, **and U&D** (no realistic chance to get up & down) — see `resolveGir`/`resolveUpAndDown` in `lib/stats.ts`. Surfaced in the Drive dispersion sections as "drives that left no shot at the green". Clubs (`approach_club`, `drive_club`) live on the hole, not the shot — so club-filtered shot stats join shots back to holes via `(round_id, hole_number)`. |
 | `shots` | `id`, `round_id` FK, `hole_number`, `shot_type` (`'driver'` \| `'approach'`), `x_norm`, `y_norm`, `intended_x_norm`, `intended_y_norm`, `notes` | One drive + one approach per hole (replaced via `upsertShot`). |
 | `putts` | `id`, `round_id` FK, `hole_number`, `distance_ft`, `made`, `created_at` | Many per hole. `distance_ft` is the bucket upper bound: `3, 10, 15, 25, 50` (the `50` bucket is the open-ended `25+ ft`). The bucket set lives in `components/putting-page.tsx` (`BANDS`) and `app/round/[id]/summary.tsx` (`PUTT_BUCKETS`) — keep them in sync. |
 | `post_round_reviews` | `id`, `round_id` FK, `tactical/technical/mental`, `went_well`, `didnt_go_well`, `will_work_on` | Schema in place; no UI yet. |

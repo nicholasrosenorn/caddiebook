@@ -25,7 +25,7 @@ export function deriveGir(
 export function resolveGir(hole: Hole): boolean | null {
   // A blocked approach (couldn't access the green) isn't a fair test of greens
   // in regulation, so it's excluded from GIR entirely rather than counted as a
-  // miss. It still counts as a missed green for up & down — see resolveUpAndDown.
+  // miss. It's likewise excluded from up & down — see resolveUpAndDown.
   if (hole.greenBlocked) return null;
   if (hole.gir != null) return hole.gir;
   return deriveGir(hole.par, hole.score, hole.putts);
@@ -42,10 +42,12 @@ export function deriveUpAndDown(
 }
 
 export function resolveUpAndDown(hole: Hole): boolean | null {
-  // Eligible whenever the green was missed — either a genuine missed approach
-  // (resolveGir === false) or a blocked one (couldn't reach the green at all).
-  const missedGreen = hole.greenBlocked === true || resolveGir(hole) === false;
-  if (!missedGreen) return null;
+  // Up & down is the success rate when a green was genuinely missed but par was
+  // still saved. A blocked green (couldn't reach it — punch-out, forced layup)
+  // is no realistic chance to get up & down, so it's excluded entirely rather
+  // than counted as a missed-green opportunity. resolveGir already returns null
+  // for blocked holes, so they never satisfy `resolveGir === false`.
+  if (resolveGir(hole) !== false) return null;
   if (hole.upAndDown != null) return hole.upAndDown;
   return deriveUpAndDown(hole.par, hole.score, false);
 }

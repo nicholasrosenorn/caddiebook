@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApproachTarget } from '@/components/approach-target';
@@ -22,6 +22,7 @@ import {
   getShotsForRound,
   listRounds,
   setRoundIncludeInHandicap,
+  setRoundRatingSlope,
 } from '@/db/queries';
 import type { Hole, PostRoundReview, PreRoundGoals, Putt, Round, Shot } from '@/db/types';
 import { GOAL_CATEGORIES } from '@/lib/goals';
@@ -63,6 +64,9 @@ export default function SummaryScreen() {
   const [goals, setGoals] = useState<PreRoundGoals | null>(null);
   // New Handicap Index after this round + how it moved from the index carried in.
   const [hcp, setHcp] = useState<{ newHcp: number; delta: number | null } | null>(null);
+  // Editable rating/slope text, seeded from the round's snapshot.
+  const [ratingText, setRatingText] = useState('');
+  const [slopeText, setSlopeText] = useState('');
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -108,6 +112,12 @@ export default function SummaryScreen() {
     }, [load]),
   );
 
+  // Mirror the round's stored rating/slope into the editable fields.
+  useEffect(() => {
+    setRatingText(round?.courseRating != null ? String(round.courseRating) : '');
+    setSlopeText(round?.slopeRating != null ? String(round.slopeRating) : '');
+  }, [round?.courseRating, round?.slopeRating]);
+
   if (!id || !round) return <Screen />;
 
   const summary = computeRoundSummary(holes);
@@ -136,6 +146,15 @@ export default function SummaryScreen() {
 
   const onToggleHandicap = async () => {
     await setRoundIncludeInHandicap(round.id, !round.includeInHandicap);
+    await load();
+  };
+
+  // Commit edited rating/slope on blur, then reload so the index recomputes.
+  const onCommitRatingSlope = async () => {
+    const rating = parseNum(ratingText);
+    const slope = parseNum(slopeText);
+    if (rating === round.courseRating && slope === round.slopeRating) return;
+    await setRoundRatingSlope(round.id, rating, slope);
     await load();
   };
 
@@ -197,11 +216,12 @@ export default function SummaryScreen() {
           </SketchSurface>
         ) : null}
 
-        <Pressable
-          onPress={onToggleHandicap}
-          accessibilityRole="switch"
-          accessibilityState={{ checked: round.includeInHandicap }}>
-          <SketchSurface seed="summary-hcp-toggle" style={styles.handicapToggleCard}>
+        <SketchSurface seed="summary-hcp-toggle" style={styles.handicapCard}>
+          <Pressable
+            onPress={onToggleHandicap}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: round.includeInHandicap }}
+            style={styles.handicapToggleRow}>
             <View style={styles.handicapToggleText}>
               <ThemedText type="caption">INCLUDE IN HANDICAP</ThemedText>
               <ThemedText style={styles.handicapToggleHint}>
@@ -231,8 +251,43 @@ export default function SummaryScreen() {
                 ]}
               />
             </SketchSurface>
-          </SketchSurface>
-        </Pressable>
+          </Pressable>
+
+          {round.includeInHandicap ? (
+            <View style={styles.ratingRow}>
+              <View style={styles.ratingCol}>
+                <ThemedText style={styles.subLabel}>COURSE RATING</ThemedText>
+                <SketchSurface seed="summary-rating" radius={8} style={styles.inputSurface}>
+                  <TextInput
+                    value={ratingText}
+                    onChangeText={setRatingText}
+                    onBlur={onCommitRatingSlope}
+                    placeholder="72.1"
+                    placeholderTextColor={colors.textMuted}
+                    style={styles.input}
+                    keyboardType="decimal-pad"
+                    returnKeyType="done"
+                  />
+                </SketchSurface>
+              </View>
+              <View style={styles.ratingCol}>
+                <ThemedText style={styles.subLabel}>SLOPE</ThemedText>
+                <SketchSurface seed="summary-slope" radius={8} style={styles.inputSurface}>
+                  <TextInput
+                    value={slopeText}
+                    onChangeText={setSlopeText}
+                    onBlur={onCommitRatingSlope}
+                    placeholder="113"
+                    placeholderTextColor={colors.textMuted}
+                    style={styles.input}
+                    keyboardType="number-pad"
+                    returnKeyType="done"
+                  />
+                </SketchSurface>
+              </View>
+            </View>
+          ) : null}
+        </SketchSurface>
 
         <Section title="Scorecard">
           <Scorecard
@@ -622,6 +677,12 @@ function formatDelta(delta: number): string {
   return delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1);
 }
 
+// Parse a rating/slope field; blank or non-numeric → null (falls back to par/113).
+function parseNum(value: string): number | null {
+  const n = parseFloat(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 const makeStyles = (colors: Palette) =>
   StyleSheet.create({
   content: {
@@ -637,17 +698,45 @@ const makeStyles = (colors: Palette) =>
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
   },
-  handicapToggleCard: {
+  handicapCard: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    gap: spacing.md,
+  },
+  handicapToggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
     gap: spacing.md,
   },
   handicapToggleText: {
     flex: 1,
     gap: 4,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  ratingCol: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  subLabel: {
+    fontSize: 11,
+    letterSpacing: 0.8,
+    color: colors.textMuted,
+    fontFamily: fontFamily.sans,
+  },
+  inputSurface: {
+    minHeight: 48,
+  },
+  input: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontSize: 16,
+    color: colors.textPrimary,
+    minHeight: 48,
+    justifyContent: 'center',
   },
   handicapToggleHint: {
     fontSize: 13,

@@ -18,6 +18,7 @@ import { HoleStatsPage } from '@/components/hole-stats-page';
 import { HoleStepper } from '@/components/hole-stepper';
 import { ParPage } from '@/components/par-page';
 import { PuttingPage } from '@/components/putting-page';
+import { ScorePage } from '@/components/score-page';
 import { Screen } from '@/components/screen';
 import { ScrollHint } from '@/components/scroll-hint';
 import { StickyHoleNav } from '@/components/sticky-hole-nav';
@@ -86,7 +87,7 @@ export default function RoundScreen() {
   const isPar3 = currentHole?.par === 3;
   const isFirstHole = holeNumber === 1;
   const isLastHole = round != null && holeNumber === round.holeCount;
-  const totalPages = isPar3 ? 4 : 5;
+  const totalPages = isPar3 ? 5 : 6;
   const isStatsPage = currentPage === totalPages - 1;
 
   // Deep-link (?hole=N&page=stats from the summary scorecard): once the pages
@@ -203,6 +204,14 @@ export default function RoundScreen() {
                   hole={currentHole}
                   onChange={load}
                   onPicked={() => scrollToPage(1)}
+                />
+              </View>
+              <View style={{ height: pageHeight }}>
+                <ScorePage
+                  roundId={id}
+                  hole={currentHole}
+                  onChange={load}
+                  onPicked={() => scrollToPage(2)}
                 />
               </View>
               {!isPar3 && (

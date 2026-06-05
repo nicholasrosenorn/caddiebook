@@ -72,12 +72,10 @@ export function ParPage({ roundId, hole, onChange, onPicked }: Props) {
       <View style={styles.hintRow}>
         <InfoHint
           title="Setting the par"
-          message="Tap a button to set this hole's par. The flow then advances automatically — par 3s skip the drive page and go straight to your approach; par 4s and 5s start with the drive. Swipe up to move between the pages of a hole."
+          message="Tap a button to set this hole's par. The flow then advances automatically to your score. Par 3s later skip the drive page and go straight to the approach; par 4s and 5s include the drive. Swipe up to move between the pages of a hole."
         />
         <ThemedText type="muted" style={styles.hint}>
-          {hole.par != null
-            ? `Par ${hole.par} · swipe up for ${hole.par === 3 ? 'approach' : 'drive'}`
-            : 'Tap to set par'}
+          {hole.par != null ? `Par ${hole.par} · swipe up for score` : 'Tap to set par'}
         </ThemedText>
       </View>
     </View>

@@ -147,8 +147,8 @@ binary ✓/✗, segmented controls, chips, and rating tiles.
 
 ## 6. Layout & motion
 
-- **A round is one screen of 4–5 vertically-paged sub-pages** (Par → Drive →
-  Approach → Putting → Stats; Par 3 skips Drive). Pages within a hole change by
+- **A round is one screen of 5–6 vertically-paged sub-pages** (Par → Score →
+  Drive → Approach → Putting → Stats; Par 3 skips Drive). Pages within a hole change by
   **vertical swipe**; holes change via the sticky bottom nav's `‹ / ›` chevrons.
 - The round screen hides its nav header and uses a floating **X** to reclaim
   vertical space.

@@ -167,6 +167,21 @@ export async function setRoundIncludeInHandicap(
   ]);
 }
 
+// Update the per-round rating/slope snapshot used for the handicap differential.
+// Either may be null (→ falls back to par / 113 in scoreDifferential).
+export async function setRoundRatingSlope(
+  id: string,
+  courseRating: number | null,
+  slopeRating: number | null,
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(`UPDATE rounds SET course_rating = ?, slope_rating = ? WHERE id = ?;`, [
+    courseRating,
+    slopeRating,
+    id,
+  ]);
+}
+
 export async function deleteRound(id: string): Promise<void> {
   const db = await getDb();
   await db.runAsync(`DELETE FROM rounds WHERE id = ?;`, [id]);
