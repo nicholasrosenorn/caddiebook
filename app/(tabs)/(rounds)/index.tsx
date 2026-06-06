@@ -11,6 +11,7 @@ import { fontFamily, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
 import { deleteRound, getHolesForRound, listRounds } from '@/db/queries';
 import type { Round, RoundSummary } from '@/db/types';
+import { useSync } from '@/lib/sync/provider';
 import { computeRoundSummary, formatPct } from '@/lib/stats';
 
 type RoundWithSummary = Round & { summary: RoundSummary };
@@ -20,6 +21,7 @@ export default function RoundsScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [rounds, setRounds] = useState<RoundWithSummary[] | null>(null);
   const tabBarHeight = useBottomTabBarHeight();
+  const { syncState } = useSync();
 
   const load = useCallback(async () => {
     const list = await listRounds();
@@ -32,10 +34,12 @@ export default function RoundsScreen() {
     setRounds(enriched);
   }, []);
 
+  // Re-run on focus, and again when a background sync applies remote changes.
   useFocusEffect(
     useCallback(() => {
       load();
-    }, [load]),
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- dataRevision is an intentional re-run trigger
+    }, [load, syncState.dataRevision]),
   );
 
   const confirmDelete = useCallback(

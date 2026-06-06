@@ -12,8 +12,11 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { Intro } from '@/components/intro';
+import { SignIn } from '@/components/sign-in';
 import { fontFamily, themes } from '@/constants/theme';
 import { ThemeProvider as AppThemeProvider, useColors, useTheme } from '@/constants/theme-context';
+import { loadSession, type Session } from '@/lib/auth/tokens';
+import { SyncProvider, useSync } from '@/lib/sync/provider';
 import { initDb } from '@/db/client';
 import { getSetting, setSetting } from '@/db/queries';
 
@@ -91,10 +94,18 @@ function Navigation() {
   );
 }
 
+// Choose the gate once the intro is dismissed: signed in → the app, otherwise
+// the sign-in screen. A cached session is trusted offline (no server check).
+function Gate() {
+  const { session } = useSync();
+  return session ? <Navigation /> : <SignIn />;
+}
+
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
   // null = not yet known (keep the splash up until the flag is read).
   const [introSeen, setIntroSeen] = useState<boolean | null>(null);
+  const [initialSession, setInitialSession] = useState<Session | null>(null);
   const [fontsLoaded] = useFonts({
     Fraunces_500Medium,
     Fraunces_700Bold,
@@ -102,12 +113,16 @@ export default function RootLayout() {
 
   useEffect(() => {
     initDb()
-      .then(() => getSetting(INTRO_SEEN_KEY))
-      .then((seen) => setIntroSeen(seen === '1'))
+      .then(() => Promise.all([getSetting(INTRO_SEEN_KEY), loadSession()]))
+      .then(([seen, session]) => {
+        setIntroSeen(seen === '1');
+        setInitialSession(session);
+      })
       .catch((err) => {
         console.error('Failed to initialize app', err);
         // Don't trap the user on the splash if the read fails — skip the intro.
         setIntroSeen(true);
+        setInitialSession(null);
       })
       .finally(() => setReady(true));
   }, []);
@@ -132,7 +147,9 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AppThemeProvider>
-        {introSeen ? <Navigation /> : <Intro onDone={dismissIntro} />}
+        <SyncProvider initialSession={initialSession}>
+          {introSeen ? <Gate /> : <Intro onDone={dismissIntro} />}
+        </SyncProvider>
       </AppThemeProvider>
     </GestureHandlerRootView>
   );

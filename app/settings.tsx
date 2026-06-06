@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { DevSettings, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, DevSettings, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
@@ -9,12 +9,42 @@ import { fontFamily, spacing, themes, THEME_ORDER, type Palette, type ThemeId } 
 import { useColors, useTheme } from '@/constants/theme-context';
 import { setSetting } from '@/db/queries';
 import { clearAllRounds, seedSampleRounds } from '@/lib/dev-seed';
+import { useSync } from '@/lib/sync/provider';
+
+// Human-friendly "last synced" label.
+function formatSyncedAt(iso: string | null): string {
+  if (!iso) return 'Not synced yet';
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return 'Not synced yet';
+  const mins = Math.floor((Date.now() - then) / 60000);
+  if (mins < 1) return 'Synced just now';
+  if (mins < 60) return `Synced ${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `Synced ${hrs}h ago`;
+  return `Synced ${new Date(iso).toLocaleDateString()}`;
+}
 
 export default function SettingsScreen() {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { themeId, setTheme } = useTheme();
+  const { session, syncState, syncNow, signOut } = useSync();
   const [devBusy, setDevBusy] = useState(false);
+
+  const confirmSignOut = useCallback(() => {
+    Alert.alert(
+      'Sign out?',
+      'Your rounds stay safe on the server. Local data on this device is cleared and re-downloaded next time you sign in.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign out', style: 'destructive', onPress: () => void signOut() },
+      ],
+    );
+  }, [signOut]);
+
+  const syncing = syncState.status === 'syncing';
+  const syncFailed = syncState.status === 'error';
+  const syncLabel = syncing ? 'Syncing…' : syncFailed ? 'Retry' : 'Sync now';
 
   const runDev = useCallback(async (fn: () => Promise<void>) => {
     setDevBusy(true);
@@ -45,6 +75,48 @@ export default function SettingsScreen() {
               onSelect={() => setTheme(id)}
             />
           ))}
+        </View>
+
+        <View style={styles.section}>
+          <ThemedText type="caption">ACCOUNT</ThemedText>
+          <ThemedText type="subtitle">{session?.user.email ?? 'Signed in'}</ThemedText>
+          <ThemedText type="muted" style={styles.sectionHint}>
+            {formatSyncedAt(syncState.lastSyncedAt)}
+            {syncState.dirtyCount > 0 ? ` · ${syncState.dirtyCount} to upload` : ''}
+          </ThemedText>
+          {syncFailed && (
+            <ThemedText style={styles.syncError}>
+              Sync failed{syncState.lastError ? ` — ${syncState.lastError}` : ''}
+              {syncState.nextRetryAt ? ' · retrying shortly' : ''}
+            </ThemedText>
+          )}
+
+          <View style={styles.devBar}>
+            <Pressable
+              style={styles.devBtn}
+              disabled={syncing}
+              accessibilityRole="button"
+              accessibilityLabel="Sync now"
+              onPress={() => void syncNow()}>
+              <SketchSurface
+                seed="sync-now"
+                fill={colors.accent}
+                stroke={colors.accent}
+                radius={8}
+                style={styles.devSurface}>
+                <ThemedText style={styles.devSeedLabel}>{syncLabel}</ThemedText>
+              </SketchSurface>
+            </Pressable>
+            <Pressable
+              style={styles.devBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Sign out"
+              onPress={confirmSignOut}>
+              <SketchSurface seed="sign-out" radius={8} style={styles.devSurface}>
+                <ThemedText style={styles.devClearLabel}>Sign out</ThemedText>
+              </SketchSurface>
+            </Pressable>
+          </View>
         </View>
 
         {__DEV__ && (
@@ -167,6 +239,12 @@ const makeStyles = (colors: Palette) =>
     sectionHint: {
       fontSize: 13,
       marginTop: 2,
+    },
+    syncError: {
+      fontSize: 13,
+      marginTop: 2,
+      color: colors.textSecondary,
+      fontFamily: fontFamily.serif,
     },
     gallery: {
       gap: spacing.sm,

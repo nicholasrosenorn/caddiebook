@@ -1,6 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 
-import { SCHEMA_STATEMENTS, SYNCABLE_TABLES } from './schema';
+import { SCHEMA_STATEMENTS, SCHEMA_VERSION, SYNCABLE_TABLES } from './schema';
 
 // Syncable tables that already carry a created_at we can seed updated_at from
 // during the one-time backfill. The rest (holes, shots, app_settings) have no
@@ -37,9 +37,35 @@ async function ensureColumn(
   await db.execAsync(`ALTER TABLE ${table} ADD COLUMN ${ddlFragment};`);
 }
 
+type Migration = { version: number; up: (db: SQLite.SQLiteDatabase) => Promise<void> };
+
+// Versioned migration runner. Each migration whose version exceeds the DB's
+// PRAGMA user_version runs once, in order, inside a transaction that also stamps
+// the new version. Migration 1 is the original idempotent bootstrap, so existing
+// installs (user_version = 0 but already fully migrated via the old ad-hoc path)
+// re-run it as a no-op and simply get stamped to version 1; fresh installs build
+// everything through the same path. Append future schema changes as new entries.
+const MIGRATIONS: Migration[] = [{ version: SCHEMA_VERSION, up: migrateV1 }];
+
 export async function initDb(): Promise<void> {
   const db = await getDb();
-  await db.execAsync('PRAGMA foreign_keys = ON;');
+  await db.execAsync('PRAGMA foreign_keys = ON;'); // must stay outside the txn
+  const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
+  const current = row?.user_version ?? 0;
+  for (const m of MIGRATIONS) {
+    if (m.version <= current) continue;
+    await db.withTransactionAsync(async () => {
+      await m.up(db);
+      // PRAGMA can't be parameterized; version comes from our own constant list.
+      await db.execAsync(`PRAGMA user_version = ${m.version};`);
+    });
+  }
+}
+
+// Migration 1 — the cumulative baseline schema. Every step is idempotent
+// (CREATE TABLE IF NOT EXISTS, ensureColumn existence-checks, backfill WHERE
+// updated_at IS NULL) so it is safe to run on a pre-existing install.
+async function migrateV1(db: SQLite.SQLiteDatabase): Promise<void> {
   for (const statement of SCHEMA_STATEMENTS) {
     await db.execAsync(statement);
   }

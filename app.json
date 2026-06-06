@@ -12,6 +12,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.caddiebook.app",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -45,7 +46,15 @@
       "@react-native-community/datetimepicker",
       "expo-font",
       "expo-audio",
-      "react-native-bottom-tabs"
+      "react-native-bottom-tabs",
+      "expo-secure-store",
+      "expo-apple-authentication",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.136536364803-20h5qfr9d2uhjkp6b8e10o5aq6ko8lhr"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
@@ -55,7 +64,10 @@
       "router": {},
       "eas": {
         "projectId": "a35af476-a832-4112-ae0c-dc46f9de24ff"
-      }
+      },
+      "apiUrl": "http://localhost:8080",
+      "googleWebClientId": "136536364803-o7kqci74oll5vqmjgoft9uqi3ada324l.apps.googleusercontent.com",
+      "googleIosClientId": "136536364803-20h5qfr9d2uhjkp6b8e10o5aq6ko8lhr.apps.googleusercontent.com"
     },
     "runtimeVersion": {
       "policy": "appVersion"

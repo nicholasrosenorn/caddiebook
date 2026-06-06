@@ -17,6 +17,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { fontFamily, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
 import { getReview, setRoundCompletedAt, upsertReview } from '@/db/queries';
+import { syncNow } from '@/lib/sync/engine';
 import type { CommonMiss, MostCostly, RangeFocus } from '@/db/types';
 import {
   COMMON_MISS_OPTIONS,
@@ -109,6 +110,8 @@ export default function ReviewScreen() {
       if (!hadExistingReview) {
         await setRoundCompletedAt(id, new Date().toISOString());
       }
+      // Finishing a round is a natural "push my work up now" moment.
+      void syncNow();
       router.replace(`/round/${id}/summary` as any);
     } finally {
       setSubmitting(false);

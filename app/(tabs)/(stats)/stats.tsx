@@ -40,6 +40,7 @@ import {
   type RoundsFilter,
 } from '@/lib/lifetime-stats';
 import type { HandicapHistory } from '@/lib/handicap';
+import { useSync } from '@/lib/sync/provider';
 import { formatPct } from '@/lib/stats';
 
 type Data = {
@@ -120,6 +121,7 @@ export default function StatsScreen() {
   const [roundsFilter, setRoundsFilter] = useState<RoundsFilter>(20);
   const [clubFilter, setClubFilter] = useState<ClubFilter>('all');
   const [driveClubFilter, setDriveClubFilter] = useState<ClubFilter>('all');
+  const { syncState } = useSync();
 
   const load = useCallback(async () => {
     const [rounds, holes, shots, putts, reviews] = await Promise.all([
@@ -140,10 +142,12 @@ export default function StatsScreen() {
     });
   }, []);
 
+  // Re-run on focus, and again when a background sync applies remote changes.
   useFocusEffect(
     useCallback(() => {
       load();
-    }, [load]),
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- dataRevision is an intentional re-run trigger
+    }, [load, syncState.dataRevision]),
   );
 
   // Rounds matching the hole-count + recency filters; shared by every section.

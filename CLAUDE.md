@@ -115,11 +115,11 @@ The **stats page is the only one that scrolls internally** (its content is talle
 
 ### Migration strategy
 
-No formal versioned migration runner yet. Schema evolution is handled by two complementary mechanisms in `db/client.ts:initDb`:
-1. `CREATE TABLE IF NOT EXISTS …` runs on every boot — handles new tables.
-2. `ensureColumn(db, table, column, ddlFragment)` does `PRAGMA table_info` then `ALTER TABLE … ADD COLUMN` if missing — handles new columns on existing tables.
+A versioned migration runner in `db/client.ts:initDb` gates on `PRAGMA user_version`: each entry in the `MIGRATIONS` array whose `version` exceeds the DB's current `user_version` runs once, in order, inside a transaction that also stamps the new version.
+- **Migration 1 (`migrateV1`)** is the cumulative idempotent baseline — `CREATE TABLE IF NOT EXISTS …` for new tables plus `ensureColumn(db, table, column, ddlFragment)` (which `PRAGMA table_info` then `ALTER TABLE … ADD COLUMN` only if missing) and the sync-column backfill. It's safe to re-run on a fully-migrated install, so existing devices (which sat at `user_version = 0` under the old ad-hoc path) just get stamped to 1.
+- **New schema changes** append a `{ version: N, up }` entry to `MIGRATIONS` and bump `SCHEMA_VERSION` in `db/schema.ts` to match. A new migration may assume version N-1 is applied, so it can use plain forward-only DDL (no `ensureColumn` guard needed). `ensureColumn` remains available if you want idempotency.
 
-When you add a column: update **all four** of `db/schema.ts`, `db/types.ts`, `db/queries.ts` (`HoleRow` type, `rowToHole`, `FIELD_TO_COLUMN`, **and the column lists in every SELECT statement**), and add an `ensureColumn` call. Missing the SELECT list is the easiest bug to introduce — the UI will silently appear inert because writes succeed but reads return `undefined`.
+When you add a column: update **all four** of `db/schema.ts` (CREATE TABLE + bump `SCHEMA_VERSION`), `db/types.ts`, `db/queries.ts` (`HoleRow` type, `rowToHole`, `FIELD_TO_COLUMN`, **and the column lists in every SELECT statement**), and add a new `MIGRATIONS` entry in `db/client.ts`. Missing the SELECT list is the easiest bug to introduce — the UI will silently appear inert because writes succeed but reads return `undefined`.
 
 ### Auto-sync invariants
 
@@ -160,7 +160,7 @@ Typography: **Fraunces** serif for display/labels/numerals (`fontFamily.serif` /
 
 | Task | File(s) |
 | --- | --- |
-| Add a new stat field on a hole | `db/schema.ts` + `db/client.ts ensureColumn` + `db/types.ts` + `db/queries.ts` (HoleRow, rowToHole, FIELD_TO_COLUMN, **all SELECT lists**) + new component or update `hole-stats-page.tsx` |
+| Add a new stat field on a hole | `db/schema.ts` (CREATE TABLE + bump `SCHEMA_VERSION`) + `db/client.ts` (new `MIGRATIONS` entry) + `db/types.ts` + `db/queries.ts` (HoleRow, rowToHole, FIELD_TO_COLUMN, **all SELECT lists**) + new component or update `hole-stats-page.tsx` |
 | Add a new page in the round flow | New `components/<name>-page.tsx`, add to `app/round/[id]/index.tsx` (controller render + adjust `totalPages`) |
 | Change CF lane width | `lib/shots.ts` (`CF_LEFT_EDGE` / `CF_RIGHT_EDGE`) — used by both the math and the visual lanes in `driver-target.tsx` |
 | Change ring proximity thresholds | `lib/shots.ts` (`APPROACH_RINGS`) — shared by `approach-target.tsx` visuals and `approachResult` math |
@@ -173,6 +173,6 @@ Typography: **Fraunces** serif for display/labels/numerals (`fontFamily.serif` /
 
 ## What's not built yet
 
-- **Versioned migrations.** Acceptable while pre-launch; add a proper runner before the first ship.
+- **Server hardening (Phase 4).** Refresh-token rotation/revocation store and API rate limiting on the backend, plus the VPS deploy. Client sync hardening (retry/backoff, error surfacing in Settings) and the versioned migration runner are **built** (Phase 3).
 
 (The per-round summary, post-round review, and the lifetime Stats tab — including cross-round dispersion and over-time trends — are now **built**; see the routing table.)

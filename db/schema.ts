@@ -1,3 +1,8 @@
+// Latest schema version the app expects on disk. The versioned migration runner
+// in db/client.ts stamps this into PRAGMA user_version once its migrations are
+// applied. To evolve the schema, append a { version: N, up } entry to MIGRATIONS
+// in db/client.ts (forward-only DDL — it may assume version N-1 is applied, so it
+// doesn't need the ensureColumn idempotency guard) and bump this constant to match.
 export const SCHEMA_VERSION = 1;
 
 // Tables that participate in server sync. Every row in these tables carries the
