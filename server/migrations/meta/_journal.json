@@ -15,6 +15,13 @@
       "when": 1780674461260,
       "tag": "0001_seq_trigger",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780766260648,
+      "tag": "0002_bored_riptide",
+      "breakpoints": true
     }
   ]
 }

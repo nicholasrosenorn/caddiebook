@@ -1,0 +1,27 @@
+# Production overlay. Run with:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# It adds the Cloudflare Tunnel (the only public ingress), forces DEV_AUTH off,
+# and makes everything restart on reboot. The base file already binds the host
+# ports to 127.0.0.1, so the only thing reachable from the internet is the
+# tunnel hostname → api:8080 (over the compose network).
+#
+# Required in server/.env (compose substitutes these): JWT_SECRET, TUNNEL_TOKEN,
+# GOOGLE_CLIENT_IDS, APPLE_BUNDLE_ID.
+services:
+  postgres:
+    restart: unless-stopped
+
+  api:
+    environment:
+      DEV_AUTH: '0'
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    depends_on:
+      - api
+    restart: unless-stopped

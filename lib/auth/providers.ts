@@ -4,10 +4,10 @@ import {
 } from '@react-native-google-signin/google-signin';
 import * as AppleAuthentication from 'expo-apple-authentication';
 
-import { authApple, authGoogle } from '../api/client';
+import { authApple, authGoogle, logout } from '../api/client';
 import { googleIosClientId, googleWebClientId } from '../config';
 import { wipeLocalData } from '../sync/db';
-import { clearSession, saveSession, type Session } from './tokens';
+import { clearSession, getRefreshToken, saveSession, type Session } from './tokens';
 
 let googleConfigured = false;
 function ensureGoogleConfigured(): void {
@@ -56,8 +56,19 @@ export async function signInWithGoogle(): Promise<Session> {
   return session;
 }
 
-// Clear the session and wipe local data so a different account can't inherit it.
+// Revoke the session server-side, then clear it and wipe local data so a
+// different account can't inherit it.
 export async function signOut(): Promise<void> {
+  // Best-effort server revocation before we drop the token locally. Don't block
+  // sign-out on the network — clearing the device is what matters here.
+  const refreshToken = await getRefreshToken();
+  if (refreshToken) {
+    try {
+      await logout(refreshToken);
+    } catch {
+      // Offline or server unreachable — the token will still be cleared locally.
+    }
+  }
   await clearSession();
   await wipeLocalData();
   try {

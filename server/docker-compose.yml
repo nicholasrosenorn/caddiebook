@@ -13,9 +13,10 @@ services:
       timeout: 5s
       retries: 10
     # Host port 5433 avoids clashing with a local Postgres on 5432. Containers
-    # still reach it as postgres:5432 over the compose network.
+    # still reach it as postgres:5432 over the compose network. Bound to
+    # loopback so it's never exposed publicly on a VPS.
     ports:
-      - '5433:5432'
+      - '127.0.0.1:5433:5432'
 
   api:
     build: .
@@ -31,8 +32,11 @@ services:
       APPLE_BUNDLE_ID: ${APPLE_BUNDLE_ID:-com.caddiebook.app}
       GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
       DEV_AUTH: ${DEV_AUTH:-0}
+    # Bound to loopback: on a VPS the API is reached only via the Cloudflare
+    # Tunnel (cloudflared → api:8080 over the compose network), never the public
+    # interface. Locally, localhost:8080 still works for the simulator.
     ports:
-      - '8080:8080'
+      - '127.0.0.1:8080:8080'
 
 volumes:
   pgdata:

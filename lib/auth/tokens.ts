@@ -56,3 +56,7 @@ export async function getRefreshToken(): Promise<string | null> {
 export async function setAccessToken(token: string): Promise<void> {
   await SecureStore.setItemAsync(ACCESS_KEY, token);
 }
+
+export async function setRefreshToken(token: string): Promise<void> {
+  await SecureStore.setItemAsync(REFRESH_KEY, token);
+}

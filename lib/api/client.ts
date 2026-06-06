@@ -1,4 +1,9 @@
-import { getAccessToken, getRefreshToken, setAccessToken } from '../auth/tokens';
+import {
+  getAccessToken,
+  getRefreshToken,
+  setAccessToken,
+  setRefreshToken,
+} from '../auth/tokens';
 import { apiUrl } from '../config';
 import type {
   AuthResponse,
@@ -30,13 +35,15 @@ async function rawRequest(
 }
 
 // Exchange the refresh token for a fresh access token; null if it can't.
+// Refresh rotates server-side, so persist the new refresh token too — the old
+// one is now revoked and reusing it would trip the server's theft detection.
 async function tryRefresh(): Promise<string | null> {
   const refreshToken = await getRefreshToken();
   if (!refreshToken) return null;
   const res = await rawRequest('/auth/refresh', { method: 'POST', body: { refreshToken } });
   if (!res.ok) return null;
   const data = (await res.json()) as RefreshResponse;
-  await setAccessToken(data.accessToken);
+  await Promise.all([setAccessToken(data.accessToken), setRefreshToken(data.refreshToken)]);
   return data.accessToken;
 }
 
@@ -70,6 +77,13 @@ export function authApple(identityToken: string): Promise<AuthResponse> {
 
 export function authGoogle(idToken: string): Promise<AuthResponse> {
   return exchangeProviderToken('/auth/google', { idToken });
+}
+
+// Revoke the refresh-token family on the server (sign-out). Best-effort: the
+// server always 200s, and the caller ignores network failures so offline
+// sign-out still clears the device.
+export async function logout(refreshToken: string): Promise<void> {
+  await rawRequest('/auth/logout', { method: 'POST', body: { refreshToken } });
 }
 
 // --- Sync (authenticated) --------------------------------------------------

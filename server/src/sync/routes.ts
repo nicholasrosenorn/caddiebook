@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 
 import { requireAuth, type AppEnv } from '../auth/middleware';
+import { rateLimit } from '../middleware/rate-limit';
 import type { PushRequest } from '../wire';
 import { DEFAULT_PULL_LIMIT, pullChanges } from './pull';
 import { applyPush } from './push';
@@ -9,6 +10,13 @@ export const syncRoutes = new Hono<AppEnv>();
 
 // Every sync route requires a valid access token; handlers read the user id.
 syncRoutes.use('*', requireAuth);
+
+// Generous per-user cap for bursty syncing (runs after requireAuth so the user
+// id is available as the key).
+syncRoutes.use(
+  '*',
+  rateLimit({ name: 'sync', windowMs: 60_000, max: 120, key: (c) => c.get('userId') }),
+);
 
 syncRoutes.post('/push', async (c) => {
   const body = await c.req.json<PushRequest>().catch(() => null);

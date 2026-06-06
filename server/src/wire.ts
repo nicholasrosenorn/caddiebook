@@ -39,4 +39,6 @@ export type AuthResponse = {
   refreshToken: string;
   user: AuthUser;
 };
-export type RefreshResponse = { accessToken: string };
+// Refresh rotates: the response carries a fresh refresh token too (the old one
+// is now revoked server-side). The client must persist both.
+export type RefreshResponse = { accessToken: string; refreshToken: string };

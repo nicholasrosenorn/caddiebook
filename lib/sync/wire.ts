@@ -34,4 +34,6 @@ export type AuthResponse = {
   refreshToken: string;
   user: AuthUser;
 };
-export type RefreshResponse = { accessToken: string };
+// Refresh rotates server-side: a fresh refresh token comes back with the access
+// token, and the old one is now revoked. The client persists both.
+export type RefreshResponse = { accessToken: string; refreshToken: string };

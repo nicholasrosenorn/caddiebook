@@ -173,6 +173,6 @@ Typography: **Fraunces** serif for display/labels/numerals (`fontFamily.serif` /
 
 ## What's not built yet
 
-- **Server hardening (Phase 4).** Refresh-token rotation/revocation store and API rate limiting on the backend, plus the VPS deploy. Client sync hardening (retry/backoff, error surfacing in Settings) and the versioned migration runner are **built** (Phase 3).
+- **VPS deploy (Phase 4, user action).** The backend (`/server`) is feature-complete: refresh-token **rotation + reuse detection** (a `refresh_tokens` family store in `server/src/db/schema.ts`; rotate/revoke in `server/src/auth/routes.ts`; `/auth/logout` revokes server-side) and **in-memory rate limiting** (`server/src/middleware/rate-limit.ts` — per-IP on `/auth/*`, per-user on `/sync/*`) are **built** (Phase 4). The client persists rotated refresh tokens and calls `/auth/logout` on sign-out (`lib/api/client.ts`, `lib/auth/providers.ts`). Still pending: actually standing the server up on the VPS — `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build` behind a Cloudflare Tunnel (see `server/docker-compose.prod.yml` + `.env.example`), then pointing `app.json extra.apiUrl` at the HTTPS tunnel URL. Client sync hardening (retry/backoff, error surfacing) and the versioned migration runner were built in Phase 3.
 
 (The per-round summary, post-round review, and the lifetime Stats tab — including cross-round dispersion and over-time trends — are now **built**; see the routing table.)

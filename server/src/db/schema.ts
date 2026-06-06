@@ -1,6 +1,7 @@
 import {
   bigint,
   doublePrecision,
+  index,
   integer,
   pgTable,
   primaryKey,
@@ -193,6 +194,25 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 
+// Server-side refresh-token store for rotation + reuse detection. Each row is one
+// issued refresh token (id = the token's jti); `familyId` groups a rotation chain
+// so replaying a revoked token can revoke the whole family (theft detection).
+export const refreshTokens = pgTable(
+  'refresh_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    familyId: uuid('family_id').notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byUser: index('refresh_tokens_user_idx').on(t.userId),
+    byFamily: index('refresh_tokens_family_idx').on(t.familyId),
+  }),
+);
+
 export const schema = {
   rounds,
   courses,
@@ -205,4 +225,5 @@ export const schema = {
   journalEntries,
   appSettings,
   users,
+  refreshTokens,
 };

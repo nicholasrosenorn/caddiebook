@@ -12,21 +12,27 @@ const REFRESH_TTL = '60d';
 
 type TokenType = 'access' | 'refresh';
 
-async function sign(userId: string, typ: TokenType, ttl: string): Promise<string> {
-  return new SignJWT({ typ })
+export const REFRESH_TTL_MS = 60 * 24 * 60 * 60 * 1000; // 60 days, for the DB expiry row
+
+export function signAccessToken(userId: string): Promise<string> {
+  return new SignJWT({ typ: 'access' })
     .setProtectedHeader({ alg: 'HS256' })
     .setSubject(userId)
     .setIssuedAt()
-    .setExpirationTime(ttl)
+    .setExpirationTime(ACCESS_TTL)
     .sign(secret);
 }
 
-export function signAccessToken(userId: string): Promise<string> {
-  return sign(userId, 'access', ACCESS_TTL);
-}
-
-export function signRefreshToken(userId: string): Promise<string> {
-  return sign(userId, 'refresh', REFRESH_TTL);
+// Refresh tokens carry a `jti` (the refresh_tokens row id) and `fid` (rotation
+// family) so the server can look them up, rotate, and revoke families.
+export function signRefreshToken(userId: string, jti: string, familyId: string): Promise<string> {
+  return new SignJWT({ typ: 'refresh', fid: familyId })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(userId)
+    .setJti(jti)
+    .setIssuedAt()
+    .setExpirationTime(REFRESH_TTL)
+    .sign(secret);
 }
 
 // Verify a token and assert its type. Returns the user id (subject).
@@ -36,4 +42,22 @@ export async function verifySessionToken(token: string, expected: TokenType): Pr
     throw new Error('invalid token');
   }
   return payload.sub;
+}
+
+export type RefreshClaims = { userId: string; jti: string; familyId: string };
+
+// Verify a refresh token's signature + type and return its identity claims.
+// Throws if the signature is bad, the type is wrong, or the jti/fid are missing
+// (e.g. legacy pre-rotation tokens) — callers treat that as an invalid refresh.
+export async function verifyRefreshToken(token: string): Promise<RefreshClaims> {
+  const { payload } = await jwtVerify(token, secret);
+  if (
+    payload.typ !== 'refresh' ||
+    typeof payload.sub !== 'string' ||
+    typeof payload.jti !== 'string' ||
+    typeof payload.fid !== 'string'
+  ) {
+    throw new Error('invalid refresh token');
+  }
+  return { userId: payload.sub, jti: payload.jti, familyId: payload.fid };
 }
