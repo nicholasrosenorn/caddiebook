@@ -4,7 +4,7 @@ import { MenuButton } from '@/components/menu-button';
 import { fontFamily } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
 
-export default function StatsStackLayout() {
+export default function CommunityStackLayout() {
   const colors = useColors();
   return (
     <Stack
@@ -18,9 +18,9 @@ export default function StatsStackLayout() {
         headerShadowVisible: false,
       }}>
       <Stack.Screen
-        name="stats"
+        name="community"
         options={{
-          title: 'Stats',
+          title: 'Community',
           headerLeft: () => <MenuButton />,
         }}
       />

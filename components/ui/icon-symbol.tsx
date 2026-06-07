@@ -40,6 +40,7 @@ const MAPPING = {
   // Profile + avatar glyphs.
   'person.crop.circle': 'account-circle',
   'person.fill': 'person',
+  'person.2.fill': 'groups',
   'flag.fill': 'golf-course',
   'star.fill': 'star',
   'leaf.fill': 'eco',

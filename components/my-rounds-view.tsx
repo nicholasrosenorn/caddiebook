@@ -1,10 +1,8 @@
 import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
-import { EdgeSwipeOpener } from '@/components/edge-swipe-opener';
-import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { fontFamily, spacing, type Palette } from '@/constants/theme';
@@ -16,7 +14,7 @@ import { computeRoundSummary, formatPct } from '@/lib/stats';
 
 type RoundWithSummary = Round & { summary: RoundSummary };
 
-export default function RoundsScreen() {
+export function MyRoundsView({ header }: { header?: ReactNode }) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [rounds, setRounds] = useState<RoundWithSummary[] | null>(null);
@@ -69,25 +67,26 @@ export default function RoundsScreen() {
   const syncing = syncState.status === 'syncing';
   if (rounds === null || (rounds.length === 0 && session && syncing)) {
     return (
-      <Screen marks>
+      <View style={styles.state}>
+        {header}
         <View style={styles.emptyState}>
           <ActivityIndicator size="large" color={colors.accent} />
           <ThemedText type="muted" style={styles.emptyCopy}>
             Syncing your rounds…
           </ThemedText>
         </View>
-        <EdgeSwipeOpener />
-      </Screen>
+      </View>
     );
   }
 
   if (rounds.length === 0) {
     return (
-      <Screen marks>
+      <View style={styles.state}>
+        {header}
         <View style={styles.emptyState}>
           <ThemedText type="subtitle">No rounds yet</ThemedText>
           <ThemedText type="muted" style={styles.emptyCopy}>
-            Tap the + button to log your first round.
+            Tap the + Play button to log your first round.
           </ThemedText>
           <Pressable
             onPress={() => router.push('/round/new')}
@@ -102,16 +101,16 @@ export default function RoundsScreen() {
             </SketchSurface>
           </Pressable>
         </View>
-        <EdgeSwipeOpener />
-      </Screen>
+      </View>
     );
   }
 
   return (
-    <Screen padded={false}>
+    <View style={styles.flex}>
       <FlatList
         data={rounds}
         keyExtractor={(item) => item.id}
+        ListHeaderComponent={header ? <>{header}</> : null}
         contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + spacing.md }]}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         renderItem={({ item }) => (
@@ -154,8 +153,7 @@ export default function RoundsScreen() {
           </Pressable>
         )}
       />
-      <EdgeSwipeOpener />
-    </Screen>
+    </View>
   );
 }
 
@@ -180,6 +178,13 @@ function formatDate(iso: string): string {
 
 const makeStyles = (colors: Palette) =>
   StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
+  state: {
+    flex: 1,
+    paddingHorizontal: spacing.md,
+  },
   emptyState: {
     flex: 1,
     alignItems: 'center',

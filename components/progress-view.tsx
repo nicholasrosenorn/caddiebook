@@ -1,13 +1,11 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 
 import { ApproachTarget } from '@/components/approach-target';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
 import { DropdownSelect, type DropdownOption } from '@/components/dropdown-select';
-import { EdgeSwipeOpener } from '@/components/edge-swipe-opener';
-import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { TrendChart } from '@/components/trend-chart';
@@ -112,7 +110,7 @@ function sortByClubOrder(clubs: string[]): string[] {
   return [...clubs].sort((a, b) => rank(a) - rank(b));
 }
 
-export default function StatsScreen() {
+export function ProgressView({ header }: { header?: ReactNode }) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const tabBarHeight = useBottomTabBarHeight();
@@ -245,15 +243,20 @@ export default function StatsScreen() {
     }
   }, [driveClubsUsed, driveClubFilter]);
 
-  if (!data) return <Screen />;
+  if (!data) {
+    return (
+      <View style={[styles.flex, styles.loadingPad]}>{header}</View>
+    );
+  }
 
   const isEmpty = data.rounds.length === 0;
 
   return (
-    <Screen padded={false} marks>
+    <View style={styles.flex}>
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + spacing.lg }]}
         showsVerticalScrollIndicator={false}>
+        {header}
 
         <View style={styles.filters}>
           <DropdownSelect
@@ -290,8 +293,7 @@ export default function StatsScreen() {
           />
         ) : null}
       </ScrollView>
-      <EdgeSwipeOpener />
-    </Screen>
+    </View>
   );
 }
 
@@ -941,6 +943,13 @@ function formatDate(iso: string): string {
 
 const makeStyles = (colors: Palette) =>
   StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
+  loadingPad: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+  },
   content: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,

@@ -71,6 +71,10 @@ function Navigation() {
         />
         <Stack.Screen name="settings" options={{ title: 'Settings', headerBackTitle: 'Back' }} />
         <Stack.Screen
+          name="edit-profile"
+          options={{ title: 'Edit profile', headerBackTitle: 'Settings' }}
+        />
+        <Stack.Screen
           name="tools/yardages"
           options={{ title: 'Stock yardages', headerBackTitle: 'Back' }}
         />

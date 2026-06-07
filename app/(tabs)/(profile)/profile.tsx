@@ -1,64 +1,90 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
+import { EdgeSwipeOpener } from '@/components/edge-swipe-opener';
+import { MyRoundsView } from '@/components/my-rounds-view';
+import { ProgressView } from '@/components/progress-view';
 import { Screen } from '@/components/screen';
+import { SegmentedControl } from '@/components/segmented-control';
 import { ThemedText } from '@/components/themed-text';
 import { fontFamily, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
 import { useSync } from '@/lib/sync/provider';
+
+type Tab = 'progress' | 'rounds';
+
+const TABS = [
+  { value: 'progress' as const, label: 'Progress' },
+  { value: 'rounds' as const, label: 'My Rounds' },
+];
 
 export default function ProfileScreen() {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { session } = useSync();
   const user = session?.user;
+  const [tab, setTab] = useState<Tab>('progress');
 
   const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
 
-  return (
-    <Screen>
-      <View style={styles.content}>
-        <Avatar avatar={user?.avatar} size={120} seed="profile-avatar" />
-        <View style={styles.identity}>
-          <ThemedText style={styles.name}>{fullName || 'Golfer'}</ThemedText>
+  // The identity block + segmented toggle scroll with the page, so they're passed
+  // into the active view to render at the top of its own scroll container (no
+  // horizontal padding here — each view's content container already provides it).
+  const header = (
+    <View style={styles.header}>
+      <View style={styles.identity}>
+        <Avatar avatar={user?.avatar} size={64} seed="profile-avatar" />
+        <View style={styles.identityText}>
+          <ThemedText style={styles.name} numberOfLines={1}>
+            {fullName || 'Golfer'}
+          </ThemedText>
           {user?.username ? (
-            <ThemedText type="muted" style={styles.handle}>
+            <ThemedText type="muted" style={styles.handle} numberOfLines={1}>
               @{user.username}
-            </ThemedText>
-          ) : null}
-          {user?.email ? (
-            <ThemedText type="muted" style={styles.email}>
-              {user.email}
             </ThemedText>
           ) : null}
         </View>
       </View>
+
+      <SegmentedControl seed="profile-tabs" options={TABS} value={tab} onChange={setTab} />
+    </View>
+  );
+
+  return (
+    <Screen padded={false} marks>
+      {tab === 'progress' ? (
+        <ProgressView header={header} />
+      ) : (
+        <MyRoundsView header={header} />
+      )}
+      <EdgeSwipeOpener />
     </Screen>
   );
 }
 
 const makeStyles = (colors: Palette) =>
   StyleSheet.create({
-    content: {
-      alignItems: 'center',
+    header: {
+      paddingTop: spacing.xs,
       gap: spacing.md,
-      paddingTop: spacing.xl,
+      marginBottom: spacing.sm,
     },
     identity: {
+      flexDirection: 'row',
       alignItems: 'center',
-      gap: spacing.xs,
+      gap: spacing.md,
+    },
+    identityText: {
+      flex: 1,
+      gap: 2,
     },
     name: {
       fontFamily: fontFamily.serifBold,
-      fontSize: 26,
+      fontSize: 22,
       color: colors.textPrimary,
     },
     handle: {
-      fontSize: 16,
-    },
-    email: {
-      fontSize: 13,
-      color: colors.textMuted,
+      fontSize: 14,
     },
   });

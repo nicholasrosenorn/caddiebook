@@ -1,6 +1,7 @@
 import { router, Stack } from 'expo-router';
 import { Pressable, View } from 'react-native';
 
+import { MenuButton } from '@/components/menu-button';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { fontFamily, spacing } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
@@ -21,7 +22,8 @@ export default function ProfileStackLayout() {
       <Stack.Screen
         name="profile"
         options={{
-          title: 'Profile',
+          title: '',
+          headerLeft: () => <MenuButton />,
           headerRight: () => (
             <View style={{ paddingHorizontal: spacing.md }}>
               <Pressable

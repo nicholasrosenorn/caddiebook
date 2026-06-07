@@ -1,6 +1,8 @@
+import { router } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, DevSettings, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
+import { Avatar } from '@/components/avatar';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
@@ -31,6 +33,9 @@ export default function SettingsScreen() {
   const { session, syncState, syncNow, signOut } = useSync();
   const [devBusy, setDevBusy] = useState(false);
 
+  const user = session?.user;
+  const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
+
   const confirmSignOut = useCallback(() => {
     Alert.alert(
       'Sign out?',
@@ -59,6 +64,48 @@ export default function SettingsScreen() {
     <Screen>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
+          <ThemedText type="caption">ACCOUNT</ThemedText>
+          <Pressable
+            onPress={() => router.push('/edit-profile')}
+            accessibilityRole="button"
+            accessibilityLabel="Edit profile"
+            style={({ pressed }) => pressed && styles.cardPressed}>
+            <SketchSurface seed="account-card" radius={12} style={styles.accountCard}>
+              <Avatar avatar={user?.avatar} size={56} seed="settings-avatar" />
+              <View style={styles.accountText}>
+                <ThemedText style={styles.accountName}>{fullName || 'Golfer'}</ThemedText>
+                {user?.username ? (
+                  <ThemedText type="muted" style={styles.accountHandle}>
+                    @{user.username}
+                  </ThemedText>
+                ) : null}
+                {user?.email ? (
+                  <ThemedText type="muted" style={styles.accountEmail}>
+                    {user.email}
+                  </ThemedText>
+                ) : null}
+              </View>
+              <View style={styles.editAffordance}>
+                <IconSymbol name="pencil" size={15} color={colors.accent} />
+                <ThemedText style={styles.editLabel}>Edit</ThemedText>
+              </View>
+            </SketchSurface>
+          </Pressable>
+
+          <View style={styles.devBar}>
+            <Pressable
+              style={styles.devBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Sign out"
+              onPress={confirmSignOut}>
+              <SketchSurface seed="sign-out" radius={8} style={styles.devSurface}>
+                <ThemedText style={styles.devClearLabel}>Sign out</ThemedText>
+              </SketchSurface>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.section}>
           <ThemedText type="caption">APPEARANCE</ThemedText>
           <ThemedText type="subtitle">Color theme</ThemedText>
           <ThemedText type="muted" style={styles.sectionHint}>
@@ -75,23 +122,6 @@ export default function SettingsScreen() {
               onSelect={() => setTheme(id)}
             />
           ))}
-        </View>
-
-        <View style={styles.section}>
-          <ThemedText type="caption">ACCOUNT</ThemedText>
-          <ThemedText type="subtitle">{session?.user.email ?? 'Signed in'}</ThemedText>
-
-          <View style={styles.devBar}>
-            <Pressable
-              style={styles.devBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Sign out"
-              onPress={confirmSignOut}>
-              <SketchSurface seed="sign-out" radius={8} style={styles.devSurface}>
-                <ThemedText style={styles.devClearLabel}>Sign out</ThemedText>
-              </SketchSurface>
-            </Pressable>
-          </View>
         </View>
 
         {__DEV__ && (
@@ -226,6 +256,41 @@ const makeStyles = (colors: Palette) =>
     },
     section: {
       gap: 2,
+    },
+    accountCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+      marginTop: spacing.xs,
+      marginBottom: spacing.sm,
+    },
+    accountText: {
+      flex: 1,
+      gap: 1,
+    },
+    accountName: {
+      fontFamily: fontFamily.serifBold,
+      fontSize: 19,
+      color: colors.textPrimary,
+    },
+    accountHandle: {
+      fontSize: 14,
+    },
+    accountEmail: {
+      fontSize: 12,
+      color: colors.textMuted,
+    },
+    editAffordance: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    editLabel: {
+      fontFamily: fontFamily.serif,
+      fontSize: 14,
+      color: colors.accent,
     },
     sectionHint: {
       fontSize: 13,
