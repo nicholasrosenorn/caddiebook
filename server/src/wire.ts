@@ -33,7 +33,14 @@ export type PullResponse = {
 };
 
 // Auth
-export type AuthUser = { id: string; email: string | null };
+export type AuthUser = {
+  id: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  username: string | null;
+  avatar: string | null;
+};
 export type AuthResponse = {
   accessToken: string;
   refreshToken: string;
@@ -42,3 +49,11 @@ export type AuthResponse = {
 // Refresh rotates: the response carries a fresh refresh token too (the old one
 // is now revoked server-side). The client must persist both.
 export type RefreshResponse = { accessToken: string; refreshToken: string };
+// Profile fields the client can set during onboarding / edit later. The server
+// validates `username` (unique, lowercased, `^[a-z0-9_]{3,20}$`).
+export type ProfileUpdate = {
+  firstName: string | null;
+  lastName: string | null;
+  username: string;
+  avatar: string | null;
+};

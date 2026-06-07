@@ -28,11 +28,25 @@ export type PullResponse = {
   hasMore: boolean;
 };
 
-export type AuthUser = { id: string; email: string | null };
+export type AuthUser = {
+  id: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  username: string | null;
+  avatar: string | null;
+};
 export type AuthResponse = {
   accessToken: string;
   refreshToken: string;
   user: AuthUser;
+};
+// Profile fields set during onboarding / edits. Mirrors server/src/wire.ts.
+export type ProfileUpdate = {
+  firstName: string | null;
+  lastName: string | null;
+  username: string;
+  avatar: string | null;
 };
 // Refresh rotates server-side: a fresh refresh token comes back with the access
 // token, and the old one is now revoked. The client persists both.

@@ -9,8 +9,10 @@ import {
 } from 'react';
 import { AppState } from 'react-native';
 
+import { getMe, updateProfile as apiUpdateProfile } from '../api/client';
 import { signInWithApple, signInWithGoogle, signOut } from '../auth/providers';
-import { clearSession, type Session } from '../auth/tokens';
+import { clearSession, setSessionUser, type Session } from '../auth/tokens';
+import type { ProfileUpdate } from './wire';
 import {
   cancelRetry,
   getState,
@@ -27,6 +29,7 @@ type SyncContextValue = {
   signInApple: () => Promise<void>;
   signInGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  updateProfile: (patch: ProfileUpdate) => Promise<void>;
   syncNow: () => Promise<void>;
 };
 
@@ -58,11 +61,25 @@ export function SyncProvider({
     [],
   );
 
-  // First-run: if already signed in, refresh the badge and sync once.
+  // Best-effort refresh of the cached profile from the server. Stays silent on
+  // failure (offline, etc.) — the cached session is still trusted.
+  const refreshProfile = useCallback(async () => {
+    try {
+      const user = await getMe();
+      setSession((prev) => (prev ? { ...prev, user } : prev));
+      await setSessionUser(user);
+    } catch {
+      // ignore — keep the cached profile
+    }
+  }, []);
+
+  // First-run: if already signed in, refresh the badge, sync once, and pull the
+  // latest profile (it may have been edited on another device).
   useEffect(() => {
     if (sessionRef.current) {
       void refreshDirtyCount();
       void syncNow();
+      void refreshProfile();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -98,9 +115,25 @@ export function SyncProvider({
     setSession(null);
   }, []);
 
+  // Persist a profile edit: write it server-side, then mirror into session state
+  // and the keychain so it survives a relaunch.
+  const updateProfile = useCallback(async (patch: ProfileUpdate) => {
+    const user = await apiUpdateProfile(patch);
+    setSession((prev) => (prev ? { ...prev, user } : prev));
+    await setSessionUser(user);
+  }, []);
+
   const value = useMemo<SyncContextValue>(
-    () => ({ session, syncState, signInApple, signInGoogle, signOut: doSignOut, syncNow }),
-    [session, syncState, signInApple, signInGoogle, doSignOut],
+    () => ({
+      session,
+      syncState,
+      signInApple,
+      signInGoogle,
+      signOut: doSignOut,
+      updateProfile,
+      syncNow,
+    }),
+    [session, syncState, signInApple, signInGoogle, doSignOut, updateProfile],
   );
 
   return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;

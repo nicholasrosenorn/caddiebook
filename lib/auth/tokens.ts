@@ -37,6 +37,12 @@ export async function loadSession(): Promise<Session | null> {
   }
 }
 
+// Update just the cached user profile (after a profile edit / getMe refresh),
+// leaving the tokens untouched.
+export async function setSessionUser(user: AuthUser): Promise<void> {
+  await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
+}
+
 export async function clearSession(): Promise<void> {
   await Promise.all([
     SecureStore.deleteItemAsync(ACCESS_KEY),

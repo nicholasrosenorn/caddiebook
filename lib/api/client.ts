@@ -7,6 +7,8 @@ import {
 import { apiUrl } from '../config';
 import type {
   AuthResponse,
+  AuthUser,
+  ProfileUpdate,
   PullResponse,
   PushResponse,
   RefreshResponse,
@@ -18,7 +20,11 @@ import type {
 // Error instead, which the sync engine swallows (retry later).
 export class AuthError extends Error {}
 
-type Method = 'GET' | 'POST';
+// Thrown by updateProfile when the requested username is already in use, so the
+// onboarding/edit UI can prompt for a different one.
+export class UsernameTakenError extends Error {}
+
+type Method = 'GET' | 'POST' | 'PATCH';
 
 async function rawRequest(
   path: string,
@@ -47,8 +53,10 @@ async function tryRefresh(): Promise<string | null> {
   return data.accessToken;
 }
 
-// Authenticated request with one transparent refresh-and-retry on 401.
-async function authedRequest<T>(path: string, method: Method, body?: unknown): Promise<T> {
+// Authenticated request with one transparent refresh-and-retry on 401. Returns
+// the raw Response so callers that care about specific statuses (e.g. 409) can
+// branch before the generic ok-check in authedRequest.
+async function authedRaw(path: string, method: Method, body?: unknown): Promise<Response> {
   const token = await getAccessToken();
   if (!token) throw new AuthError('not signed in');
 
@@ -59,6 +67,11 @@ async function authedRequest<T>(path: string, method: Method, body?: unknown): P
     res = await rawRequest(path, { method, body, token: refreshed });
     if (res.status === 401) throw new AuthError('session expired');
   }
+  return res;
+}
+
+async function authedRequest<T>(path: string, method: Method, body?: unknown): Promise<T> {
+  const res = await authedRaw(path, method, body);
   if (!res.ok) throw new Error(`request to ${path} failed: ${res.status}`);
   return (await res.json()) as T;
 }
@@ -84,6 +97,22 @@ export function authGoogle(idToken: string): Promise<AuthResponse> {
 // sign-out still clears the device.
 export async function logout(refreshToken: string): Promise<void> {
   await rawRequest('/auth/logout', { method: 'POST', body: { refreshToken } });
+}
+
+// --- Profile (authenticated) -----------------------------------------------
+
+// Current account profile from the server (refreshes what was cached at sign-in).
+export function getMe(): Promise<AuthUser> {
+  return authedRequest<AuthUser>('/auth/me', 'GET');
+}
+
+// Persist the account profile. Throws UsernameTakenError on a 409 so the caller
+// can surface "that handle's taken" without treating it as a hard failure.
+export async function updateProfile(patch: ProfileUpdate): Promise<AuthUser> {
+  const res = await authedRaw('/auth/me', 'PATCH', patch);
+  if (res.status === 409) throw new UsernameTakenError('username taken');
+  if (!res.ok) throw new Error(`profile update failed: ${res.status}`);
+  return (await res.json()) as AuthUser;
 }
 
 // --- Sync (authenticated) --------------------------------------------------

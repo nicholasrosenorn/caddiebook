@@ -4,7 +4,7 @@ import { Hono } from 'hono';
 import { db, type Db } from '../db/client';
 import { refreshTokens, users } from '../db/schema';
 import { env } from '../env';
-import type { AuthResponse, RefreshResponse } from '../wire';
+import type { AuthResponse, AuthUser, ProfileUpdate, RefreshResponse } from '../wire';
 import {
   REFRESH_TTL_MS,
   signAccessToken,
@@ -12,10 +12,24 @@ import {
   verifyRefreshToken,
   type RefreshClaims,
 } from './jwt';
+import { requireAuth, type AppEnv } from './middleware';
 import { verifyAppleToken, verifyGoogleToken, type ProviderIdentity } from './verify';
 import { clientIp, rateLimit } from '../middleware/rate-limit';
 
 type UserRow = typeof users.$inferSelect;
+
+// Project a user row to the public profile shape the client persists in its
+// session. Never leak the provider subs or internal timestamps.
+function toAuthUser(user: UserRow): AuthUser {
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    username: user.username,
+    avatar: user.avatar,
+  };
+}
 // The handle passed to db.transaction's callback — lets helpers run on either
 // the root connection or inside a transaction.
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -72,10 +86,10 @@ async function issue(user: UserRow): Promise<AuthResponse> {
     signAccessToken(user.id),
     mintRefreshToken(user.id, familyId),
   ]);
-  return { accessToken, refreshToken, user: { id: user.id, email: user.email } };
+  return { accessToken, refreshToken, user: toAuthUser(user) };
 }
 
-export const authRoutes = new Hono();
+export const authRoutes = new Hono<AppEnv>();
 
 // Throttle token endpoints per client IP to blunt brute-force / token grinding.
 authRoutes.use('*', rateLimit({ name: 'auth', windowMs: 5 * 60_000, max: 30, key: clientIp }));
@@ -160,6 +174,56 @@ authRoutes.post('/logout', async (c) => {
     }
   }
   return c.json({ ok: true });
+});
+
+// --- Profile (authenticated) -----------------------------------------------
+
+const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
+
+// Current account's profile. Lets the client refresh what it cached at sign-in
+// (e.g. edits made on another device).
+authRoutes.get('/me', requireAuth, async (c) => {
+  const userId = c.get('userId');
+  const row = (await db.select().from(users).where(eq(users.id, userId)).limit(1))[0];
+  if (!row) return c.json({ error: 'user not found' }, 404);
+  return c.json(toAuthUser(row));
+});
+
+// Set the account profile (onboarding + later edits). Username is normalised to
+// lowercase and must be unique; a clash returns 409 so the UI can prompt for
+// another. firstName/lastName/avatar are stored as-is (null clears them).
+authRoutes.patch('/me', requireAuth, async (c) => {
+  const userId = c.get('userId');
+  const body = (await c.req.json().catch(() => null)) as Partial<ProfileUpdate> | null;
+  const username = typeof body?.username === 'string' ? body.username.trim().toLowerCase() : '';
+  if (!USERNAME_RE.test(username)) {
+    return c.json({ error: 'username must be 3-20 chars: a-z, 0-9, underscore' }, 400);
+  }
+
+  // Pre-check keeps the common case a clean 409; the unique index is the source
+  // of truth and a racing insert still surfaces below via the 23505 catch.
+  const clash = (
+    await db.select({ id: users.id }).from(users).where(eq(users.username, username)).limit(1)
+  )[0];
+  if (clash && clash.id !== userId) return c.json({ error: 'username taken' }, 409);
+
+  const patch = {
+    firstName: typeof body?.firstName === 'string' ? body.firstName.trim() || null : null,
+    lastName: typeof body?.lastName === 'string' ? body.lastName.trim() || null : null,
+    username,
+    avatar: typeof body?.avatar === 'string' ? body.avatar : null,
+  };
+
+  try {
+    const updated = await db.update(users).set(patch).where(eq(users.id, userId)).returning();
+    if (!updated[0]) return c.json({ error: 'user not found' }, 404);
+    return c.json(toAuthUser(updated[0]));
+  } catch (e) {
+    if (e && typeof e === 'object' && 'code' in e && e.code === '23505') {
+      return c.json({ error: 'username taken' }, 409);
+    }
+    throw e;
+  }
 });
 
 // Dev-only: mint a session for a fixed local user so sync can be exercised

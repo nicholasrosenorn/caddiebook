@@ -65,7 +65,7 @@
       "eas": {
         "projectId": "a35af476-a832-4112-ae0c-dc46f9de24ff"
       },
-      "apiUrl": "http://localhost:8080",
+      "apiUrl": "https://api.caddiebook.app",
       "googleWebClientId": "136536364803-o7kqci74oll5vqmjgoft9uqi3ada324l.apps.googleusercontent.com",
       "googleIosClientId": "136536364803-20h5qfr9d2uhjkp6b8e10o5aq6ko8lhr.apps.googleusercontent.com"
     },

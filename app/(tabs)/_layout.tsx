@@ -14,12 +14,14 @@ type TabIcon = ImageSourcePropType | AppleIcon;
 const ANDROID_ICONS = {
   rounds: 'format-list-bulleted',
   stats: 'bar-chart',
+  profile: 'account-circle',
 } as const;
 
 function useAndroidTabIcons() {
   const [icons, setIcons] = useState<Record<keyof typeof ANDROID_ICONS, ImageSourcePropType | null>>({
     rounds: null,
     stats: null,
+    profile: null,
   });
 
   useEffect(() => {
@@ -28,8 +30,9 @@ function useAndroidTabIcons() {
     Promise.all([
       MaterialIcons.getImageSource(ANDROID_ICONS.rounds, 26, '#000000'),
       MaterialIcons.getImageSource(ANDROID_ICONS.stats, 26, '#000000'),
-    ]).then(([rounds, stats]) => {
-      if (active) setIcons({ rounds, stats });
+      MaterialIcons.getImageSource(ANDROID_ICONS.profile, 26, '#000000'),
+    ]).then(([rounds, stats, profile]) => {
+      if (active) setIcons({ rounds, stats, profile });
     });
     return () => {
       active = false;
@@ -69,6 +72,13 @@ export default function TabLayout() {
         options={{
           title: 'Stats',
           tabBarIcon: () => icon('stats', 'chart.bar.fill'),
+        }}
+      />
+      <Tabs.Screen
+        name="(profile)"
+        options={{
+          title: 'Profile',
+          tabBarIcon: () => icon('profile', 'person.crop.circle'),
         }}
       />
     </Tabs>

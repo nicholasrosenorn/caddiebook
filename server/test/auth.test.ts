@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createApp } from '../src/app';
-import { pool } from '../src/db/client';
+import { signAccessToken } from '../src/auth/jwt';
+import { db, pool } from '../src/db/client';
+import { users } from '../src/db/schema';
 import { runMigrations } from '../src/migrate';
 import { resetRateLimits } from '../src/middleware/rate-limit';
-import type { AuthResponse, RefreshResponse } from '../src/wire';
+import type { AuthResponse, AuthUser, RefreshResponse } from '../src/wire';
 
 const app = createApp();
 
@@ -25,11 +27,19 @@ async function devLogin(): Promise<AuthResponse> {
   return (await res.json()) as AuthResponse;
 }
 
-function refresh(refreshToken: string): Promise<Response> {
+async function refresh(refreshToken: string): Promise<Response> {
   return app.request('/auth/refresh', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refreshToken }),
+  });
+}
+
+async function patchMe(token: string, body: unknown): Promise<Response> {
+  return app.request('/auth/me', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
   });
 }
 
@@ -83,5 +93,57 @@ describe('refresh-token rotation', () => {
       body: JSON.stringify({ refreshToken: 'garbage' }),
     });
     expect(out.status).toBe(200);
+  });
+});
+
+describe('profile (/auth/me)', () => {
+  it('requires authentication', async () => {
+    expect((await app.request('/auth/me')).status).toBe(401);
+    expect((await patchMe('not-a-token', { username: 'whoever' })).status).toBe(401);
+  });
+
+  it('updates and echoes the profile, then GET reflects it', async () => {
+    const { accessToken } = await devLogin();
+    const username = 'caddiemaster';
+
+    const res = await patchMe(accessToken, {
+      firstName: 'Jordan',
+      lastName: 'Spieth',
+      username,
+      avatar: 'figure.golf',
+    });
+    expect(res.status).toBe(200);
+    const updated = (await res.json()) as AuthUser;
+    expect(updated).toMatchObject({
+      firstName: 'Jordan',
+      lastName: 'Spieth',
+      username,
+      avatar: 'figure.golf',
+    });
+
+    const me = await app.request('/auth/me', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    expect(me.status).toBe(200);
+    expect(((await me.json()) as AuthUser).username).toBe(username);
+  });
+
+  it('rejects a malformed username with 400', async () => {
+    const { accessToken } = await devLogin();
+    expect((await patchMe(accessToken, { username: 'no' })).status).toBe(400);
+    expect((await patchMe(accessToken, { username: 'Has Spaces' })).status).toBe(400);
+  });
+
+  it('returns 409 when the username is already taken by another account', async () => {
+    // The dev user owns `caddiemaster` (set above / re-set idempotently here).
+    const { accessToken: devToken } = await devLogin();
+    expect((await patchMe(devToken, { username: 'caddiemaster' })).status).toBe(200);
+
+    // A distinct account trying to claim the same handle is rejected.
+    const other = (
+      await db.insert(users).values({ email: `other-${Date.now()}@local` }).returning()
+    )[0]!;
+    const otherToken = await signAccessToken(other.id);
+    expect((await patchMe(otherToken, { username: 'caddiemaster' })).status).toBe(409);
   });
 });

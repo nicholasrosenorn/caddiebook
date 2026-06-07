@@ -191,6 +191,13 @@ export const users = pgTable('users', {
   appleSub: text('apple_sub').unique(),
   googleSub: text('google_sub').unique(),
   email: text('email'),
+  // Account profile, set during onboarding right after first sign-in. `username`
+  // is the account's unique handle; the rest are free-form. `avatar` stores a
+  // preset icon key (an SF-symbol name), not an uploaded image.
+  firstName: text('first_name'),
+  lastName: text('last_name'),
+  username: text('username').unique(),
+  avatar: text('avatar'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 });
 

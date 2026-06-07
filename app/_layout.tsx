@@ -12,6 +12,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { Intro } from '@/components/intro';
+import { Onboarding } from '@/components/onboarding';
 import { SignIn } from '@/components/sign-in';
 import { fontFamily, themes } from '@/constants/theme';
 import { ThemeProvider as AppThemeProvider, useColors, useTheme } from '@/constants/theme-context';
@@ -94,11 +95,14 @@ function Navigation() {
   );
 }
 
-// Choose the gate once the intro is dismissed: signed in → the app, otherwise
-// the sign-in screen. A cached session is trusted offline (no server check).
+// Choose the gate once the intro is dismissed: not signed in → sign-in; signed
+// in but no profile yet (new or legacy account) → onboarding; otherwise the app.
+// A cached session is trusted offline (no server check).
 function Gate() {
   const { session } = useSync();
-  return session ? <Navigation /> : <SignIn />;
+  if (!session) return <SignIn />;
+  if (!session.user.username) return <Onboarding />;
+  return <Navigation />;
 }
 
 export default function RootLayout() {

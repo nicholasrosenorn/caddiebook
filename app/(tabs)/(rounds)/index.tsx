@@ -1,7 +1,7 @@
 import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { EdgeSwipeOpener } from '@/components/edge-swipe-opener';
 import { Screen } from '@/components/screen';
@@ -21,7 +21,7 @@ export default function RoundsScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [rounds, setRounds] = useState<RoundWithSummary[] | null>(null);
   const tabBarHeight = useBottomTabBarHeight();
-  const { syncState } = useSync();
+  const { session, syncState } = useSync();
 
   const load = useCallback(async () => {
     const list = await listRounds();
@@ -63,8 +63,22 @@ export default function RoundsScreen() {
     [load],
   );
 
-  if (rounds === null) {
-    return <Screen />;
+  // Spinner while the first local read is in flight, or while a signed-in
+  // session is still pulling rounds down (e.g. just after logging back in) and
+  // we don't yet have anything to show.
+  const syncing = syncState.status === 'syncing';
+  if (rounds === null || (rounds.length === 0 && session && syncing)) {
+    return (
+      <Screen marks>
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color={colors.accent} />
+          <ThemedText type="muted" style={styles.emptyCopy}>
+            Syncing your rounds…
+          </ThemedText>
+        </View>
+        <EdgeSwipeOpener />
+      </Screen>
+    );
   }
 
   if (rounds.length === 0) {

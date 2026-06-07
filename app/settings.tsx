@@ -5,7 +5,7 @@ import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, themes, THEME_ORDER, type Palette, type ThemeId } from '@/constants/theme';
+import { fontFamily, spacing, THEME_ORDER, themes, type Palette, type ThemeId } from '@/constants/theme';
 import { useColors, useTheme } from '@/constants/theme-context';
 import { setSetting } from '@/db/queries';
 import { clearAllRounds, seedSampleRounds } from '@/lib/dev-seed';
@@ -80,33 +80,8 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <ThemedText type="caption">ACCOUNT</ThemedText>
           <ThemedText type="subtitle">{session?.user.email ?? 'Signed in'}</ThemedText>
-          <ThemedText type="muted" style={styles.sectionHint}>
-            {formatSyncedAt(syncState.lastSyncedAt)}
-            {syncState.dirtyCount > 0 ? ` · ${syncState.dirtyCount} to upload` : ''}
-          </ThemedText>
-          {syncFailed && (
-            <ThemedText style={styles.syncError}>
-              Sync failed{syncState.lastError ? ` — ${syncState.lastError}` : ''}
-              {syncState.nextRetryAt ? ' · retrying shortly' : ''}
-            </ThemedText>
-          )}
 
           <View style={styles.devBar}>
-            <Pressable
-              style={styles.devBtn}
-              disabled={syncing}
-              accessibilityRole="button"
-              accessibilityLabel="Sync now"
-              onPress={() => void syncNow()}>
-              <SketchSurface
-                seed="sync-now"
-                fill={colors.accent}
-                stroke={colors.accent}
-                radius={8}
-                style={styles.devSurface}>
-                <ThemedText style={styles.devSeedLabel}>{syncLabel}</ThemedText>
-              </SketchSurface>
-            </Pressable>
             <Pressable
               style={styles.devBtn}
               accessibilityRole="button"
@@ -122,6 +97,22 @@ export default function SettingsScreen() {
         {__DEV__ && (
           <View style={styles.devSection}>
             <ThemedText type="caption">DEVELOPER</ThemedText>
+
+            <Pressable
+              style={styles.devBtn}
+              disabled={syncing}
+              accessibilityRole="button"
+              accessibilityLabel="Sync now"
+              onPress={() => void syncNow()}>
+              <SketchSurface
+                seed="sync-now"
+                fill={colors.accent}
+                stroke={colors.accent}
+                radius={8}
+                style={styles.devSurface}>
+                <ThemedText style={styles.devSeedLabel}>{syncLabel}</ThemedText>
+              </SketchSurface>
+            </Pressable>
 
             <View style={styles.devBar}>
               <Pressable
