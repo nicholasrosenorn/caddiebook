@@ -237,7 +237,7 @@ export default function NewRoundScreen() {
                 <TextInput
                   value={teeName}
                   onChangeText={setTeeName}
-                  placeholder="Tee"
+                  placeholder="Tee *"
                   placeholderTextColor={colors.textMuted}
                   style={styles.input}
                   returnKeyType="done"
@@ -247,7 +247,7 @@ export default function NewRoundScreen() {
                 <TextInput
                   value={rating}
                   onChangeText={setRating}
-                  placeholder="Rating"
+                  placeholder="Rating *"
                   placeholderTextColor={colors.textMuted}
                   style={styles.input}
                   keyboardType="decimal-pad"
@@ -258,7 +258,7 @@ export default function NewRoundScreen() {
                 <TextInput
                   value={slope}
                   onChangeText={setSlope}
-                  placeholder="Slope"
+                  placeholder="Slope *"
                   placeholderTextColor={colors.textMuted}
                   style={styles.input}
                   keyboardType="number-pad"
@@ -266,7 +266,7 @@ export default function NewRoundScreen() {
                 />
               </SketchSurface>
             </View>
-            <ThemedText style={styles.hint}>Optional, used for handicap.</ThemedText>
+            <ThemedText style={styles.hint}>* Optional, used for handicap.</ThemedText>
           </View>
 
           <View style={styles.essentialsRow}>

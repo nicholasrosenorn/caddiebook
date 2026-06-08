@@ -15,7 +15,7 @@ export function MenuButton() {
       onPress={() => router.push('/menu')}
       hitSlop={12}
       style={({ pressed }) => ({
-        paddingHorizontal: spacing.md,
+        paddingHorizontal: spacing.xs,
         opacity: pressed ? 0.6 : 1,
       })}>
       <IconSymbol name="line.3.horizontal" size={24} color={colors.accent} />

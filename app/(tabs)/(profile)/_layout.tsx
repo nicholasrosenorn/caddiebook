@@ -25,7 +25,7 @@ export default function ProfileStackLayout() {
           title: '',
           headerLeft: () => <MenuButton />,
           headerRight: () => (
-            <View style={{ paddingHorizontal: spacing.md }}>
+            <View style={{ paddingHorizontal: spacing.xs }}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Settings"
