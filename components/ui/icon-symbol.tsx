@@ -49,6 +49,12 @@ const MAPPING = {
   'trophy.fill': 'emoji-events',
   'target': 'my-location',
   'mountain.2.fill': 'terrain',
+  // Community.
+  'bell': 'notifications-none',
+  'bell.fill': 'notifications',
+  'person.badge.plus': 'person-add',
+  'heart': 'favorite-border',
+  'heart.fill': 'favorite',
 } as IconMapping;
 
 /**

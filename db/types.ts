@@ -12,6 +12,8 @@ export type Round = {
   slopeRating: number | null;
   /** Whether this round posts a differential to the Handicap Index. */
   includeInHandicap: boolean;
+  /** When true, the round is hidden from friends' Community feed. */
+  excludeFromSharing: boolean;
   createdAt: string;
 };
 

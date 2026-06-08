@@ -230,8 +230,12 @@ authRoutes.patch('/me', requireAuth, async (c) => {
 // end-to-end without real Apple/Google tokens. Mounted only when DEV_AUTH=1.
 if (env.devAuth) {
   authRoutes.post('/dev', async (c) => {
-    const existing = await db.select().from(users).where(eq(users.email, 'dev@local')).limit(1);
-    const user = existing[0] ?? (await db.insert(users).values({ email: 'dev@local' }).returning())[0]!;
+    // Optional { email } lets tests/local use mint distinct users so the
+    // community flows can be exercised between two accounts.
+    const body = (await c.req.json().catch(() => null)) as { email?: string } | null;
+    const email = typeof body?.email === 'string' && body.email.trim() ? body.email.trim() : 'dev@local';
+    const existing = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const user = existing[0] ?? (await db.insert(users).values({ email }).returning())[0]!;
     return c.json(await issue(user));
   });
 }

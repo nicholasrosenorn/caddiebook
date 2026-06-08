@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApproachTarget } from '@/components/approach-target';
@@ -21,8 +21,6 @@ import {
   getRound,
   getShotsForRound,
   listRounds,
-  setRoundIncludeInHandicap,
-  setRoundRatingSlope,
 } from '@/db/queries';
 import type { Hole, PostRoundReview, PreRoundGoals, Putt, Round, Shot } from '@/db/types';
 import { GOAL_CATEGORIES } from '@/lib/goals';
@@ -64,9 +62,6 @@ export default function SummaryScreen() {
   const [goals, setGoals] = useState<PreRoundGoals | null>(null);
   // New Handicap Index after this round + how it moved from the index carried in.
   const [hcp, setHcp] = useState<{ newHcp: number; delta: number | null } | null>(null);
-  // Editable rating/slope text, seeded from the round's snapshot.
-  const [ratingText, setRatingText] = useState('');
-  const [slopeText, setSlopeText] = useState('');
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -112,12 +107,6 @@ export default function SummaryScreen() {
     }, [load]),
   );
 
-  // Mirror the round's stored rating/slope into the editable fields.
-  useEffect(() => {
-    setRatingText(round?.courseRating != null ? String(round.courseRating) : '');
-    setSlopeText(round?.slopeRating != null ? String(round.slopeRating) : '');
-  }, [round?.courseRating, round?.slopeRating]);
-
   if (!id || !round) return <Screen />;
 
   const summary = computeRoundSummary(holes);
@@ -142,20 +131,6 @@ export default function SummaryScreen() {
     } else {
       router.replace('/' as any);
     }
-  };
-
-  const onToggleHandicap = async () => {
-    await setRoundIncludeInHandicap(round.id, !round.includeInHandicap);
-    await load();
-  };
-
-  // Commit edited rating/slope on blur, then reload so the index recomputes.
-  const onCommitRatingSlope = async () => {
-    const rating = parseNum(ratingText);
-    const slope = parseNum(slopeText);
-    if (rating === round.courseRating && slope === round.slopeRating) return;
-    await setRoundRatingSlope(round.id, rating, slope);
-    await load();
   };
 
   return (
@@ -215,79 +190,6 @@ export default function SummaryScreen() {
             </View>
           </SketchSurface>
         ) : null}
-
-        <SketchSurface seed="summary-hcp-toggle" style={styles.handicapCard}>
-          <Pressable
-            onPress={onToggleHandicap}
-            accessibilityRole="switch"
-            accessibilityState={{ checked: round.includeInHandicap }}
-            style={styles.handicapToggleRow}>
-            <View style={styles.handicapToggleText}>
-              <ThemedText type="caption">INCLUDE IN HANDICAP</ThemedText>
-              <ThemedText style={styles.handicapToggleHint}>
-                {round.includeInHandicap
-                  ? 'This round counts toward your index.'
-                  : 'Excluded — posts no differential.'}
-              </ThemedText>
-            </View>
-            <SketchSurface
-              seed="summary-hcp-switch"
-              radius={999}
-              fill={round.includeInHandicap ? colors.accent : colors.surface}
-              stroke={round.includeInHandicap ? colors.accent : colors.borderStrong}
-              grain={round.includeInHandicap}
-              style={[
-                styles.toggleTrack,
-                round.includeInHandicap ? styles.toggleTrackOn : styles.toggleTrackOff,
-              ]}>
-              <View
-                style={[
-                  styles.toggleKnob,
-                  {
-                    backgroundColor: round.includeInHandicap
-                      ? colors.accentOn
-                      : colors.borderStrong,
-                  },
-                ]}
-              />
-            </SketchSurface>
-          </Pressable>
-
-          {round.includeInHandicap ? (
-            <View style={styles.ratingRow}>
-              <View style={styles.ratingCol}>
-                <ThemedText style={styles.subLabel}>COURSE RATING</ThemedText>
-                <SketchSurface seed="summary-rating" radius={8} style={styles.inputSurface}>
-                  <TextInput
-                    value={ratingText}
-                    onChangeText={setRatingText}
-                    onBlur={onCommitRatingSlope}
-                    placeholder="72.1"
-                    placeholderTextColor={colors.textMuted}
-                    style={styles.input}
-                    keyboardType="decimal-pad"
-                    returnKeyType="done"
-                  />
-                </SketchSurface>
-              </View>
-              <View style={styles.ratingCol}>
-                <ThemedText style={styles.subLabel}>SLOPE</ThemedText>
-                <SketchSurface seed="summary-slope" radius={8} style={styles.inputSurface}>
-                  <TextInput
-                    value={slopeText}
-                    onChangeText={setSlopeText}
-                    onBlur={onCommitRatingSlope}
-                    placeholder="113"
-                    placeholderTextColor={colors.textMuted}
-                    style={styles.input}
-                    keyboardType="number-pad"
-                    returnKeyType="done"
-                  />
-                </SketchSurface>
-              </View>
-            </View>
-          ) : null}
-        </SketchSurface>
 
         <Section title="Scorecard">
           <Scorecard
@@ -380,6 +282,19 @@ export default function SummaryScreen() {
           </SketchSurface>
         </Pressable>
       </ScrollView>
+
+      <Pressable
+        onPress={() => router.push(`/round/${id}/settings` as any)}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel="Round settings"
+        style={({ pressed }) => [
+          styles.settingsButton,
+          { top: insets.top + 8 },
+          pressed && styles.closeButtonPressed,
+        ]}>
+        <IconSymbol name="gearshape" size={18} color={colors.textPrimary} />
+      </Pressable>
 
       <Pressable
         onPress={onClose}
@@ -677,12 +592,6 @@ function formatDelta(delta: number): string {
   return delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1);
 }
 
-// Parse a rating/slope field; blank or non-numeric → null (falls back to par/113).
-function parseNum(value: string): number | null {
-  const n = parseFloat(value);
-  return Number.isFinite(n) ? n : null;
-}
-
 const makeStyles = (colors: Palette) =>
   StyleSheet.create({
   content: {
@@ -697,67 +606,6 @@ const makeStyles = (colors: Palette) =>
     alignItems: 'center',
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
-  },
-  handicapCard: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    gap: spacing.md,
-  },
-  handicapToggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  handicapToggleText: {
-    flex: 1,
-    gap: 4,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  ratingCol: {
-    flex: 1,
-    gap: spacing.xs,
-  },
-  subLabel: {
-    fontSize: 11,
-    letterSpacing: 0.8,
-    color: colors.textMuted,
-    fontFamily: fontFamily.sans,
-  },
-  inputSurface: {
-    minHeight: 48,
-  },
-  input: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    fontSize: 16,
-    color: colors.textPrimary,
-    minHeight: 48,
-    justifyContent: 'center',
-  },
-  handicapToggleHint: {
-    fontSize: 13,
-    color: colors.textMuted,
-  },
-  toggleTrack: {
-    width: 52,
-    height: 30,
-    justifyContent: 'center',
-  },
-  toggleTrackOn: {
-    alignItems: 'flex-end',
-  },
-  toggleTrackOff: {
-    alignItems: 'flex-start',
-  },
-  toggleKnob: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    marginHorizontal: 3,
   },
   scoreCardCol: {
     flex: 1,
@@ -982,6 +830,19 @@ const makeStyles = (colors: Palette) =>
   closeButton: {
     position: 'absolute',
     right: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 30,
+  },
+  settingsButton: {
+    position: 'absolute',
+    left: 12,
     width: 36,
     height: 36,
     borderRadius: 18,

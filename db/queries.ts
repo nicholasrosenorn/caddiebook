@@ -57,6 +57,7 @@ type RoundRow = {
   course_rating: number | null;
   slope_rating: number | null;
   include_in_handicap: number;
+  exclude_from_sharing: number;
   created_at: string;
 };
 
@@ -93,6 +94,7 @@ function rowToRound(row: RoundRow): Round {
     courseRating: row.course_rating,
     slopeRating: row.slope_rating,
     includeInHandicap: row.include_in_handicap === 1,
+    excludeFromSharing: row.exclude_from_sharing === 1,
     createdAt: row.created_at,
   };
 }
@@ -105,6 +107,7 @@ export type CreateRoundInput = {
   courseRating?: number | null;
   slopeRating?: number | null;
   includeInHandicap?: boolean;
+  excludeFromSharing?: boolean;
 };
 
 export async function createRound(input: CreateRoundInput): Promise<string> {
@@ -113,8 +116,8 @@ export async function createRound(input: CreateRoundInput): Promise<string> {
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO rounds
-         (id, course_name, date_played, hole_count, tee_name, course_rating, slope_rating, include_in_handicap, updated_at, dirty)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 1);`,
+         (id, course_name, date_played, hole_count, tee_name, course_rating, slope_rating, include_in_handicap, exclude_from_sharing, updated_at, dirty)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 1);`,
       [
         id,
         input.courseName,
@@ -124,6 +127,7 @@ export async function createRound(input: CreateRoundInput): Promise<string> {
         input.courseRating ?? null,
         input.slopeRating ?? null,
         (input.includeInHandicap ?? true) ? 1 : 0,
+        (input.excludeFromSharing ?? false) ? 1 : 0,
       ],
     );
     for (let n = 1; n <= input.holeCount; n++) {
@@ -141,7 +145,8 @@ export async function listRounds(): Promise<Round[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<RoundRow>(
     `SELECT id, course_name, date_played, hole_count, completed_at,
-            tee_name, course_rating, slope_rating, include_in_handicap, created_at
+            tee_name, course_rating, slope_rating, include_in_handicap,
+            exclude_from_sharing, created_at
      FROM rounds
      WHERE deleted_at IS NULL
      ORDER BY date_played DESC, created_at DESC;`,
@@ -153,7 +158,8 @@ export async function getRound(id: string): Promise<Round | null> {
   const db = await getDb();
   const row = await db.getFirstAsync<RoundRow>(
     `SELECT id, course_name, date_played, hole_count, completed_at,
-            tee_name, course_rating, slope_rating, include_in_handicap, created_at
+            tee_name, course_rating, slope_rating, include_in_handicap,
+            exclude_from_sharing, created_at
      FROM rounds WHERE id = ? AND deleted_at IS NULL;`,
     [id],
   );
@@ -178,6 +184,18 @@ export async function setRoundIncludeInHandicap(
   const db = await getDb();
   await db.runAsync(`UPDATE rounds SET include_in_handicap = ?, ${TOUCH} WHERE id = ?;`, [
     include ? 1 : 0,
+    id,
+  ]);
+}
+
+// Toggle whether the round appears in friends' Community feed (0 = shared).
+export async function setRoundExcludeFromSharing(
+  id: string,
+  exclude: boolean,
+): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(`UPDATE rounds SET exclude_from_sharing = ?, ${TOUCH} WHERE id = ?;`, [
+    exclude ? 1 : 0,
     id,
   ]);
 }

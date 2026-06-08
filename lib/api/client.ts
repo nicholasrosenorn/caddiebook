@@ -6,12 +6,21 @@ import {
 } from '../auth/tokens';
 import { apiUrl } from '../config';
 import type {
+  AcceptResponse,
   AuthResponse,
   AuthUser,
+  FeedResponse,
+  FriendRoundDetail,
+  FriendsResponse,
+  IncomingRequestsResponse,
+  LikeResponse,
   ProfileUpdate,
   PullResponse,
   PushResponse,
   RefreshResponse,
+  RequestCountResponse,
+  SendRequestResponse,
+  UserSearchResult,
   WireChange,
 } from '../sync/wire';
 
@@ -24,7 +33,11 @@ export class AuthError extends Error {}
 // onboarding/edit UI can prompt for a different one.
 export class UsernameTakenError extends Error {}
 
-type Method = 'GET' | 'POST' | 'PATCH';
+// Thrown by sendFriendRequest so the add-friend UI can give a precise message.
+export class UserNotFoundError extends Error {}
+export class AlreadyFriendsError extends Error {}
+
+type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
 async function rawRequest(
   path: string,
@@ -124,4 +137,77 @@ export function pushChanges(changes: WireChange[]): Promise<PushResponse> {
 export function pull(since: number, limit?: number): Promise<PullResponse> {
   const q = limit ? `?since=${since}&limit=${limit}` : `?since=${since}`;
   return authedRequest<PullResponse>(`/sync/pull${q}`, 'GET');
+}
+
+// --- Community (authenticated) ---------------------------------------------
+
+export async function searchUsers(q: string): Promise<UserSearchResult[]> {
+  const { users } = await authedRequest<{ users: UserSearchResult[] }>(
+    `/community/users/search?q=${encodeURIComponent(q)}`,
+    'GET',
+  );
+  return users;
+}
+
+// Send a friend request by handle. Maps server errors to typed exceptions so the
+// UI can react: 404 → unknown user, 409 → already friends.
+export async function sendFriendRequest(username: string): Promise<SendRequestResponse> {
+  const res = await authedRaw('/community/friend-requests', 'POST', { username });
+  if (res.status === 404) throw new UserNotFoundError('user not found');
+  if (res.status === 409) throw new AlreadyFriendsError('already friends');
+  if (!res.ok) throw new Error(`friend request failed: ${res.status}`);
+  return (await res.json()) as SendRequestResponse;
+}
+
+export async function listIncomingRequests(): Promise<IncomingRequestsResponse['requests']> {
+  const { requests } = await authedRequest<IncomingRequestsResponse>(
+    '/community/friend-requests/incoming',
+    'GET',
+  );
+  return requests;
+}
+
+export async function getIncomingRequestCount(): Promise<number> {
+  const { count } = await authedRequest<RequestCountResponse>(
+    '/community/friend-requests/count',
+    'GET',
+  );
+  return count;
+}
+
+export function acceptFriendRequest(id: string): Promise<AcceptResponse> {
+  return authedRequest<AcceptResponse>(`/community/friend-requests/${id}/accept`, 'POST');
+}
+
+export async function declineFriendRequest(id: string): Promise<void> {
+  await authedRequest(`/community/friend-requests/${id}/decline`, 'POST');
+}
+
+export async function listFriends(): Promise<FriendsResponse['friends']> {
+  const { friends } = await authedRequest<FriendsResponse>('/community/friends', 'GET');
+  return friends;
+}
+
+export async function unfriend(friendUserId: string): Promise<void> {
+  await authedRequest(`/community/friends/${friendUserId}`, 'DELETE');
+}
+
+export function getFeed(cursor?: string, limit?: number): Promise<FeedResponse> {
+  const params = new URLSearchParams();
+  if (cursor) params.set('cursor', cursor);
+  if (limit) params.set('limit', String(limit));
+  const q = params.toString();
+  return authedRequest<FeedResponse>(`/community/feed${q ? `?${q}` : ''}`, 'GET');
+}
+
+export function getFriendRound(ownerId: string, roundId: string): Promise<FriendRoundDetail> {
+  return authedRequest<FriendRoundDetail>(`/community/rounds/${ownerId}/${roundId}`, 'GET');
+}
+
+export function likeRound(ownerId: string, roundId: string): Promise<LikeResponse> {
+  return authedRequest<LikeResponse>(`/community/rounds/${ownerId}/${roundId}/like`, 'POST');
+}
+
+export function unlikeRound(ownerId: string, roundId: string): Promise<LikeResponse> {
+  return authedRequest<LikeResponse>(`/community/rounds/${ownerId}/${roundId}/like`, 'DELETE');
 }

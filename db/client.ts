@@ -45,7 +45,10 @@ type Migration = { version: number; up: (db: SQLite.SQLiteDatabase) => Promise<v
 // installs (user_version = 0 but already fully migrated via the old ad-hoc path)
 // re-run it as a no-op and simply get stamped to version 1; fresh installs build
 // everything through the same path. Append future schema changes as new entries.
-const MIGRATIONS: Migration[] = [{ version: SCHEMA_VERSION, up: migrateV1 }];
+const MIGRATIONS: Migration[] = [
+  { version: 1, up: migrateV1 },
+  { version: 2, up: migrateV2 },
+];
 
 export async function initDb(): Promise<void> {
   const db = await getDb();
@@ -106,6 +109,18 @@ async function migrateV1(db: SQLite.SQLiteDatabase): Promise<void> {
   await ensureColumn(db, 'pre_round_goals', 'mental_goal', 'mental_goal TEXT');
 
   await ensureSyncColumns(db);
+}
+
+// Migration 2 — add the per-round "exclude from sharing" flag (0 = shared to the
+// Community feed, 1 = hidden). ensureColumn keeps it idempotent for installs that
+// already picked up the column via the fresh-install CREATE TABLE.
+async function migrateV2(db: SQLite.SQLiteDatabase): Promise<void> {
+  await ensureColumn(
+    db,
+    'rounds',
+    'exclude_from_sharing',
+    'exclude_from_sharing INTEGER NOT NULL DEFAULT 0',
+  );
 }
 
 // Add the sync trio (updated_at / deleted_at / dirty) to every syncable table

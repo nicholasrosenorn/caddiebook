@@ -15,8 +15,8 @@ export const SYNC_TABLES: TableSpec[] = [
     idColumn: 'id',
     columns: [
       'id', 'course_name', 'date_played', 'hole_count', 'completed_at', 'tee_name',
-      'course_rating', 'slope_rating', 'include_in_handicap', 'created_at',
-      'updated_at', 'deleted_at',
+      'course_rating', 'slope_rating', 'include_in_handicap', 'exclude_from_sharing',
+      'created_at', 'updated_at', 'deleted_at',
     ],
   },
   {

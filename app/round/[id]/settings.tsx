@@ -1,0 +1,295 @@
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { Screen } from '@/components/screen';
+import { SketchSurface } from '@/components/sketch';
+import { ThemedText } from '@/components/themed-text';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { fontFamily, spacing, type Palette } from '@/constants/theme';
+import { useColors } from '@/constants/theme-context';
+import {
+  getRound,
+  setRoundExcludeFromSharing,
+  setRoundIncludeInHandicap,
+  setRoundRatingSlope,
+} from '@/db/queries';
+import type { Round } from '@/db/types';
+
+export default function RoundSettingsScreen() {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const insets = useSafeAreaInsets();
+  const [round, setRound] = useState<Round | null>(null);
+  const [ratingText, setRatingText] = useState('');
+  const [slopeText, setSlopeText] = useState('');
+
+  const load = useCallback(async () => {
+    if (!id) return;
+    const r = await getRound(id);
+    setRound(r);
+  }, [id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
+
+  useEffect(() => {
+    setRatingText(round?.courseRating != null ? String(round.courseRating) : '');
+    setSlopeText(round?.slopeRating != null ? String(round.slopeRating) : '');
+  }, [round?.courseRating, round?.slopeRating]);
+
+  if (!id || !round) return <Screen />;
+
+  const onClose = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/' as any);
+  };
+
+  const onToggleHandicap = async () => {
+    await setRoundIncludeInHandicap(round.id, !round.includeInHandicap);
+    await load();
+  };
+
+  const onToggleShare = async () => {
+    // The toggle reads as "share with friends", so ON = NOT excluded.
+    await setRoundExcludeFromSharing(round.id, !round.excludeFromSharing);
+    await load();
+  };
+
+  const onCommitRatingSlope = async () => {
+    const rating = parseNum(ratingText);
+    const slope = parseNum(slopeText);
+    if (rating === round.courseRating && slope === round.slopeRating) return;
+    await setRoundRatingSlope(round.id, rating, slope);
+    await load();
+  };
+
+  const shared = !round.excludeFromSharing;
+
+  return (
+    <Screen padded={false}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + spacing.xxl, paddingBottom: insets.bottom + spacing.xl },
+        ]}
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.header}>
+          <ThemedText type="caption">ROUND SETTINGS</ThemedText>
+          <ThemedText type="title">{round.courseName}</ThemedText>
+        </View>
+
+        <SketchSurface seed="settings-hcp-toggle" style={styles.card}>
+          <Pressable
+            onPress={onToggleHandicap}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: round.includeInHandicap }}
+            style={styles.toggleRow}>
+            <View style={styles.toggleText}>
+              <ThemedText type="caption">INCLUDE IN HANDICAP</ThemedText>
+              <ThemedText style={styles.toggleHint}>
+                {round.includeInHandicap
+                  ? 'This round counts toward your index.'
+                  : 'Excluded — posts no differential.'}
+              </ThemedText>
+            </View>
+            <Toggle on={round.includeInHandicap} seed="settings-hcp-switch" colors={colors} styles={styles} />
+          </Pressable>
+
+          {round.includeInHandicap ? (
+            <View style={styles.ratingRow}>
+              <View style={styles.ratingCol}>
+                <ThemedText style={styles.subLabel}>COURSE RATING</ThemedText>
+                <SketchSurface seed="settings-rating" radius={8} style={styles.inputSurface}>
+                  <TextInput
+                    value={ratingText}
+                    onChangeText={setRatingText}
+                    onBlur={onCommitRatingSlope}
+                    placeholder="72.1"
+                    placeholderTextColor={colors.textMuted}
+                    style={styles.input}
+                    keyboardType="decimal-pad"
+                    returnKeyType="done"
+                  />
+                </SketchSurface>
+              </View>
+              <View style={styles.ratingCol}>
+                <ThemedText style={styles.subLabel}>SLOPE</ThemedText>
+                <SketchSurface seed="settings-slope" radius={8} style={styles.inputSurface}>
+                  <TextInput
+                    value={slopeText}
+                    onChangeText={setSlopeText}
+                    onBlur={onCommitRatingSlope}
+                    placeholder="113"
+                    placeholderTextColor={colors.textMuted}
+                    style={styles.input}
+                    keyboardType="number-pad"
+                    returnKeyType="done"
+                  />
+                </SketchSurface>
+              </View>
+            </View>
+          ) : null}
+        </SketchSurface>
+
+        <SketchSurface seed="settings-share-toggle" style={styles.card}>
+          <Pressable
+            onPress={onToggleShare}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: shared }}
+            style={styles.toggleRow}>
+            <View style={styles.toggleText}>
+              <ThemedText type="caption">SHARE WITH FRIENDS</ThemedText>
+              <ThemedText style={styles.toggleHint}>
+                {shared
+                  ? "Visible in your friends' Community feed."
+                  : 'Hidden from the Community feed.'}
+              </ThemedText>
+            </View>
+            <Toggle on={shared} seed="settings-share-switch" colors={colors} styles={styles} />
+          </Pressable>
+        </SketchSurface>
+      </ScrollView>
+
+      <Pressable
+        onPress={onClose}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel="Close settings"
+        style={({ pressed }) => [
+          styles.closeButton,
+          { top: insets.top + 8 },
+          pressed && styles.closeButtonPressed,
+        ]}>
+        <IconSymbol name="xmark" size={18} color={colors.textPrimary} />
+      </Pressable>
+    </Screen>
+  );
+}
+
+function Toggle({
+  on,
+  seed,
+  colors,
+  styles,
+}: {
+  on: boolean;
+  seed: string;
+  colors: Palette;
+  styles: ReturnType<typeof makeStyles>;
+}) {
+  return (
+    <SketchSurface
+      seed={seed}
+      radius={999}
+      fill={on ? colors.accent : colors.surface}
+      stroke={on ? colors.accent : colors.borderStrong}
+      grain={on}
+      style={[styles.toggleTrack, on ? styles.toggleTrackOn : styles.toggleTrackOff]}>
+      <View
+        style={[
+          styles.toggleKnob,
+          { backgroundColor: on ? colors.accentOn : colors.borderStrong },
+        ]}
+      />
+    </SketchSurface>
+  );
+}
+
+function parseNum(value: string): number | null {
+  const n = parseFloat(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+const makeStyles = (colors: Palette) =>
+  StyleSheet.create({
+    content: {
+      paddingHorizontal: spacing.md,
+      gap: spacing.lg,
+    },
+    header: {
+      gap: spacing.xs,
+    },
+    card: {
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+      gap: spacing.md,
+    },
+    toggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.md,
+    },
+    toggleText: {
+      flex: 1,
+      gap: 4,
+    },
+    toggleHint: {
+      fontSize: 13,
+      color: colors.textMuted,
+    },
+    toggleTrack: {
+      width: 52,
+      height: 30,
+      justifyContent: 'center',
+    },
+    toggleTrackOn: {
+      alignItems: 'flex-end',
+    },
+    toggleTrackOff: {
+      alignItems: 'flex-start',
+    },
+    toggleKnob: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      marginHorizontal: 3,
+    },
+    ratingRow: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+    },
+    ratingCol: {
+      flex: 1,
+      gap: spacing.xs,
+    },
+    subLabel: {
+      fontSize: 11,
+      letterSpacing: 0.8,
+      color: colors.textMuted,
+      fontFamily: fontFamily.sans,
+    },
+    inputSurface: {
+      minHeight: 48,
+    },
+    input: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+      fontSize: 16,
+      color: colors.textPrimary,
+      minHeight: 48,
+      justifyContent: 'center',
+    },
+    closeButton: {
+      position: 'absolute',
+      right: 12,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 30,
+    },
+    closeButtonPressed: {
+      backgroundColor: colors.accentMuted,
+    },
+  });

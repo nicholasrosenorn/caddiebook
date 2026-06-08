@@ -7,6 +7,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -42,6 +43,7 @@ export const rounds = pgTable(
     courseRating: doublePrecision('course_rating'),
     slopeRating: doublePrecision('slope_rating'),
     includeInHandicap: integer('include_in_handicap'),
+    excludeFromSharing: integer('exclude_from_sharing'),
     createdAt: text('created_at'),
     ...syncMeta,
   },
@@ -220,6 +222,63 @@ export const refreshTokens = pgTable(
   }),
 );
 
+// --- Community ------------------------------------------------------------
+//
+// These tables are NOT synced (absent from TABLE_SPECS): they are server-owned
+// social state, read through the /community API rather than the per-user sync
+// pipe. They use real Postgres timestamps like users/refresh_tokens.
+
+// A directed friend request. The unique index on (from,to) prevents duplicate
+// pending requests in the same direction; declining deletes the row so a future
+// re-request is possible.
+export const friendRequests = pgTable(
+  'friend_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    fromUserId: uuid('from_user_id').notNull(),
+    toUserId: uuid('to_user_id').notNull(),
+    status: text('status').notNull().default('pending'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    respondedAt: timestamp('responded_at', { withTimezone: true }),
+  },
+  (t) => ({
+    pair: uniqueIndex('friend_requests_pair_idx').on(t.fromUserId, t.toUserId),
+    byTo: index('friend_requests_to_idx').on(t.toUserId, t.status),
+    byFrom: index('friend_requests_from_idx').on(t.fromUserId, t.status),
+  }),
+);
+
+// An undirected friendship, stored once with an ordered pair (user_low <
+// user_high, string compare on the uuid) so (A,B) and (B,A) collapse to one row.
+export const friendships = pgTable(
+  'friendships',
+  {
+    userLow: uuid('user_low').notNull(),
+    userHigh: uuid('user_high').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.userLow, t.userHigh] }),
+    byHigh: index('friendships_high_idx').on(t.userHigh),
+  }),
+);
+
+// A like on a friend's round. roundOwnerId + roundId together reference the
+// round (rounds PK is composite (user_id, id)); liker_id is the friend liking it.
+export const roundLikes = pgTable(
+  'round_likes',
+  {
+    roundOwnerId: uuid('round_owner_id').notNull(),
+    roundId: text('round_id').notNull(),
+    likerId: uuid('liker_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.roundOwnerId, t.roundId, t.likerId] }),
+    byRound: index('round_likes_round_idx').on(t.roundOwnerId, t.roundId),
+  }),
+);
+
 export const schema = {
   rounds,
   courses,
@@ -233,4 +292,7 @@ export const schema = {
   appSettings,
   users,
   refreshTokens,
+  friendRequests,
+  friendships,
+  roundLikes,
 };

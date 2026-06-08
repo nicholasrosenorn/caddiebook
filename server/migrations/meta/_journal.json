@@ -29,6 +29,13 @@
       "when": 1780792577418,
       "tag": "0003_silent_demogoblin",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780883359647,
+      "tag": "0004_broad_drax",
+      "breakpoints": true
     }
   ]
 }

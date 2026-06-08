@@ -93,6 +93,11 @@ function Navigation() {
         <Stack.Screen name="round/[id]/goals" options={{ headerShown: false }} />
         <Stack.Screen name="round/[id]/review" options={{ headerShown: false }} />
         <Stack.Screen name="round/[id]/summary" options={{ headerShown: false }} />
+        <Stack.Screen name="round/[id]/settings" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="community/round/[ownerId]/[roundId]"
+          options={{ title: 'Round', headerBackTitle: 'Back' }}
+        />
       </Stack>
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </ThemeProvider>

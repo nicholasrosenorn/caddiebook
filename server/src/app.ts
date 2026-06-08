@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 
 import { authRoutes } from './auth/routes';
+import { communityRoutes } from './community/routes';
 import { syncRoutes } from './sync/routes';
 
 // Build the Hono app. Factored out of index.ts so integration tests can mount
@@ -10,5 +11,6 @@ export function createApp() {
   app.get('/health', (c) => c.json({ ok: true }));
   app.route('/auth', authRoutes);
   app.route('/sync', syncRoutes);
+  app.route('/community', communityRoutes);
   return app;
 }

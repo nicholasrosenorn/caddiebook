@@ -50,6 +50,8 @@ export default function NewRoundScreen() {
   const [rating, setRating] = useState('');
   const [slope, setSlope] = useState('');
   const [includeInHandicap, setIncludeInHandicap] = useState(true);
+  // Whether this round is visible in friends' Community feed (default on).
+  const [share, setShare] = useState(true);
 
   useEffect(() => {
     getBag().then((stored) => {
@@ -127,6 +129,7 @@ export default function NewRoundScreen() {
         courseRating: hasRatingSlope ? ratingNum : null,
         slopeRating: hasRatingSlope ? slopeNum : null,
         includeInHandicap,
+        excludeFromSharing: !share,
       });
       router.replace(`/round/${id}/goals` as any);
     } catch (err) {
@@ -337,6 +340,38 @@ export default function NewRoundScreen() {
             </View>
           </View>
           ) : null}
+
+          <View style={styles.field}>
+            <Pressable
+              style={styles.toggleRow}
+              onPress={() => setShare((v) => !v)}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: share }}>
+              <ThemedText type="caption">SHARE WITH FRIENDS?</ThemedText>
+              <SketchSurface
+                seed="new-share-toggle"
+                radius={999}
+                fill={share ? colors.accent : colors.surface}
+                stroke={share ? colors.accent : colors.borderStrong}
+                grain={share}
+                style={[
+                  styles.toggleTrack,
+                  share ? styles.toggleTrackOn : styles.toggleTrackOff,
+                ]}>
+                <View
+                  style={[
+                    styles.toggleKnob,
+                    { backgroundColor: share ? colors.accentOn : colors.borderStrong },
+                  ]}
+                />
+              </SketchSurface>
+            </Pressable>
+            <ThemedText style={styles.hint}>
+              {share
+                ? 'Friends can see this round in their Community feed.'
+                : 'Hidden from the Community feed.'}
+            </ThemedText>
+          </View>
 
           <View style={styles.field}>
             <ThemedText type="caption">YOUR BAG</ThemedText>
