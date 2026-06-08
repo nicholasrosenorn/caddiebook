@@ -3,7 +3,7 @@
 // applied. To evolve the schema, append a { version: N, up } entry to MIGRATIONS
 // in db/client.ts (forward-only DDL — it may assume version N-1 is applied, so it
 // doesn't need the ensureColumn idempotency guard) and bump this constant to match.
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 // Tables that participate in server sync. Every row in these tables carries the
 // sync trio (updated_at / deleted_at / dirty); the sync engine (Phase 2) reads

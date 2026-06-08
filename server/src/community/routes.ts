@@ -361,9 +361,14 @@ communityRoutes.get('/feed', async (c) => {
   const limitIdx = params.length;
 
   const res = await pool.query(
-    `WITH friends AS (
+    // `authors` = my friends plus me, so the feed shows my own shared rounds
+    // interleaved with friends'. The exclude_from_sharing filter still applies
+    // uniformly: a round I hid from sharing stays out of my own feed too.
+    `WITH authors AS (
        SELECT CASE WHEN user_low = $1 THEN user_high ELSE user_low END AS fid
        FROM friendships WHERE user_low = $1 OR user_high = $1
+       UNION
+       SELECT $1::uuid
      )
      SELECT r.user_id AS owner_id, r.id, r.course_name, r.date_played, r.hole_count,
             r.completed_at, r.created_at,
@@ -371,7 +376,7 @@ communityRoutes.get('/feed', async (c) => {
             COALESCE(l.cnt, 0)::int AS like_count,
             (ml.liker_id IS NOT NULL) AS liked_by_me
      FROM rounds r
-     JOIN friends f ON f.fid = r.user_id
+     JOIN authors f ON f.fid = r.user_id
      JOIN users u ON u.id = r.user_id
      LEFT JOIN (
        SELECT round_owner_id, round_id, COUNT(*) AS cnt

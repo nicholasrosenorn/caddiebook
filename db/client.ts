@@ -48,6 +48,7 @@ type Migration = { version: number; up: (db: SQLite.SQLiteDatabase) => Promise<v
 const MIGRATIONS: Migration[] = [
   { version: 1, up: migrateV1 },
   { version: 2, up: migrateV2 },
+  { version: 3, up: migrateV3 },
 ];
 
 export async function initDb(): Promise<void> {
@@ -115,6 +116,21 @@ async function migrateV1(db: SQLite.SQLiteDatabase): Promise<void> {
 // Community feed, 1 = hidden). ensureColumn keeps it idempotent for installs that
 // already picked up the column via the fresh-install CREATE TABLE.
 async function migrateV2(db: SQLite.SQLiteDatabase): Promise<void> {
+  await ensureColumn(
+    db,
+    'rounds',
+    'exclude_from_sharing',
+    'exclude_from_sharing INTEGER NOT NULL DEFAULT 0',
+  );
+}
+
+// Migration 3 — repair migration. Some installs got stamped to user_version = 2
+// during development before migrateV2 added exclude_from_sharing in its final
+// form, so the gated runner now skips v2 and those DBs lack the column — every
+// query touching rounds (listRounds, the sync engine's applyServerRow) then
+// fails to prepare. This idempotent ensureColumn backfills it for those installs
+// and no-ops everywhere else.
+async function migrateV3(db: SQLite.SQLiteDatabase): Promise<void> {
   await ensureColumn(
     db,
     'rounds',

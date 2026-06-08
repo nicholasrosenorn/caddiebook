@@ -10,6 +10,7 @@ import { users } from '../src/db/schema';
 import { runMigrations } from '../src/migrate';
 import type {
   FeedResponse,
+  FriendsResponse,
   IncomingRequestsResponse,
   LikeResponse,
   RequestCountResponse,
@@ -156,6 +157,18 @@ describe('community', () => {
     expect((await authed(b, `/community/rounds/${a}/${excluded}/like`, 'POST')).status).toBe(404);
   });
 
+  it('includes my own shared rounds in my feed, but not hidden ones', async () => {
+    const a = await makeUser('heidi');
+    const shared = await seedRound(a);
+    const excluded = await seedRound(a, { excluded: true });
+
+    const feed = (await (await authed(a, '/community/feed')).json()) as FeedResponse;
+    const ids = feed.rounds.map((r) => r.id);
+    expect(ids).toContain(shared);
+    expect(ids).not.toContain(excluded);
+    expect(feed.rounds.find((r) => r.id === shared)!.ownerId).toBe(a);
+  });
+
   it('auto-accepts a reverse-direction request', async () => {
     const a = await makeUser('erin');
     const b = await makeUser('frank');
@@ -169,8 +182,8 @@ describe('community', () => {
     expect(send.status).toBe('accepted');
 
     // Both now see each other in the friends list.
-    const friends = await (await authed(a, '/community/friends')).json();
-    expect(friends.friends.map((f: { id: string }) => f.id)).toContain(b);
+    const friends = (await (await authed(a, '/community/friends')).json()) as FriendsResponse;
+    expect(friends.friends.map((f) => f.id)).toContain(b);
   });
 
   it('rejects self-requests and unknown users', async () => {

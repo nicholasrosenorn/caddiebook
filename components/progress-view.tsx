@@ -122,22 +122,28 @@ export function ProgressView({ header }: { header?: ReactNode }) {
   const { syncState } = useSync();
 
   const load = useCallback(async () => {
-    const [rounds, holes, shots, putts, reviews] = await Promise.all([
-      listRounds(),
-      getAllHoles(),
-      getAllShots(),
-      getAllPutts(),
-      getAllReviews(),
-    ]);
-    const reviewsByRound = new Map<string, PostRoundReview>();
-    for (const rv of reviews) reviewsByRound.set(rv.roundId, rv);
-    setData({
-      rounds: rounds.filter((r) => r.completedAt != null),
-      holesByRound: groupBy(holes, (h) => h.roundId),
-      shotsByRound: groupBy(shots, (s) => s.roundId),
-      puttsByRound: groupBy(putts, (p) => p.roundId),
-      reviewsByRound,
-    });
+    try {
+      const [rounds, holes, shots, putts, reviews] = await Promise.all([
+        listRounds(),
+        getAllHoles(),
+        getAllShots(),
+        getAllPutts(),
+        getAllReviews(),
+      ]);
+      const reviewsByRound = new Map<string, PostRoundReview>();
+      for (const rv of reviews) reviewsByRound.set(rv.roundId, rv);
+      setData({
+        rounds: rounds.filter((r) => r.completedAt != null),
+        holesByRound: groupBy(holes, (h) => h.roundId),
+        shotsByRound: groupBy(shots, (s) => s.roundId),
+        puttsByRound: groupBy(putts, (p) => p.roundId),
+        reviewsByRound,
+      });
+    } catch (err) {
+      // Don't let a read failure become an uncaught rejection — leave the
+      // loading state up rather than crashing the focused screen.
+      console.error('Failed to load progress data', err);
+    }
   }, []);
 
   // Re-run on focus, and again when a background sync applies remote changes.
