@@ -59,12 +59,14 @@ communityRoutes.use('*', requireAuth);
 communityRoutes.use('*', rateLimit({ name: 'community', windowMs: 60_000, max: 120, key: (c) => c.get('userId') }));
 const writeLimit = rateLimit({ name: 'community-write', windowMs: 60_000, max: 30, key: (c) => c.get('userId') });
 
-// GET /community/users/search?q= — prefix match on username, excluding self.
+// GET /community/users/search?q= — prefix match on username, first/last name
+// (and "first last" full name), excluding self.
 communityRoutes.get('/users/search', writeLimit, async (c) => {
   const me = c.get('userId');
   const q = (c.req.query('q') ?? '').trim().toLowerCase();
   if (q.length < 2) return c.json<UserSearchResponse>({ users: [] });
 
+  const pattern = `${q}%`;
   const rows = await db
     .select({
       id: users.id,
@@ -74,7 +76,17 @@ communityRoutes.get('/users/search', writeLimit, async (c) => {
       avatar: users.avatar,
     })
     .from(users)
-    .where(and(ilike(users.username, `${q}%`), ne(users.id, me)))
+    .where(
+      and(
+        or(
+          ilike(users.username, pattern),
+          ilike(users.firstName, pattern),
+          ilike(users.lastName, pattern),
+          ilike(sql`${users.firstName} || ' ' || ${users.lastName}`, pattern),
+        ),
+        ne(users.id, me),
+      ),
+    )
     .limit(10);
   if (rows.length === 0) return c.json<UserSearchResponse>({ users: [] });
 

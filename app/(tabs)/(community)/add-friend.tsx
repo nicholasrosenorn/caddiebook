@@ -82,7 +82,7 @@ export default function AddFriendScreen() {
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="Search by username"
+              placeholder="Search by name or username"
               placeholderTextColor={colors.textMuted}
               style={styles.input}
               autoCapitalize="none"
@@ -112,7 +112,7 @@ export default function AddFriendScreen() {
           ) : (
             <View style={styles.empty}>
               <ThemedText type="muted" style={styles.centerText}>
-                Find friends by their @username to follow their rounds.
+                Find friends by name or @username to follow their rounds.
               </ThemedText>
             </View>
           )

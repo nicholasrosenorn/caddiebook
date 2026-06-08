@@ -194,4 +194,25 @@ describe('community', () => {
       (await authed(a, '/community/friend-requests', 'POST', { username: 'nobody_zzz' })).status,
     ).toBe(404);
   });
+
+  it('finds users by first name, last name, and full name', async () => {
+    const me = await makeUser('searcher');
+    const target = await makeUser('heidi');
+    await db
+      .update(users)
+      .set({ firstName: 'Henrietta', lastName: 'Vanderbeek' })
+      .where(eq(users.id, target));
+
+    async function searchIds(q: string): Promise<string[]> {
+      const res = (await (
+        await authed(me, `/community/users/search?q=${encodeURIComponent(q)}`)
+      ).json()) as UserSearchResponse;
+      return res.users.map((u) => u.id);
+    }
+
+    expect(await searchIds('henri')).toContain(target); // first name prefix
+    expect(await searchIds('vander')).toContain(target); // last name prefix
+    expect(await searchIds('henrietta van')).toContain(target); // full name prefix
+    expect(await searchIds('zzznope')).not.toContain(target); // no match
+  });
 });
