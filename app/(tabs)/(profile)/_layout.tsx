@@ -20,7 +20,7 @@ export default function ProfileStackLayout() {
         headerShadowVisible: false,
       }}>
       <Stack.Screen
-        name="profile"
+        name="index"
         options={{
           title: '',
           headerLeft: () => <MenuButton />,
