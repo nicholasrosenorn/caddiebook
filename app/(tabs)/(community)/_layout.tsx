@@ -1,6 +1,5 @@
 import { Stack } from 'expo-router';
 
-import { MenuButton } from '@/components/menu-button';
 import { fontFamily } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
 
@@ -20,8 +19,7 @@ export default function CommunityStackLayout() {
       <Stack.Screen
         name="community"
         options={{
-          title: 'Community',
-          headerLeft: () => <MenuButton />,
+          title: '',
         }}
       />
       <Stack.Screen name="add-friend" options={{ title: 'Add friends' }} />

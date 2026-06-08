@@ -12,7 +12,7 @@ import {
 
 import { EdgeSwipeOpener } from '@/components/edge-swipe-opener';
 import { Screen } from '@/components/screen';
-import { SketchSurface } from '@/components/sketch';
+import { SketchDivider, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/icon-symbol';
 import { fontFamily, spacing, type Palette } from '@/constants/theme';
@@ -21,7 +21,8 @@ import { getFeed, getIncomingRequestCount, likeRound, unlikeRound } from '@/lib/
 import { wireHoleToHole } from '@/lib/community/map';
 import { useSync } from '@/lib/sync/provider';
 import type { FeedRound } from '@/lib/sync/wire';
-import { computeRoundSummary, formatPct } from '@/lib/stats';
+import { computeRoundSummary, formatPct, totalPar } from '@/lib/stats';
+import { formatToPar } from '@/lib/lifetime-stats';
 
 export default function CommunityScreen() {
   const colors = useColors();
@@ -106,15 +107,23 @@ export default function CommunityScreen() {
     }
   }, []);
 
-  const headerRight = useCallback(
+  const headerLeft = useCallback(
     () => (
-      <View style={styles.headerActions}>
+      <View style={styles.headerActionsLeft}>
         <Pressable
           onPress={() => router.push('/add-friend' as any)}
           hitSlop={8}
           accessibilityLabel="Add friends">
           <IconSymbol name="person.badge.plus" size={24} color={colors.textPrimary} />
         </Pressable>
+      </View>
+    ),
+    [colors.textPrimary, styles],
+  );
+
+  const headerRight = useCallback(
+    () => (
+      <View style={styles.headerActions}>
         <Pressable
           onPress={() => router.push('/requests' as any)}
           hitSlop={8}
@@ -149,7 +158,7 @@ export default function CommunityScreen() {
 
   return (
     <Screen padded={false} marks>
-      <Stack.Screen options={{ headerRight }} />
+      <Stack.Screen options={{ headerLeft, headerRight }} />
       {rounds === null ? (
         <View style={styles.empty}>
           <ActivityIndicator size="large" color={colors.accent} />
@@ -201,11 +210,15 @@ function FeedCard({
   colors: Palette;
   styles: ReturnType<typeof makeStyles>;
 }) {
-  const summary = useMemo(
-    () => computeRoundSummary(item.holes.map(wireHoleToHole)),
-    [item.holes],
-  );
-  const name = item.owner.username ? `@${item.owner.username}` : item.owner.firstName ?? 'A friend';
+  const holes = useMemo(() => item.holes.map(wireHoleToHole), [item.holes]);
+  const summary = useMemo(() => computeRoundSummary(holes), [holes]);
+  const played = summary.holesPlayed > 0;
+  const toPar = played ? formatToPar(summary.totalScore - totalPar(holes)) : '—';
+
+  const fullName = [item.owner.firstName, item.owner.lastName].filter(Boolean).join(' ').trim();
+  const displayName = fullName || (item.owner.username ? `@${item.owner.username}` : 'A friend');
+  const handle = fullName && item.owner.username ? `@${item.owner.username}` : null;
+
   return (
     <Pressable
       onPress={() => router.push(`/community/round/${item.ownerId}/${item.id}` as any)}
@@ -214,43 +227,62 @@ function FeedCard({
         <View style={styles.owner}>
           <IconSymbol
             name={(item.owner.avatar as IconSymbolName) ?? 'person.crop.circle'}
-            size={28}
+            size={32}
             color={colors.accent}
           />
-          <ThemedText style={styles.ownerName} numberOfLines={1}>
-            {name}
+          <View style={styles.ownerText}>
+            <ThemedText style={styles.ownerName} numberOfLines={1}>
+              {displayName}
+            </ThemedText>
+            {handle ? (
+              <ThemedText type="muted" style={styles.ownerHandle} numberOfLines={1}>
+                {handle}
+              </ThemedText>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.metaRow}>
+          <ThemedText type="subtitle" numberOfLines={1} style={styles.course}>
+            {item.courseName}
           </ThemedText>
           <ThemedText type="muted">{formatDate(item.datePlayed)}</ThemedText>
         </View>
 
-        <View style={styles.cardTop}>
-          <ThemedText type="subtitle" numberOfLines={1} style={styles.course}>
-            {item.courseName}
-          </ThemedText>
-          <ThemedText type="muted">
-            {summary.holesPlayed}/{item.holeCount}
-          </ThemedText>
+        <View style={styles.scoreRow}>
+          <ThemedText style={styles.toPar}>{toPar}</ThemedText>
+          {played ? (
+            <ThemedText style={styles.gross}>{summary.totalScore}</ThemedText>
+          ) : null}
         </View>
+
+        <SketchDivider seed={`feed-div-${item.ownerId}-${item.id}`} />
 
         <View style={styles.cardStats}>
-          <Stat label="Score" value={summary.holesPlayed > 0 ? String(summary.totalScore) : '—'} colors={colors} styles={styles} />
-          <Stat label="GIR" value={formatPct(summary.girPct)} colors={colors} styles={styles} />
-          <Stat label="FIR" value={formatPct(summary.firPct)} colors={colors} styles={styles} />
-          <Stat label="Putts" value={summary.totalPutts > 0 ? String(summary.totalPutts) : '—'} colors={colors} styles={styles} />
-        </View>
-
-        <View style={styles.cardFooter}>
-          <Pressable
-            onPress={onToggleLike}
-            hitSlop={8}
-            style={({ pressed }) => [styles.likeBtn, pressed && styles.pressed]}>
-            <IconSymbol
-              name={item.likedByMe ? 'heart.fill' : 'heart'}
-              size={20}
-              color={item.likedByMe ? colors.accent : colors.textMuted}
-            />
-            <ThemedText style={styles.likeCount}>{item.likeCount}</ThemedText>
-          </Pressable>
+          <Stat label="GIR" value={formatPct(summary.girPct)} styles={styles} />
+          <Stat label="FIR" value={formatPct(summary.firPct)} styles={styles} />
+          <Stat label="Putts" value={summary.totalPutts > 0 ? String(summary.totalPutts) : '—'} styles={styles} />
+          <View style={styles.likeBtn}>
+            <Pressable
+              onPress={onToggleLike}
+              hitSlop={8}
+              style={({ pressed }) => pressed && styles.pressed}>
+              <IconSymbol
+                name={item.likedByMe ? 'heart.fill' : 'heart'}
+                size={20}
+                color={item.likedByMe ? colors.accent : colors.textMuted}
+              />
+            </Pressable>
+            <Pressable
+              onPress={() =>
+                router.push(`/community/likes/${item.ownerId}/${item.id}` as any)
+              }
+              hitSlop={8}
+              accessibilityLabel="See who liked this round"
+              style={({ pressed }) => pressed && styles.pressed}>
+              <ThemedText style={styles.likeCount}>{item.likeCount}</ThemedText>
+            </Pressable>
+          </View>
         </View>
       </SketchSurface>
     </Pressable>
@@ -264,7 +296,6 @@ function Stat({
 }: {
   label: string;
   value: string;
-  colors: Palette;
   styles: ReturnType<typeof makeStyles>;
 }) {
   return (
@@ -304,21 +335,30 @@ const makeStyles = (colors: Palette) =>
       gap: spacing.md,
       paddingRight: spacing.xs,
     },
+    headerActionsLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingLeft: spacing.xs,
+    },
     badge: {
       position: 'absolute',
-      top: -6,
-      right: -8,
+      top: -5,
+      right: -7,
       minWidth: 16,
       height: 16,
       borderRadius: 8,
       backgroundColor: colors.accent,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingHorizontal: 3,
+      paddingHorizontal: 4,
     },
     badgeText: {
       color: colors.accentOn,
       fontSize: 10,
+      lineHeight: 16,
+      textAlign: 'center',
+      includeFontPadding: false,
       fontFamily: fontFamily.serifBold,
     },
     list: {
@@ -343,28 +383,50 @@ const makeStyles = (colors: Palette) =>
       alignItems: 'center',
       gap: spacing.sm,
     },
-    ownerName: {
+    ownerText: {
       flex: 1,
-      fontFamily: fontFamily.serif,
-      fontSize: 15,
+    },
+    ownerName: {
+      fontFamily: fontFamily.serifBold,
+      fontSize: 17,
       color: colors.textPrimary,
     },
-    cardTop: {
+    ownerHandle: {
+      fontSize: 12,
+    },
+    metaRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'flex-start',
+      alignItems: 'center',
       gap: spacing.sm,
     },
     course: {
       flex: 1,
+      color: colors.textSecondary,
+    },
+    scoreRow: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: spacing.sm,
+      paddingVertical: spacing.xs,
+    },
+    toPar: {
+      fontFamily: fontFamily.serifBold,
+      fontSize: 40,
+      lineHeight: 44,
+      color: colors.accent,
+    },
+    gross: {
+      fontFamily: fontFamily.serif,
+      fontSize: 20,
+      color: colors.textSecondary,
     },
     cardStats: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
-      gap: spacing.sm,
+      alignItems: 'flex-end',
+      gap: spacing.xl,
     },
     stat: {
-      flex: 1,
       gap: 2,
     },
     statValue: {
@@ -372,16 +434,11 @@ const makeStyles = (colors: Palette) =>
       fontSize: 18,
       color: colors.textPrimary,
     },
-    cardFooter: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'flex-end',
-      paddingTop: spacing.xs,
-    },
     likeBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.xs,
+      marginLeft: 'auto',
     },
     likeCount: {
       fontFamily: fontFamily.serif,

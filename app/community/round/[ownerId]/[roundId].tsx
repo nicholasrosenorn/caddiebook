@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -139,18 +139,23 @@ export default function FriendRoundScreen() {
           />
         </View>
 
-        <Pressable
-          onPress={onToggleLike}
-          style={({ pressed }) => [styles.likeRow, pressed && styles.pressed]}>
-          <IconSymbol
-            name={detail.likedByMe ? 'heart.fill' : 'heart'}
-            size={22}
-            color={detail.likedByMe ? colors.accent : colors.textMuted}
-          />
-          <ThemedText style={styles.likeLabel}>
-            {detail.likeCount} {detail.likeCount === 1 ? 'like' : 'likes'}
-          </ThemedText>
-        </Pressable>
+        <View style={styles.likeRow}>
+          <Pressable onPress={onToggleLike} style={({ pressed }) => pressed && styles.pressed}>
+            <IconSymbol
+              name={detail.likedByMe ? 'heart.fill' : 'heart'}
+              size={22}
+              color={detail.likedByMe ? colors.accent : colors.textMuted}
+            />
+          </Pressable>
+          <Pressable
+            onPress={() => router.push(`/community/likes/${ownerId}/${roundId}` as any)}
+            accessibilityLabel="See who liked this round"
+            style={({ pressed }) => pressed && styles.pressed}>
+            <ThemedText style={styles.likeLabel}>
+              {detail.likeCount} {detail.likeCount === 1 ? 'like' : 'likes'}
+            </ThemedText>
+          </Pressable>
+        </View>
 
         <Section title="Scorecard" styles={styles}>
           <Scorecard holes={holes} />

@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, DevSettings, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -10,6 +10,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { fontFamily, spacing, THEME_ORDER, themes, type Palette, type ThemeId } from '@/constants/theme';
 import { useColors, useTheme } from '@/constants/theme-context';
 import { setSetting } from '@/db/queries';
+import { listFriends } from '@/lib/api/client';
 import { clearAllRounds, seedSampleRounds } from '@/lib/dev-seed';
 import { useSync } from '@/lib/sync/provider';
 
@@ -32,6 +33,22 @@ export default function SettingsScreen() {
   const { themeId, setTheme } = useTheme();
   const { session, syncState, syncNow, signOut } = useSync();
   const [devBusy, setDevBusy] = useState(false);
+  const [friendCount, setFriendCount] = useState<number | null>(null);
+
+  // Live friend count for the Community row; refetched on focus so removals
+  // made on the Friends screen are reflected when we return here.
+  useFocusEffect(
+    useCallback(() => {
+      if (!session) return;
+      let active = true;
+      listFriends()
+        .then((friends) => active && setFriendCount(friends.length))
+        .catch(() => active && setFriendCount(null));
+      return () => {
+        active = false;
+      };
+    }, [session]),
+  );
 
   const user = session?.user;
   const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
@@ -104,6 +121,28 @@ export default function SettingsScreen() {
             </Pressable>
           </View>
         </View>
+
+        {session ? (
+          <View style={styles.section}>
+            <ThemedText type="caption">COMMUNITY</ThemedText>
+            <Pressable
+              onPress={() => router.push('/friends')}
+              accessibilityRole="button"
+              accessibilityLabel="View friends"
+              style={({ pressed }) => pressed && styles.cardPressed}>
+              <SketchSurface seed="friends-card" radius={12} style={styles.communityRow}>
+                <IconSymbol name="person.2.fill" size={20} color={colors.accent} />
+                <ThemedText style={styles.cardLabel}>Friends</ThemedText>
+                {friendCount !== null ? (
+                  <View style={styles.countChip}>
+                    <ThemedText style={styles.countText}>{friendCount}</ThemedText>
+                  </View>
+                ) : null}
+                <IconSymbol name="chevron.right" size={16} color={colors.textMuted} />
+              </SketchSurface>
+            </Pressable>
+          </View>
+        ) : null}
 
         <View style={styles.section}>
           <ThemedText type="caption">APPEARANCE</ThemedText>
@@ -295,6 +334,30 @@ const makeStyles = (colors: Palette) =>
     sectionHint: {
       fontSize: 13,
       marginTop: 2,
+    },
+    communityRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+      marginTop: spacing.xs,
+      minHeight: 60,
+    },
+    countChip: {
+      marginLeft: 'auto',
+      minWidth: 24,
+      height: 24,
+      borderRadius: 12,
+      paddingHorizontal: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.accentMuted,
+    },
+    countText: {
+      fontFamily: fontFamily.serifBold,
+      fontSize: 14,
+      color: colors.accent,
     },
     syncError: {
       fontSize: 13,

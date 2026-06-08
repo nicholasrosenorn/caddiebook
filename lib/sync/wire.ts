@@ -161,3 +161,6 @@ export type FriendRoundDetail = FeedRound & {
 };
 
 export type LikeResponse = { likeCount: number; likedByMe: boolean };
+
+// Who liked a round, most-recent first.
+export type RoundLikersResponse = { likers: PublicProfile[] };

@@ -74,6 +74,11 @@ function Navigation() {
           name="edit-profile"
           options={{ title: 'Edit profile', headerBackTitle: 'Settings' }}
         />
+        <Stack.Screen name="friends" options={{ title: 'Friends', headerBackTitle: 'Settings' }} />
+        <Stack.Screen
+          name="add-friends"
+          options={{ title: 'Add friends', headerBackTitle: 'Friends' }}
+        />
         <Stack.Screen
           name="tools/yardages"
           options={{ title: 'Stock yardages', headerBackTitle: 'Back' }}
@@ -97,6 +102,10 @@ function Navigation() {
         <Stack.Screen
           name="community/round/[ownerId]/[roundId]"
           options={{ title: 'Round', headerBackTitle: 'Back' }}
+        />
+        <Stack.Screen
+          name="community/likes/[ownerId]/[roundId]"
+          options={{ title: 'Likes', headerBackTitle: 'Back' }}
         />
       </Stack>
       <StatusBar style={isDark ? 'light' : 'dark'} />

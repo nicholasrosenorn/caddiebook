@@ -11,10 +11,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BagPicker } from '@/components/bag-picker';
+import { Collapsible } from '@/components/collapsible';
 import { Screen } from '@/components/screen';
-import { SketchSurface } from '@/components/sketch';
+import { SegmentedControl } from '@/components/segmented-control';
+import { SettingToggle } from '@/components/setting-toggle';
+import { SketchDivider, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS } from '@/constants/clubs';
 import { fontFamily, spacing, type Palette } from '@/constants/theme';
@@ -30,10 +34,14 @@ import {
 } from '@/db/queries';
 import type { Course, Tee } from '@/db/types';
 
-const HOLE_OPTIONS = [9, 18] as const;
+const HOLE_OPTIONS = [
+  { value: '9', label: '9' },
+  { value: '18', label: '18' },
+] as const;
 
 export default function NewRoundScreen() {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [courseName, setCourseName] = useState('');
   const [date, setDate] = useState(new Date());
@@ -66,6 +74,27 @@ export default function NewRoundScreen() {
     if (!needle) return null;
     return courses.find((c) => c.name.toLowerCase() === needle) ?? null;
   }, [courses, courseName]);
+
+  // Typeahead: saved courses containing the typed text. Hidden once the name is
+  // an exact match (nothing left to pick) or empty.
+  const courseSuggestions = useMemo(() => {
+    const needle = courseName.trim().toLowerCase();
+    if (!needle) return [];
+    const matches = courses.filter((c) => c.name.toLowerCase().includes(needle));
+    if (matches.length === 1 && matches[0].name.toLowerCase() === needle) return [];
+    return matches.slice(0, 4);
+  }, [courses, courseName]);
+
+  // One-line glance of the furled options so state is readable without expanding.
+  const optionsSummary = useMemo(
+    () =>
+      [
+        includeInHandicap ? 'Handicap on' : 'Handicap off',
+        share ? 'Sharing on' : 'Sharing off',
+        `${bag.length} clubs`,
+      ].join(' · '),
+    [includeInHandicap, share, bag.length],
+  );
 
   // Load the matched course's tees so they can be tapped to autofill.
   useEffect(() => {
@@ -162,118 +191,25 @@ export default function NewRoundScreen() {
                 returnKeyType="done"
               />
             </SketchSurface>
-            {courses.length > 0 ? (
-              <ChipRow
-                styles={styles}
-                colors={colors}
-                seed="course"
-                items={courses.map((c) => ({ key: c.id, label: c.name }))}
-                selectedKey={selectedCourse?.id ?? null}
-                onPick={(key) => {
-                  const c = courses.find((x) => x.id === key);
-                  if (c) setCourseName(c.name);
-                }}
-              />
+            {courseSuggestions.length > 0 ? (
+              <SketchSurface seed="new-course-suggest" radius={8} style={styles.suggestCard}>
+                {courseSuggestions.map((c, i) => (
+                  <Pressable
+                    key={c.id}
+                    onPress={() => setCourseName(c.name)}
+                    style={({ pressed }) => [
+                      styles.suggestRow,
+                      i > 0 && styles.suggestRowDivided,
+                      pressed && styles.pressed,
+                    ]}>
+                    <ThemedText style={styles.suggestLabel}>{c.name}</ThemedText>
+                  </Pressable>
+                ))}
+              </SketchSurface>
             ) : null}
           </View>
 
-          <View style={styles.field}>
-            <ThemedText type="caption">DATE</ThemedText>
-            {Platform.OS === 'ios' ? (
-              <View style={styles.iosDateRow}>
-                <DateTimePicker
-                  value={date}
-                  mode="date"
-                  display="compact"
-                  onChange={(_, d) => d && setDate(d)}
-                  maximumDate={new Date()}
-                  themeVariant="light"
-                  accentColor={colors.accent}
-                />
-              </View>
-            ) : (
-              <>
-                <Pressable onPress={() => setAndroidPickerOpen(true)}>
-                  <SketchSurface seed="new-date" radius={8} style={styles.input}>
-                    <ThemedText>{date.toLocaleDateString()}</ThemedText>
-                  </SketchSurface>
-                </Pressable>
-                {androidPickerOpen && (
-                  <DateTimePicker
-                    value={date}
-                    mode="date"
-                    display="default"
-                    onChange={(_, d) => {
-                      setAndroidPickerOpen(false);
-                      if (d) setDate(d);
-                    }}
-                    maximumDate={new Date()}
-                  />
-                )}
-              </>
-            )}
-          </View>
-
-          <View style={styles.field}>
-            <ThemedText type="caption">HOLES</ThemedText>
-            <View style={styles.segmented}>
-              {HOLE_OPTIONS.map((n) => {
-                const selected = holeCount === n;
-                return (
-                  <Pressable
-                    key={n}
-                    onPress={() => setHoleCount(n)}
-                    style={({ pressed }) => [styles.segment, pressed && !selected && styles.pressed]}>
-                    <SketchSurface
-                      seed={`new-holes-${n}`}
-                      radius={8}
-                      fill={selected ? colors.accent : colors.surface}
-                      stroke={selected ? colors.accent : colors.borderStrong}
-                      grain={selected}
-                      style={styles.segmentSurface}>
-                      <ThemedText style={selected ? styles.segmentLabelSelected : undefined}>
-                        {n}
-                      </ThemedText>
-                    </SketchSurface>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-
-          <View style={styles.field}>
-            <Pressable
-              style={styles.toggleRow}
-              onPress={() => setIncludeInHandicap((v) => !v)}
-              accessibilityRole="switch"
-              accessibilityState={{ checked: includeInHandicap }}>
-              <ThemedText type="caption">INCLUDE IN HANDICAP?</ThemedText>
-              <SketchSurface
-                seed="new-handicap-toggle"
-                radius={999}
-                fill={includeInHandicap ? colors.accent : colors.surface}
-                stroke={includeInHandicap ? colors.accent : colors.borderStrong}
-                grain={includeInHandicap}
-                style={[
-                  styles.toggleTrack,
-                  includeInHandicap ? styles.toggleTrackOn : styles.toggleTrackOff,
-                ]}>
-                <View
-                  style={[
-                    styles.toggleKnob,
-                    { backgroundColor: includeInHandicap ? colors.accentOn : colors.borderStrong },
-                  ]}
-                />
-              </SketchSurface>
-            </Pressable>
-          </View>
-
-          {includeInHandicap ? (
-          <View style={styles.field}>
-            <ThemedText type="caption">TEE & RATING</ThemedText>
-            <ThemedText style={styles.hint}>
-              * Optional for handicap calculation.
-            </ThemedText>
+          <View style={styles.teeField}>
             {tees.length > 0 ? (
               <ChipRow
                 styles={styles}
@@ -286,7 +222,8 @@ export default function NewRoundScreen() {
                 selectedKey={
                   tees.find(
                     (t) =>
-                      String(t.courseRating) === rating && String(t.slopeRating) === slope,
+                      String(t.courseRating) === rating &&
+                      String(t.slopeRating) === slope,
                   )?.id ?? null
                 }
                 onPick={(key) => {
@@ -296,88 +233,123 @@ export default function NewRoundScreen() {
               />
             ) : null}
             <View style={styles.ratingRow}>
-              <View style={styles.ratingCol}>
-                <ThemedText style={styles.subLabel}>TEE*</ThemedText>
-                <SketchSurface seed="new-tee-name" radius={8} style={styles.inputSurface}>
-                  <TextInput
-                    value={teeName}
-                    onChangeText={setTeeName}
-                    placeholder="Blue"
-                    placeholderTextColor={colors.textMuted}
-                    style={styles.input}
-                    returnKeyType="done"
-                  />
-                </SketchSurface>
-              </View>
-              <View style={styles.ratingCol}>
-                <ThemedText style={styles.subLabel}>RATING*</ThemedText>
-                <SketchSurface seed="new-rating" radius={8} style={styles.inputSurface}>
-                  <TextInput
-                    value={rating}
-                    onChangeText={setRating}
-                    placeholder="72.1"
-                    placeholderTextColor={colors.textMuted}
-                    style={styles.input}
-                    keyboardType="decimal-pad"
-                    returnKeyType="done"
-                  />
-                </SketchSurface>
-              </View>
-              <View style={styles.ratingCol}>
-                <ThemedText style={styles.subLabel}>SLOPE*</ThemedText>
-                <SketchSurface seed="new-slope" radius={8} style={styles.inputSurface}>
-                  <TextInput
-                    value={slope}
-                    onChangeText={setSlope}
-                    placeholder="113"
-                    placeholderTextColor={colors.textMuted}
-                    style={styles.input}
-                    keyboardType="number-pad"
-                    returnKeyType="done"
-                  />
-                </SketchSurface>
-              </View>
-            </View>
-          </View>
-          ) : null}
-
-          <View style={styles.field}>
-            <Pressable
-              style={styles.toggleRow}
-              onPress={() => setShare((v) => !v)}
-              accessibilityRole="switch"
-              accessibilityState={{ checked: share }}>
-              <ThemedText type="caption">SHARE WITH FRIENDS?</ThemedText>
-              <SketchSurface
-                seed="new-share-toggle"
-                radius={999}
-                fill={share ? colors.accent : colors.surface}
-                stroke={share ? colors.accent : colors.borderStrong}
-                grain={share}
-                style={[
-                  styles.toggleTrack,
-                  share ? styles.toggleTrackOn : styles.toggleTrackOff,
-                ]}>
-                <View
-                  style={[
-                    styles.toggleKnob,
-                    { backgroundColor: share ? colors.accentOn : colors.borderStrong },
-                  ]}
+              <SketchSurface seed="new-tee-name" radius={8} style={[styles.ratingCol, styles.inputSurface]}>
+                <TextInput
+                  value={teeName}
+                  onChangeText={setTeeName}
+                  placeholder="Tee"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.input}
+                  returnKeyType="done"
                 />
               </SketchSurface>
-            </Pressable>
-            <ThemedText style={styles.hint}>
-              {share
-                ? 'Friends can see this round in their Community feed.'
-                : 'Hidden from the Community feed.'}
-            </ThemedText>
+              <SketchSurface seed="new-rating" radius={8} style={[styles.ratingCol, styles.inputSurface]}>
+                <TextInput
+                  value={rating}
+                  onChangeText={setRating}
+                  placeholder="Rating"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.input}
+                  keyboardType="decimal-pad"
+                  returnKeyType="done"
+                />
+              </SketchSurface>
+              <SketchSurface seed="new-slope" radius={8} style={[styles.ratingCol, styles.inputSurface]}>
+                <TextInput
+                  value={slope}
+                  onChangeText={setSlope}
+                  placeholder="Slope"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.input}
+                  keyboardType="number-pad"
+                  returnKeyType="done"
+                />
+              </SketchSurface>
+            </View>
+            <ThemedText style={styles.hint}>Optional, used for handicap.</ThemedText>
           </View>
 
-          <View style={styles.field}>
-            <ThemedText type="caption">YOUR BAG</ThemedText>
-            <BagPicker value={bag} onChange={onBagChange} />
+          <View style={styles.essentialsRow}>
+            <View style={styles.dateCol}>
+              <ThemedText type="caption">DATE</ThemedText>
+              {Platform.OS === 'ios' ? (
+                <View style={styles.iosDateRow}>
+                  <DateTimePicker
+                    value={date}
+                    mode="date"
+                    display="compact"
+                    onChange={(_, d) => d && setDate(d)}
+                    maximumDate={new Date()}
+                    themeVariant="light"
+                    accentColor={colors.accent}
+                  />
+                </View>
+              ) : (
+                <>
+                  <Pressable onPress={() => setAndroidPickerOpen(true)}>
+                    <SketchSurface seed="new-date" radius={8} style={styles.input}>
+                      <ThemedText>{date.toLocaleDateString()}</ThemedText>
+                    </SketchSurface>
+                  </Pressable>
+                  {androidPickerOpen && (
+                    <DateTimePicker
+                      value={date}
+                      mode="date"
+                      display="default"
+                      onChange={(_, d) => {
+                        setAndroidPickerOpen(false);
+                        if (d) setDate(d);
+                      }}
+                      maximumDate={new Date()}
+                    />
+                  )}
+                </>
+              )}
+            </View>
+
+            <View style={styles.holesCol}>
+              <ThemedText type="caption">HOLES</ThemedText>
+              <SegmentedControl
+                seed="new-holes"
+                options={HOLE_OPTIONS.map((o) => ({ ...o }))}
+                value={String(holeCount)}
+                onChange={(v) => setHoleCount(Number(v) as 9 | 18)}
+              />
+            </View>
           </View>
 
+          <View style={styles.divider}>
+            <SketchDivider seed="new-options" />
+          </View>
+
+          <Collapsible title="ROUND OPTIONS" summary={optionsSummary}>
+            <SettingToggle
+              label="INCLUDE IN HANDICAP?"
+              value={includeInHandicap}
+              onChange={setIncludeInHandicap}
+              seed="new-handicap-toggle"
+            />
+
+            <SettingToggle
+              label="SHARE WITH FRIENDS?"
+              value={share}
+              onChange={setShare}
+              seed="new-share-toggle"
+              hint={
+                share
+                  ? 'Friends can see this round in their Community feed.'
+                  : 'Hidden from the Community feed.'
+              }
+            />
+
+            <View style={styles.subField}>
+              <ThemedText type="caption">YOUR BAG</ThemedText>
+              <BagPicker value={bag} onChange={onBagChange} />
+            </View>
+          </Collapsible>
+        </ScrollView>
+
+        <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.sm }]}>
           <Pressable
             disabled={!canSubmit}
             onPress={handleSubmit}
@@ -397,7 +369,7 @@ export default function NewRoundScreen() {
               </ThemedText>
             </SketchSurface>
           </Pressable>
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -470,6 +442,28 @@ const makeStyles = (colors: Palette) =>
     paddingTop: spacing.md,
     gap: spacing.xs,
   },
+  teeField: {
+    paddingTop: spacing.sm,
+    gap: spacing.xs,
+  },
+  subField: {
+    gap: spacing.xs,
+  },
+  essentialsRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingTop: spacing.md,
+  },
+  dateCol: {
+    gap: spacing.xs,
+  },
+  holesCol: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  divider: {
+    paddingTop: spacing.lg,
+  },
   inputSurface: {
     minHeight: 48,
   },
@@ -485,53 +479,31 @@ const makeStyles = (colors: Palette) =>
     fontSize: 13,
     color: colors.textMuted,
   },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  toggleTrack: {
-    width: 52,
-    height: 30,
-    justifyContent: 'center',
-  },
-  toggleTrackOn: {
-    alignItems: 'flex-end',
-  },
-  toggleTrackOff: {
-    alignItems: 'flex-start',
-  },
-  toggleKnob: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    marginHorizontal: 3,
-  },
   iosDateRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: spacing.xs,
   },
-  segmented: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  segment: {
-    flex: 1,
-    minHeight: 52,
-  },
-  segmentSurface: {
-    flex: 1,
-    minHeight: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   pressed: {
     opacity: 0.6,
   },
-  segmentLabelSelected: {
-    color: colors.accentOn,
+  suggestCard: {
+    marginTop: spacing.xs,
+  },
+  suggestRow: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  suggestRowDivided: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
+  suggestLabel: {
     fontFamily: fontFamily.serif,
+    fontSize: 15,
+    color: colors.textPrimary,
   },
   chipRow: {
     gap: spacing.sm,
@@ -556,20 +528,14 @@ const makeStyles = (colors: Palette) =>
   ratingRow: {
     flexDirection: 'row',
     gap: spacing.sm,
-    paddingTop: spacing.xs,
   },
   ratingCol: {
     flex: 1,
-    gap: spacing.xs,
   },
-  subLabel: {
-    fontSize: 11,
-    letterSpacing: 0.8,
-    color: colors.textMuted,
-    fontFamily: fontFamily.sans,
+  footer: {
+    paddingTop: spacing.sm,
   },
   ctaWrap: {
-    marginTop: spacing.xl,
     minHeight: 52,
   },
   cta: {

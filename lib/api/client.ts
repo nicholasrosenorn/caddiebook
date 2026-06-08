@@ -15,10 +15,12 @@ import type {
   IncomingRequestsResponse,
   LikeResponse,
   ProfileUpdate,
+  PublicProfile,
   PullResponse,
   PushResponse,
   RefreshResponse,
   RequestCountResponse,
+  RoundLikersResponse,
   SendRequestResponse,
   UserSearchResult,
   WireChange,
@@ -202,6 +204,17 @@ export function getFeed(cursor?: string, limit?: number): Promise<FeedResponse> 
 
 export function getFriendRound(ownerId: string, roundId: string): Promise<FriendRoundDetail> {
   return authedRequest<FriendRoundDetail>(`/community/rounds/${ownerId}/${roundId}`, 'GET');
+}
+
+export async function getRoundLikers(
+  ownerId: string,
+  roundId: string,
+): Promise<PublicProfile[]> {
+  const { likers } = await authedRequest<RoundLikersResponse>(
+    `/community/rounds/${ownerId}/${roundId}/likes`,
+    'GET',
+  );
+  return likers;
 }
 
 export function likeRound(ownerId: string, roundId: string): Promise<LikeResponse> {

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApproachTarget } from '@/components/approach-target';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
+import { GlassSurface } from '@/components/glass-surface';
 import { Scorecard } from '@/components/scorecard';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
@@ -288,12 +289,14 @@ export default function SummaryScreen() {
         hitSlop={10}
         accessibilityRole="button"
         accessibilityLabel="Round settings"
-        style={({ pressed }) => [
-          styles.settingsButton,
-          { top: insets.top + 8 },
-          pressed && styles.closeButtonPressed,
-        ]}>
-        <IconSymbol name="gearshape" size={18} color={colors.textPrimary} />
+        style={[styles.settingsButton, { top: insets.top + 8 }]}>
+        {({ pressed }) => (
+          <>
+            <GlassSurface borderRadius={18} />
+            {pressed && <View style={styles.buttonPressedOverlay} pointerEvents="none" />}
+            <IconSymbol name="gearshape" size={18} color={colors.textPrimary} />
+          </>
+        )}
       </Pressable>
 
       <Pressable
@@ -301,12 +304,14 @@ export default function SummaryScreen() {
         hitSlop={10}
         accessibilityRole="button"
         accessibilityLabel="Close summary"
-        style={({ pressed }) => [
-          styles.closeButton,
-          { top: insets.top + 8 },
-          pressed && styles.closeButtonPressed,
-        ]}>
-        <IconSymbol name="xmark" size={18} color={colors.textPrimary} />
+        style={[styles.closeButton, { top: insets.top + 8 }]}>
+        {({ pressed }) => (
+          <>
+            <GlassSurface borderRadius={18} />
+            {pressed && <View style={styles.buttonPressedOverlay} pointerEvents="none" />}
+            <IconSymbol name="xmark" size={18} color={colors.textPrimary} />
+          </>
+        )}
       </Pressable>
     </Screen>
   );
@@ -833,9 +838,7 @@ const makeStyles = (colors: Palette) =>
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 30,
@@ -846,14 +849,14 @@ const makeStyles = (colors: Palette) =>
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 30,
   },
-  closeButtonPressed: {
+  buttonPressedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 18,
     backgroundColor: colors.accentMuted,
   },
 });

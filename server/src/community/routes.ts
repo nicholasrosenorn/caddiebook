@@ -1,4 +1,4 @@
-import { and, eq, ilike, inArray, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, ne, or, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { db } from '../db/client';
@@ -16,6 +16,7 @@ import type {
   PublicProfile,
   Relation,
   RequestCountResponse,
+  RoundLikersResponse,
   SendRequestResponse,
   UserSearchResponse,
   UserSearchResult,
@@ -525,6 +526,30 @@ communityRoutes.get('/rounds/:ownerId/:roundId', async (c) => {
     goals: (goalsRes.rows[0] as FriendRoundDetail['goals']) ?? null,
   };
   return c.json(detail);
+});
+
+// GET /community/rounds/:ownerId/:roundId/likes — who liked it, newest first.
+communityRoutes.get('/rounds/:ownerId/:roundId/likes', async (c) => {
+  const me = c.get('userId');
+  const ownerId = c.req.param('ownerId');
+  const roundId = c.req.param('roundId');
+  const round = await loadShareableRound(me, ownerId, roundId);
+  if (!round) return c.json({ error: 'round not found' }, 404);
+
+  const rows = await db
+    .select({
+      id: users.id,
+      username: users.username,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      avatar: users.avatar,
+    })
+    .from(roundLikes)
+    .innerJoin(users, eq(users.id, roundLikes.likerId))
+    .where(and(eq(roundLikes.roundOwnerId, ownerId), eq(roundLikes.roundId, roundId)))
+    .orderBy(desc(roundLikes.createdAt));
+
+  return c.json<RoundLikersResponse>({ likers: rows.map(toPublicProfile) });
 });
 
 // POST /community/rounds/:ownerId/:roundId/like
