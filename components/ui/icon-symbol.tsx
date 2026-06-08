@@ -55,6 +55,8 @@ const MAPPING = {
   'person.badge.plus': 'person-add',
   'heart': 'favorite-border',
   'heart.fill': 'favorite',
+  'hand.thumbsup': 'thumb-up-off-alt',
+  'hand.thumbsup.fill': 'thumb-up',
 } as IconMapping;
 
 /**

@@ -14,6 +14,8 @@ import type {
   FriendsResponse,
   IncomingRequestsResponse,
   LikeResponse,
+  NotificationItem,
+  NotificationsResponse,
   ProfileUpdate,
   PublicProfile,
   PullResponse,
@@ -226,6 +228,14 @@ export function unlikeRound(ownerId: string, roundId: string): Promise<LikeRespo
 }
 
 // --- Notifications (authenticated) -----------------------------------------
+
+export async function listNotifications(): Promise<NotificationItem[]> {
+  const { notifications } = await authedRequest<NotificationsResponse>(
+    '/community/notifications',
+    'GET',
+  );
+  return notifications;
+}
 
 export async function registerPushToken(token: string, platform?: string): Promise<void> {
   await authedRequest('/notifications/token', 'POST', { token, platform });

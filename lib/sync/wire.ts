@@ -77,6 +77,23 @@ export type RequestCountResponse = { count: number };
 export type AcceptResponse = { ok: true; friend: PublicProfile };
 export type FriendsResponse = { friends: PublicProfile[] };
 
+// A single notification-feed entry. Derived on the fly (no stored read-state):
+// pending friend requests always sort first, then likes on my rounds and new
+// friendships by recency. `id` is a synthetic stable key for React lists; for a
+// friend_request it carries the underlying request uuid so it can be accepted.
+export type NotificationItem =
+  | { kind: 'friend_request'; id: string; requestId: string; createdAt: string; from: PublicProfile }
+  | {
+      kind: 'like';
+      id: string;
+      createdAt: string;
+      from: PublicProfile;
+      roundId: string;
+      courseName: string | null;
+    }
+  | { kind: 'friendship'; id: string; createdAt: string; from: PublicProfile };
+export type NotificationsResponse = { notifications: NotificationItem[] };
+
 // Hole/shot/putt rows travel snake_case so the client can reuse its row mappers.
 export type WireHole = {
   id: string;

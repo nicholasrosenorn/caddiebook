@@ -13,4 +13,10 @@ CREATE TABLE "round_share_notifications" (
 	CONSTRAINT "round_share_notifications_round_owner_id_round_id_pk" PRIMARY KEY("round_owner_id","round_id")
 );
 --> statement-breakpoint
-CREATE INDEX "push_tokens_user_idx" ON "push_tokens" USING btree ("user_id");
+CREATE INDEX "push_tokens_user_idx" ON "push_tokens" USING btree ("user_id");--> statement-breakpoint
+-- Backfill: mark every already-completed round as "already notified" so the
+-- first sync after deploy can't fire a notification storm for historical rounds.
+-- Only new completions (no ledger row) will notify going forward.
+INSERT INTO "round_share_notifications" ("round_owner_id", "round_id")
+SELECT "user_id", "id" FROM "rounds" WHERE "completed_at" IS NOT NULL
+ON CONFLICT DO NOTHING;

@@ -23,7 +23,7 @@ export default function CommunityStackLayout() {
         }}
       />
       <Stack.Screen name="add-friend" options={{ title: 'Add friends' }} />
-      <Stack.Screen name="requests" options={{ title: 'Friend requests' }} />
+      <Stack.Screen name="requests" options={{ title: 'Notifications' }} />
     </Stack>
   );
 }

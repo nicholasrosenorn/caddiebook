@@ -13,6 +13,7 @@ import type {
   FriendsResponse,
   IncomingRequestsResponse,
   LikeResponse,
+  NotificationsResponse,
   RequestCountResponse,
   SendRequestResponse,
   UserSearchResponse,
@@ -184,6 +185,55 @@ describe('community', () => {
     // Both now see each other in the friends list.
     const friends = (await (await authed(a, '/community/friends')).json()) as FriendsResponse;
     expect(friends.friends.map((f) => f.id)).toContain(b);
+  });
+
+  it('builds the notification feed: pending requests first, then likes + friendships', async () => {
+    const me = await makeUser('nadia');
+    const requester = await makeUser('oscar'); // sends me a pending request
+    const friend = await makeUser('peggy'); // becomes my friend + likes my round
+    const meHandle = (await db.select().from(users).where(eq(users.id, me)).limit(1))[0]!.username!;
+    const friendHandle = (await db.select().from(users).where(eq(users.id, friend)).limit(1))[0]!
+      .username!;
+
+    // requester → me: a pending incoming request.
+    await authed(requester, '/community/friend-requests', 'POST', { username: meHandle });
+
+    // me ↔ friend: become friends (I send, friend accepts → friendship for both).
+    await authed(me, '/community/friend-requests', 'POST', { username: friendHandle });
+    const inc = (await (
+      await authed(friend, '/community/friend-requests/incoming')
+    ).json()) as IncomingRequestsResponse;
+    await authed(friend, `/community/friend-requests/${inc.requests[0]!.id}/accept`, 'POST');
+
+    // friend likes my shared round.
+    const myRound = await seedRound(me);
+    await authed(friend, `/community/rounds/${me}/${myRound}/like`, 'POST');
+
+    const notifs = (await (
+      await authed(me, '/community/notifications')
+    ).json()) as NotificationsResponse;
+    const kinds = notifs.notifications.map((n) => n.kind);
+
+    // Pending request is always first.
+    expect(notifs.notifications[0]!.kind).toBe('friend_request');
+    expect(notifs.notifications[0]!.from.id).toBe(requester);
+    // Both a like (from the friend, on my round) and a friendship are present.
+    expect(kinds).toContain('like');
+    expect(kinds).toContain('friendship');
+    const like = notifs.notifications.find((n) => n.kind === 'like')!;
+    expect(like.kind === 'like' && like.from.id).toBe(friend);
+    expect(like.kind === 'like' && like.roundId).toBe(myRound);
+    const friendship = notifs.notifications.find((n) => n.kind === 'friendship')!;
+    expect(friendship.from.id).toBe(friend);
+
+    // I never get notified of my own like on my own round.
+    await authed(me, `/community/rounds/${me}/${myRound}/like`, 'POST');
+    const after = (await (
+      await authed(me, '/community/notifications')
+    ).json()) as NotificationsResponse;
+    expect(
+      after.notifications.some((n) => n.kind === 'like' && n.from.id === me),
+    ).toBe(false);
   });
 
   it('rejects self-requests and unknown users', async () => {

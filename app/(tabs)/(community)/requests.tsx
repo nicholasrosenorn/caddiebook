@@ -8,19 +8,19 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/icon-symbol';
 import { fontFamily, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
-import { acceptFriendRequest, declineFriendRequest, listIncomingRequests } from '@/lib/api/client';
-import type { IncomingRequest } from '@/lib/sync/wire';
+import { acceptFriendRequest, declineFriendRequest, listNotifications } from '@/lib/api/client';
+import type { NotificationItem } from '@/lib/sync/wire';
 
-export default function RequestsScreen() {
+export default function NotificationsScreen() {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [requests, setRequests] = useState<IncomingRequest[] | null>(null);
+  const [items, setItems] = useState<NotificationItem[] | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setRequests(await listIncomingRequests());
+      setItems(await listNotifications());
     } catch {
-      setRequests([]);
+      setItems([]);
     }
   }, []);
 
@@ -30,27 +30,33 @@ export default function RequestsScreen() {
     }, [load]),
   );
 
-  const onAccept = useCallback(async (id: string) => {
-    setRequests((prev) => prev?.filter((r) => r.id !== id) ?? null);
-    try {
-      await acceptFriendRequest(id);
-    } catch {
-      Alert.alert('Could not accept', 'Please try again.');
-      load();
-    }
-  }, [load]);
+  const onAccept = useCallback(
+    async (id: string, requestId: string) => {
+      setItems((prev) => prev?.filter((r) => r.id !== id) ?? null);
+      try {
+        await acceptFriendRequest(requestId);
+      } catch {
+        Alert.alert('Could not accept', 'Please try again.');
+        load();
+      }
+    },
+    [load],
+  );
 
-  const onDecline = useCallback(async (id: string) => {
-    setRequests((prev) => prev?.filter((r) => r.id !== id) ?? null);
-    try {
-      await declineFriendRequest(id);
-    } catch {
-      Alert.alert('Could not decline', 'Please try again.');
-      load();
-    }
-  }, [load]);
+  const onDecline = useCallback(
+    async (id: string, requestId: string) => {
+      setItems((prev) => prev?.filter((r) => r.id !== id) ?? null);
+      try {
+        await declineFriendRequest(requestId);
+      } catch {
+        Alert.alert('Could not decline', 'Please try again.');
+        load();
+      }
+    },
+    [load],
+  );
 
-  if (requests === null) {
+  if (items === null) {
     return (
       <Screen>
         <View style={styles.empty}>
@@ -63,13 +69,13 @@ export default function RequestsScreen() {
   return (
     <Screen padded={false}>
       <FlatList
-        data={requests}
+        data={items}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <ThemedText type="muted">No pending requests.</ThemedText>
+            <ThemedText type="muted">No notifications yet.</ThemedText>
           </View>
         }
         renderItem={({ item }) => (
@@ -81,34 +87,51 @@ export default function RequestsScreen() {
             />
             <View style={styles.rowText}>
               <ThemedText style={styles.handle}>@{item.from.username}</ThemedText>
-              {item.from.firstName ? (
-                <ThemedText type="muted" numberOfLines={1}>
-                  {item.from.firstName}
-                  {item.from.lastName ? ` ${item.from.lastName}` : ''}
-                </ThemedText>
-              ) : null}
+              <ThemedText type="muted" numberOfLines={1}>
+                {item.kind === 'friend_request'
+                  ? item.from.firstName
+                    ? `${item.from.firstName}${item.from.lastName ? ` ${item.from.lastName}` : ''}`
+                    : 'wants to be friends'
+                  : item.kind === 'like'
+                    ? item.courseName
+                      ? `liked your round at ${item.courseName}`
+                      : 'liked your round'
+                    : "you're now friends"}
+              </ThemedText>
             </View>
-            <View style={styles.actions}>
-              <Pressable onPress={() => onAccept(item.id)} style={({ pressed }) => pressed && styles.pressed}>
-                <SketchSurface
-                  seed={`req-accept-${item.id}`}
-                  fill={colors.accent}
-                  stroke={colors.accent}
-                  grain
-                  style={styles.actionBtn}>
-                  <ThemedText style={styles.actionLabel}>Accept</ThemedText>
-                </SketchSurface>
-              </Pressable>
-              <Pressable onPress={() => onDecline(item.id)} style={({ pressed }) => pressed && styles.pressed}>
-                <SketchSurface
-                  seed={`req-decline-${item.id}`}
-                  fill={colors.surface}
-                  stroke={colors.borderStrong}
-                  style={styles.actionBtn}>
-                  <ThemedText style={styles.declineLabel}>Decline</ThemedText>
-                </SketchSurface>
-              </Pressable>
-            </View>
+            {item.kind === 'friend_request' ? (
+              <View style={styles.actions}>
+                <Pressable
+                  onPress={() => onAccept(item.id, item.requestId)}
+                  style={({ pressed }) => pressed && styles.pressed}>
+                  <SketchSurface
+                    seed={`req-accept-${item.id}`}
+                    fill={colors.accent}
+                    stroke={colors.accent}
+                    grain
+                    style={styles.actionBtn}>
+                    <ThemedText style={styles.actionLabel}>Accept</ThemedText>
+                  </SketchSurface>
+                </Pressable>
+                <Pressable
+                  onPress={() => onDecline(item.id, item.requestId)}
+                  style={({ pressed }) => pressed && styles.pressed}>
+                  <SketchSurface
+                    seed={`req-decline-${item.id}`}
+                    fill={colors.surface}
+                    stroke={colors.borderStrong}
+                    style={styles.actionBtn}>
+                    <ThemedText style={styles.declineLabel}>Decline</ThemedText>
+                  </SketchSurface>
+                </Pressable>
+              </View>
+            ) : (
+              <IconSymbol
+                name={item.kind === 'like' ? 'heart.fill' : 'person.2.fill'}
+                size={18}
+                color={colors.textMuted}
+              />
+            )}
           </View>
         )}
       />

@@ -1,4 +1,3 @@
-import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
@@ -9,6 +8,7 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 
 import { EdgeSwipeOpener } from '@/components/edge-swipe-opener';
 import { Screen } from '@/components/screen';
@@ -19,10 +19,10 @@ import { fontFamily, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
 import { getFeed, getIncomingRequestCount, likeRound, unlikeRound } from '@/lib/api/client';
 import { wireHoleToHole } from '@/lib/community/map';
+import { formatToPar } from '@/lib/lifetime-stats';
+import { computeRoundSummary, formatPct, totalPar } from '@/lib/stats';
 import { useSync } from '@/lib/sync/provider';
 import type { FeedRound } from '@/lib/sync/wire';
-import { computeRoundSummary, formatPct, totalPar } from '@/lib/stats';
-import { formatToPar } from '@/lib/lifetime-stats';
 
 export default function CommunityScreen() {
   const colors = useColors();
@@ -130,11 +130,7 @@ export default function CommunityScreen() {
           accessibilityLabel="Friend requests">
           <View>
             <IconSymbol name="bell" size={24} color={colors.textPrimary} />
-            {badge > 0 ? (
-              <View style={styles.badge}>
-                <ThemedText style={styles.badgeText}>{badge > 9 ? '9+' : badge}</ThemedText>
-              </View>
-            ) : null}
+            {badge > 0 ? <View style={styles.badge} /> : null}
           </View>
         </Pressable>
       </View>
@@ -246,13 +242,15 @@ function FeedCard({
           <ThemedText type="subtitle" numberOfLines={1} style={styles.course}>
             {item.courseName}
           </ThemedText>
-          <ThemedText type="muted">{formatDate(item.datePlayed)}</ThemedText>
+          <ThemedText type="caption" style={styles.date}>{formatDate(item.datePlayed)}</ThemedText>
         </View>
 
         <View style={styles.scoreRow}>
           <ThemedText style={styles.toPar}>{toPar}</ThemedText>
           {played ? (
-            <ThemedText style={styles.gross}>{summary.totalScore}</ThemedText>
+            <View style={styles.grossBlock}>
+              <ThemedText style={styles.gross}>{summary.totalScore}</ThemedText>
+            </View>
           ) : null}
         </View>
 
@@ -268,7 +266,7 @@ function FeedCard({
               hitSlop={8}
               style={({ pressed }) => pressed && styles.pressed}>
               <IconSymbol
-                name={item.likedByMe ? 'heart.fill' : 'heart'}
+                name={item.likedByMe ? 'hand.thumbsup.fill' : 'hand.thumbsup'}
                 size={20}
                 color={item.likedByMe ? colors.accent : colors.textMuted}
               />
@@ -312,7 +310,7 @@ function formatDate(iso: string | null): string {
   if (parts.length !== 3 || parts.some(Number.isNaN)) return iso;
   const [y, m, d] = parts;
   const date = new Date(y, m - 1, d);
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 const makeStyles = (colors: Palette) =>
@@ -343,23 +341,12 @@ const makeStyles = (colors: Palette) =>
     },
     badge: {
       position: 'absolute',
-      top: -5,
-      right: -7,
-      minWidth: 16,
-      height: 16,
-      borderRadius: 8,
-      backgroundColor: colors.accent,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: 4,
-    },
-    badgeText: {
-      color: colors.accentOn,
-      fontSize: 10,
-      lineHeight: 16,
-      textAlign: 'center',
-      includeFontPadding: false,
-      fontFamily: fontFamily.serifBold,
+      top: -2,
+      right: -3,
+      width: 9,
+      height: 9,
+      borderRadius: 4.5,
+      backgroundColor: colors.danger,
     },
     list: {
       paddingHorizontal: spacing.md,
@@ -416,10 +403,21 @@ const makeStyles = (colors: Palette) =>
       lineHeight: 44,
       color: colors.accent,
     },
+    grossBlock: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: 4,
+    },
     gross: {
       fontFamily: fontFamily.serif,
       fontSize: 20,
       color: colors.textSecondary,
+    },
+    grossLabel: {
+      color: colors.textMuted,
+    },
+    date: {
+      fontSize: 10,
     },
     cardStats: {
       flexDirection: 'row',

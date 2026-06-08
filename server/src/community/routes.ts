@@ -13,6 +13,8 @@ import type {
   FriendsResponse,
   IncomingRequestsResponse,
   LikeResponse,
+  NotificationItem,
+  NotificationsResponse,
   PublicProfile,
   Relation,
   RequestCountResponse,
@@ -202,6 +204,103 @@ communityRoutes.get('/friend-requests/count', async (c) => {
     .from(friendRequests)
     .where(and(eq(friendRequests.toUserId, me), eq(friendRequests.status, 'pending')));
   return c.json<RequestCountResponse>({ count: rows[0]?.n ?? 0 });
+});
+
+// GET /community/notifications — derived feed (no stored read-state). Pending
+// incoming requests always come first, then likes on my rounds and new
+// friendships interleaved by recency, capped at the 20 most recent.
+const NOTIFICATIONS_LIMIT = 20;
+communityRoutes.get('/notifications', async (c) => {
+  const me = c.get('userId');
+
+  const [reqRows, likeRes, friendRes] = await Promise.all([
+    db
+      .select({
+        id: friendRequests.id,
+        createdAt: friendRequests.createdAt,
+        uId: users.id,
+        username: users.username,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        avatar: users.avatar,
+      })
+      .from(friendRequests)
+      .innerJoin(users, eq(users.id, friendRequests.fromUserId))
+      .where(and(eq(friendRequests.toUserId, me), eq(friendRequests.status, 'pending')))
+      .orderBy(desc(friendRequests.createdAt)),
+    // Likes others placed on my (non-deleted) rounds. Skip my own likes.
+    pool.query(
+      `SELECT rl.round_id, rl.created_at, r.course_name,
+              u.id AS liker_id, u.username, u.first_name, u.last_name, u.avatar
+       FROM round_likes rl
+       JOIN users u ON u.id = rl.liker_id
+       JOIN rounds r ON r.user_id = rl.round_owner_id AND r.id = rl.round_id
+         AND r.deleted_at IS NULL
+       WHERE rl.round_owner_id = $1 AND rl.liker_id <> $1
+       ORDER BY rl.created_at DESC
+       LIMIT ${NOTIFICATIONS_LIMIT}`,
+      [me],
+    ),
+    // Friendships involving me; the other party is the non-me side of the pair.
+    pool.query(
+      `SELECT CASE WHEN f.user_low = $1 THEN f.user_high ELSE f.user_low END AS other_id,
+              f.created_at, u.username, u.first_name, u.last_name, u.avatar
+       FROM friendships f
+       JOIN users u ON u.id = CASE WHEN f.user_low = $1 THEN f.user_high ELSE f.user_low END
+       WHERE f.user_low = $1 OR f.user_high = $1
+       ORDER BY f.created_at DESC
+       LIMIT ${NOTIFICATIONS_LIMIT}`,
+      [me],
+    ),
+  ]);
+
+  const requests: NotificationItem[] = reqRows.map((r) => ({
+    kind: 'friend_request',
+    id: `req:${r.id}`,
+    requestId: r.id,
+    createdAt: r.createdAt.toISOString(),
+    from: toPublicProfile({
+      id: r.uId,
+      username: r.username,
+      firstName: r.firstName,
+      lastName: r.lastName,
+      avatar: r.avatar,
+    }),
+  }));
+
+  const likes: NotificationItem[] = likeRes.rows.map((r) => ({
+    kind: 'like',
+    id: `like:${r.round_id}:${r.liker_id}`,
+    createdAt: new Date(r.created_at).toISOString(),
+    from: toPublicProfile({
+      id: r.liker_id,
+      username: r.username,
+      firstName: r.first_name,
+      lastName: r.last_name,
+      avatar: r.avatar,
+    }),
+    roundId: r.round_id,
+    courseName: r.course_name ?? null,
+  }));
+
+  const friends: NotificationItem[] = friendRes.rows.map((r) => ({
+    kind: 'friendship',
+    id: `friend:${r.other_id}`,
+    createdAt: new Date(r.created_at).toISOString(),
+    from: toPublicProfile({
+      id: r.other_id,
+      username: r.username,
+      firstName: r.first_name,
+      lastName: r.last_name,
+      avatar: r.avatar,
+    }),
+  }));
+
+  const rest = [...likes, ...friends].sort((a, b) =>
+    a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0,
+  );
+  const notifications = [...requests, ...rest].slice(0, NOTIFICATIONS_LIMIT);
+  return c.json<NotificationsResponse>({ notifications });
 });
 
 // POST /community/friend-requests/:id/accept
