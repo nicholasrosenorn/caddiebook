@@ -180,3 +180,10 @@ export type LikeResponse = { likeCount: number; likedByMe: boolean };
 
 // Who liked a round, most-recent first.
 export type RoundLikersResponse = { likers: PublicProfile[] };
+
+// --- Notifications --------------------------------------------------------
+
+// Register/unregister a device's Expo push token. `platform` is 'ios'|'android'
+// (free-form; only stored for diagnostics).
+export type RegisterPushTokenRequest = { token: string; platform?: string };
+export type UnregisterPushTokenRequest = { token: string };

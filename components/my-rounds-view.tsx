@@ -51,6 +51,8 @@ export function MyRoundsView({ header }: { header?: ReactNode }) {
             text: 'Delete',
             style: 'destructive',
             onPress: async () => {
+              // deleteRound tombstones the round; the mutation-event auto-sync
+              // (lib/sync/provider) pushes it so it also leaves the Community feed.
               await deleteRound(round.id);
               await load();
             },
@@ -111,6 +113,10 @@ export function MyRoundsView({ header }: { header?: ReactNode }) {
         data={rounds}
         keyExtractor={(item) => item.id}
         ListHeaderComponent={header ? <>{header}</> : null}
+        // Matches the Progress ScrollView: both views stay mounted, so pin the
+        // top inset behavior to "never" on both to stop iOS auto-adjusting only
+        // one of them (which shifted the header when switching tabs).
+        contentInsetAdjustmentBehavior="never"
         contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + spacing.md }]}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         renderItem={({ item }) => (

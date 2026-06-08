@@ -330,16 +330,16 @@ const makeStyles = (colors: Palette) =>
       maxWidth: 280,
     },
     headerActions: {
-      flexDirection: 'row',
+      width: 32,
+      height: 32,
       alignItems: 'center',
-      gap: spacing.md,
-      paddingRight: spacing.xs,
+      justifyContent: 'center',
     },
     headerActionsLeft: {
-      flexDirection: 'row',
+      width: 32,
+      height: 32,
       alignItems: 'center',
-      gap: spacing.md,
-      paddingLeft: spacing.xs,
+      justifyContent: 'center',
     },
     badge: {
       position: 'absolute',

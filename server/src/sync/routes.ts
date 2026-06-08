@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 
 import { requireAuth, type AppEnv } from '../auth/middleware';
 import { rateLimit } from '../middleware/rate-limit';
+import { dispatchRoundShareNotifications } from '../notifications/dispatch';
 import type { PushRequest } from '../wire';
 import { DEFAULT_PULL_LIMIT, pullChanges } from './pull';
 import { applyPush } from './push';
@@ -23,7 +24,12 @@ syncRoutes.post('/push', async (c) => {
   if (!body || !Array.isArray(body.changes)) {
     return c.json({ error: 'changes[] required' }, 400);
   }
-  const result = await applyPush(c.get('userId'), body.changes);
+  const userId = c.get('userId');
+  const result = await applyPush(userId, body.changes);
+  // Fire-and-forget: a just-completed + shared round notifies the owner's
+  // friends. The ledger inside makes this idempotent across re-syncs, and not
+  // awaiting keeps sync latency unaffected.
+  void dispatchRoundShareNotifications(userId);
   return c.json(result);
 });
 

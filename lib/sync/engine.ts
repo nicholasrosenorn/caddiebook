@@ -95,6 +95,30 @@ export function cancelRetry(): void {
   if (state.nextRetryAt !== null) setState({ nextRetryAt: null });
 }
 
+// Debounced auto-sync. Every local write (db/mutation-events) calls this; rapid
+// tap-entry (score grid, putts) coalesces into one push ~1.5s after activity
+// settles. Session-agnostic — the provider only wires it up while signed in, so
+// it never fires a sign-out-inducing AuthError when logged out.
+const AUTO_SYNC_DEBOUNCE_MS = 1_500;
+let autoSyncTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function scheduleSync(): void {
+  if (autoSyncTimer) clearTimeout(autoSyncTimer);
+  autoSyncTimer = setTimeout(() => {
+    autoSyncTimer = null;
+    void syncNow();
+  }, AUTO_SYNC_DEBOUNCE_MS);
+}
+
+// Drop a pending debounced sync (on sign-out and when backgrounding — foreground
+// re-drives a full sync).
+export function cancelScheduledSync(): void {
+  if (autoSyncTimer) {
+    clearTimeout(autoSyncTimer);
+    autoSyncTimer = null;
+  }
+}
+
 // Push local changes then pull remote ones. Concurrent calls coalesce onto the
 // in-flight run. Network/offline errors surface as status 'error' and schedule a
 // backoff retry (rows stay dirty); only an unrecoverable AuthError forces sign-out.

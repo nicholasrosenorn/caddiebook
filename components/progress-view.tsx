@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 
 import { ApproachTarget } from '@/components/approach-target';
@@ -251,7 +251,12 @@ export function ProgressView({ header }: { header?: ReactNode }) {
 
   if (!data) {
     return (
-      <View style={[styles.flex, styles.loadingPad]}>{header}</View>
+      <View style={[styles.flex, styles.loadingPad]}>
+        {header}
+        <View style={styles.loadingSpinner}>
+          <ActivityIndicator size="large" color={colors.accent} />
+        </View>
+      </View>
     );
   }
 
@@ -261,6 +266,11 @@ export function ProgressView({ header }: { header?: ReactNode }) {
     <View style={styles.flex}>
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + spacing.lg }]}
+        // Both Progress and My Rounds stay mounted together, so each has its own
+        // scroll view. iOS only auto-adjusts the top content inset of one of
+        // several coexisting scroll views, which made the header jump vertically
+        // when switching tabs — pin both to "never" so they line up exactly.
+        contentInsetAdjustmentBehavior="never"
         showsVerticalScrollIndicator={false}>
         {header}
 
@@ -955,6 +965,11 @@ const makeStyles = (colors: Palette) =>
   loadingPad: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
+  },
+  loadingSpinner: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     paddingHorizontal: spacing.md,

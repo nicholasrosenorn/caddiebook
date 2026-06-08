@@ -164,3 +164,8 @@ export type LikeResponse = { likeCount: number; likedByMe: boolean };
 
 // Who liked a round, most-recent first.
 export type RoundLikersResponse = { likers: PublicProfile[] };
+
+// --- Notifications --------------------------------------------------------
+
+export type RegisterPushTokenRequest = { token: string; platform?: string };
+export type UnregisterPushTokenRequest = { token: string };

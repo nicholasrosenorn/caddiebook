@@ -1,4 +1,5 @@
 import { getDb } from './client';
+import { emitLocalMutation } from './mutation-events';
 import type {
   CommonMiss,
   Course,
@@ -138,6 +139,7 @@ export async function createRound(input: CreateRoundInput): Promise<string> {
       );
     }
   });
+  emitLocalMutation();
   return id;
 }
 
@@ -175,6 +177,7 @@ export async function setRoundCompletedAt(
     completedAt,
     id,
   ]);
+  emitLocalMutation();
 }
 
 export async function setRoundIncludeInHandicap(
@@ -186,6 +189,7 @@ export async function setRoundIncludeInHandicap(
     include ? 1 : 0,
     id,
   ]);
+  emitLocalMutation();
 }
 
 // Toggle whether the round appears in friends' Community feed (0 = shared).
@@ -198,6 +202,7 @@ export async function setRoundExcludeFromSharing(
     exclude ? 1 : 0,
     id,
   ]);
+  emitLocalMutation();
 }
 
 // Update the per-round rating/slope snapshot used for the handicap differential.
@@ -212,6 +217,7 @@ export async function setRoundRatingSlope(
     `UPDATE rounds SET course_rating = ?, slope_rating = ?, ${TOUCH} WHERE id = ?;`,
     [courseRating, slopeRating, id],
   );
+  emitLocalMutation();
 }
 
 // Soft-delete the round and cascade to its children. The FK ON DELETE CASCADE
@@ -232,6 +238,7 @@ export async function deleteRound(id: string): Promise<void> {
       );
     }
   });
+  emitLocalMutation();
 }
 
 // --- Saved courses + tees (for handicap rating/slope autofill) -------------
@@ -299,6 +306,7 @@ export async function findOrCreateCourse(name: string): Promise<string> {
     `INSERT INTO courses (id, name, updated_at, dirty) VALUES (?, ?, datetime('now'), 1);`,
     [id, trimmed],
   );
+  emitLocalMutation();
   return id;
 }
 
@@ -318,6 +326,7 @@ export async function createTee(input: CreateTeeInput): Promise<string> {
      VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 1);`,
     [id, input.courseId, input.name.trim(), input.courseRating, input.slopeRating, input.par ?? null],
   );
+  emitLocalMutation();
   return id;
 }
 
@@ -409,6 +418,7 @@ export async function updateHole(
     `UPDATE holes SET ${setClause}, ${TOUCH} WHERE round_id = ? AND hole_number = ?;`,
     [...(values as (string | number | null)[]), roundId, holeNumber],
   );
+  emitLocalMutation();
 }
 
 type ShotRow = {
@@ -470,6 +480,7 @@ export async function upsertShot(input: UpsertShotInput): Promise<string> {
       ],
     );
   });
+  emitLocalMutation();
   return id;
 }
 
@@ -484,6 +495,7 @@ export async function deleteShot(
      WHERE round_id = ? AND hole_number = ? AND shot_type = ? AND deleted_at IS NULL;`,
     [roundId, holeNumber, shotType],
   );
+  emitLocalMutation();
 }
 
 export async function getShotsForRound(roundId: string): Promise<Shot[]> {
@@ -578,6 +590,7 @@ export async function createPutt(input: CreatePuttInput): Promise<string> {
     );
     await syncHolePuttsCount(db, input.roundId, input.holeNumber);
   });
+  emitLocalMutation();
   return id;
 }
 
@@ -592,6 +605,7 @@ export async function deletePutt(id: string): Promise<void> {
     await db.runAsync(`UPDATE putts SET ${SOFT_DELETE} WHERE id = ?;`, [id]);
     await syncHolePuttsCount(db, row.round_id, row.hole_number);
   });
+  emitLocalMutation();
 }
 
 export async function getPuttsForRound(roundId: string): Promise<Putt[]> {
@@ -728,6 +742,7 @@ export async function upsertReview(input: UpsertReviewInput): Promise<void> {
       ],
     );
   }
+  emitLocalMutation();
 }
 
 // --- Pre-round goals -------------------------------------------------------
@@ -791,6 +806,7 @@ export async function upsertGoals(input: UpsertGoalsInput): Promise<void> {
       [uuid(), input.roundId, input.execution, input.strategic, input.mental],
     );
   }
+  emitLocalMutation();
 }
 
 // --- App settings (global, not per-round) ---------------------------------
@@ -822,6 +838,7 @@ export async function setBag(clubs: string[]): Promise<void> {
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, ${TOUCH};`,
     [BAG_KEY, JSON.stringify(clubs)],
   );
+  emitLocalMutation();
 }
 
 const CLUB_YARDAGES_KEY = 'club_yardages';
@@ -866,6 +883,7 @@ export async function setClubYardage(club: string, yds: number | null): Promise<
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, ${TOUCH};`,
     [CLUB_YARDAGES_KEY, JSON.stringify(map)],
   );
+  emitLocalMutation();
 }
 
 // Generic string-valued setting (key/value), for small UI prefs like the wedge
@@ -894,6 +912,9 @@ export async function setSetting(key: string, value: string): Promise<void> {
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now'), dirty = ?;`,
     [key, value, dirty, dirty],
   );
+  // Local-only keys (sync cursor/timestamp) must not trigger a sync — that would
+  // loop. Only a syncable write announces a mutation.
+  if (dirty === 1) emitLocalMutation();
 }
 
 // --- Journal (standalone, not per-round) -----------------------------------
@@ -947,6 +968,7 @@ export async function createJournalEntry(input: {
     `INSERT INTO journal_entries (id, tag, body) VALUES (?, ?, ?);`,
     [id, input.tag, input.body ?? null],
   );
+  emitLocalMutation();
   return id;
 }
 
@@ -973,6 +995,7 @@ export async function updateJournalEntry(
     `UPDATE journal_entries SET ${sets.join(', ')} WHERE id = ?;`,
     [...values, id],
   );
+  emitLocalMutation();
 }
 
 export async function deleteJournalEntry(id: string): Promise<void> {
@@ -980,6 +1003,7 @@ export async function deleteJournalEntry(id: string): Promise<void> {
   await db.runAsync(`UPDATE journal_entries SET ${SOFT_DELETE} WHERE id = ? AND deleted_at IS NULL;`, [
     id,
   ]);
+  emitLocalMutation();
 }
 
 const WEDGE_PARTIALS_KEY = 'wedge_partials';

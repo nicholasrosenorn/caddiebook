@@ -224,3 +224,13 @@ export function likeRound(ownerId: string, roundId: string): Promise<LikeRespons
 export function unlikeRound(ownerId: string, roundId: string): Promise<LikeResponse> {
   return authedRequest<LikeResponse>(`/community/rounds/${ownerId}/${roundId}/like`, 'DELETE');
 }
+
+// --- Notifications (authenticated) -----------------------------------------
+
+export async function registerPushToken(token: string, platform?: string): Promise<void> {
+  await authedRequest('/notifications/token', 'POST', { token, platform });
+}
+
+export async function unregisterPushToken(token: string): Promise<void> {
+  await authedRequest('/notifications/token', 'DELETE', { token });
+}

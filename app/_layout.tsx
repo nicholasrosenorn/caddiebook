@@ -4,7 +4,8 @@ import {
   useFonts,
 } from '@expo-google-fonts/fraunces';
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import * as Notifications from 'expo-notifications';
+import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -35,6 +36,19 @@ function Navigation() {
   const colors = useColors();
   const { themeId } = useTheme();
   const isDark = themes[themeId].dark ?? false;
+
+  // Deep-link from a tapped push notification. useLastNotificationResponse covers
+  // both a cold start (app launched by the tap) and a warm tap. The payload's
+  // `url` is set server-side (currently the Community tab).
+  const notificationResponse = Notifications.useLastNotificationResponse();
+  useEffect(() => {
+    const url = notificationResponse?.notification.request.content.data?.url;
+    if (typeof url === 'string') {
+      // Typed routes can't statically know a runtime string; the URL is
+      // server-controlled and always an in-app path.
+      router.navigate(url as Parameters<typeof router.navigate>[0]);
+    }
+  }, [notificationResponse]);
 
   const navigationTheme = {
     ...DefaultTheme,

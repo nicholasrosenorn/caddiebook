@@ -279,6 +279,43 @@ export const roundLikes = pgTable(
   }),
 );
 
+// --- Notifications --------------------------------------------------------
+//
+// Also NOT synced (server-owned). Push notifications are sent through Expo's
+// push service when a friend's round becomes completed + shared.
+
+// One row per device push token. `token` (the Expo push token) is globally
+// unique, so a token re-registering under a different account simply reassigns
+// ownership (ON CONFLICT (token) DO UPDATE).
+export const pushTokens = pgTable(
+  'push_tokens',
+  {
+    token: text('token').primaryKey(),
+    userId: uuid('user_id').notNull(),
+    platform: text('platform'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byUser: index('push_tokens_user_idx').on(t.userId),
+  }),
+);
+
+// Idempotency ledger for the "friend finished a round" push: the presence of a
+// row means we've already notified for that (owner, round), so re-syncing the
+// same completed round never re-fires the notification.
+export const roundShareNotifications = pgTable(
+  'round_share_notifications',
+  {
+    roundOwnerId: uuid('round_owner_id').notNull(),
+    roundId: text('round_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.roundOwnerId, t.roundId] }),
+  }),
+);
+
 export const schema = {
   rounds,
   courses,
@@ -295,4 +332,6 @@ export const schema = {
   friendRequests,
   friendships,
   roundLikes,
+  pushTokens,
+  roundShareNotifications,
 };
