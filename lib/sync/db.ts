@@ -147,9 +147,17 @@ export async function applyServerRow(table: SyncTable, row: WireRow): Promise<vo
   const cols = spec.columns.filter((c) => Object.prototype.hasOwnProperty.call(row, c));
   const placeholders = cols.map(() => '?').join(', ');
   const values = cols.map((c) => row[c] ?? null);
-  // Pulled rows are authoritative → land them clean (dirty = 0).
+  const setClause = [
+    ...cols.filter((c) => c !== spec.idColumn).map((c) => `${c} = excluded.${c}`),
+    'dirty = 0',
+  ].join(', ');
+  // Pulled rows are authoritative → land them clean (dirty = 0). Use an upsert,
+  // NOT INSERT OR REPLACE: REPLACE deletes the conflicting row first, which would
+  // cascade-delete a round's holes/shots/putts through the ON DELETE CASCADE
+  // foreign keys (a round-level edit echoes back on pull and wiped the children).
   await db.runAsync(
-    `INSERT OR REPLACE INTO ${table} (${cols.join(', ')}, dirty) VALUES (${placeholders}, 0);`,
+    `INSERT INTO ${table} (${cols.join(', ')}, dirty) VALUES (${placeholders}, 0)
+     ON CONFLICT(${spec.idColumn}) DO UPDATE SET ${setClause};`,
     values as (string | number | null)[],
   );
 }

@@ -2,14 +2,32 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
+import { Avatar } from '@/components/avatar';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { IconSymbol, type IconSymbolName } from '@/components/ui/icon-symbol';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import { acceptFriendRequest, declineFriendRequest, listNotifications } from '@/lib/api/client';
 import type { NotificationItem } from '@/lib/sync/wire';
+
+// Compact relative time: "now", "5m", "3h", "2d", "4w", then a short date for older.
+function timeAgo(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return '';
+  const secs = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (secs < 60) return 'now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `${weeks}w`;
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 export default function NotificationsScreen() {
   const colors = useColors();
@@ -81,13 +99,11 @@ export default function NotificationsScreen() {
         }
         renderItem={({ item }) => (
           <View style={styles.row}>
-            <IconSymbol
-              name={(item.from.avatar as IconSymbolName) ?? 'person.crop.circle'}
-              size={32}
-              color={colors.accent}
-            />
+            <Avatar avatar={item.from.avatar} size={40} seed={`notif-av-${item.id}`} />
             <View style={styles.rowText}>
-              <ThemedText style={styles.handle}>@{item.from.username}</ThemedText>
+              <ThemedText style={styles.handle} numberOfLines={1}>
+                @{item.from.username}
+              </ThemedText>
               <ThemedText type="muted" numberOfLines={1}>
                 {item.kind === 'friend_request'
                   ? item.from.firstName
@@ -101,37 +117,47 @@ export default function NotificationsScreen() {
               </ThemedText>
             </View>
             {item.kind === 'friend_request' ? (
-              <View style={styles.actions}>
-                <Pressable
-                  onPress={() => onAccept(item.id, item.requestId)}
-                  style={({ pressed }) => pressed && styles.pressed}>
-                  <SketchSurface
-                    seed={`req-accept-${item.id}`}
-                    fill={colors.accent}
-                    stroke={colors.accent}
-                    grain
-                    style={styles.actionBtn}>
-                    <ThemedText style={styles.actionLabel}>Accept</ThemedText>
-                  </SketchSurface>
-                </Pressable>
-                <Pressable
-                  onPress={() => onDecline(item.id, item.requestId)}
-                  style={({ pressed }) => pressed && styles.pressed}>
-                  <SketchSurface
-                    seed={`req-decline-${item.id}`}
-                    fill={colors.surface}
-                    stroke={colors.borderStrong}
-                    style={styles.actionBtn}>
-                    <ThemedText style={styles.declineLabel}>Decline</ThemedText>
-                  </SketchSurface>
-                </Pressable>
+              <View style={styles.meta}>
+                <ThemedText type="muted" style={styles.time}>
+                  {timeAgo(item.createdAt)}
+                </ThemedText>
+                <View style={styles.actions}>
+                  <Pressable
+                    onPress={() => onAccept(item.id, item.requestId)}
+                    style={({ pressed }) => pressed && styles.pressed}>
+                    <SketchSurface
+                      seed={`req-accept-${item.id}`}
+                      fill={colors.accent}
+                      stroke={colors.accent}
+                      grain
+                      style={styles.actionBtn}>
+                      <ThemedText style={styles.actionLabel}>Accept</ThemedText>
+                    </SketchSurface>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => onDecline(item.id, item.requestId)}
+                    style={({ pressed }) => pressed && styles.pressed}>
+                    <SketchSurface
+                      seed={`req-decline-${item.id}`}
+                      fill={colors.surface}
+                      stroke={colors.borderStrong}
+                      style={styles.actionBtn}>
+                      <ThemedText style={styles.declineLabel}>Decline</ThemedText>
+                    </SketchSurface>
+                  </Pressable>
+                </View>
               </View>
             ) : (
-              <IconSymbol
-                name={item.kind === 'like' ? 'heart.fill' : 'person.2.fill'}
-                size={18}
-                color={colors.textMuted}
-              />
+              <View style={styles.meta}>
+                <ThemedText type="muted" style={styles.time}>
+                  {timeAgo(item.createdAt)}
+                </ThemedText>
+                <IconSymbol
+                  name={item.kind === 'like' ? 'heart.fill' : 'person.2.fill'}
+                  size={16}
+                  color={colors.textMuted}
+                />
+              </View>
             )}
           </View>
         )}
@@ -169,6 +195,13 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       fontSize: 16,
       lineHeight: 22,
       color: colors.textPrimary,
+    },
+    meta: {
+      alignItems: 'flex-end',
+      gap: spacing.xs,
+    },
+    time: {
+      fontSize: 12,
     },
     actions: {
       flexDirection: 'row',

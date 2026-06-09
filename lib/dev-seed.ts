@@ -292,11 +292,14 @@ export async function seedSampleRounds(count = 70): Promise<void> {
         // 9-hole rounds snapshot roughly half the 18-hole rating.
         const rating =
           holeCount === 18 ? course.rating : Math.round((course.rating / 2) * 10) / 10;
+        // Seeded rounds are flagged exclude_from_sharing = 1 so that syncing them
+        // (they're written dirty = 1) doesn't fan out a "friend finished a round"
+        // push per round to every friend — see dispatchRoundShareNotifications.
         await db.runAsync(
           `INSERT INTO rounds
              (id, course_name, date_played, hole_count, completed_at, created_at,
-              tee_name, course_rating, slope_rating, updated_at, dirty)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 1);`,
+              tee_name, course_rating, slope_rating, exclude_from_sharing, updated_at, dirty)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), 1);`,
           [
             roundId,
             course.name,
