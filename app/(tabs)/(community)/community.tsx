@@ -10,13 +10,14 @@ import {
 } from 'react-native';
 import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 
+import { Avatar } from '@/components/avatar';
 import { EdgeSwipeOpener } from '@/components/edge-swipe-opener';
 import { HeaderIconButton } from '@/components/header-icon-button';
 import { Screen } from '@/components/screen';
 import { SketchDivider, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { IconSymbol, type IconSymbolName } from '@/components/ui/icon-symbol';
-import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import { getFeed, getIncomingRequestCount, likeRound, unlikeRound } from '@/lib/api/client';
 import { wireHoleToHole } from '@/lib/community/map';
@@ -217,11 +218,7 @@ function FeedCard({
       style={({ pressed }) => pressed && styles.pressed}>
       <SketchSurface seed={`feed-${item.ownerId}-${item.id}`} style={styles.card}>
         <View style={styles.owner}>
-          <IconSymbol
-            name={(item.owner.avatar as IconSymbolName) ?? 'person.crop.circle'}
-            size={32}
-            color={colors.accent}
-          />
+          <Avatar avatar={item.owner.avatar} size={40} seed={`feed-av-${item.ownerId}`} />
           <View style={styles.ownerText}>
             <ThemedText style={styles.ownerName} numberOfLines={1}>
               {displayName}
@@ -232,22 +229,23 @@ function FeedCard({
               </ThemedText>
             ) : null}
           </View>
+          <ThemedText type="muted" style={styles.date}>{formatDate(item.datePlayed)}</ThemedText>
         </View>
 
-        <View style={styles.metaRow}>
-          <ThemedText type="subtitle" numberOfLines={1} style={styles.course}>
-            {item.courseName}
-          </ThemedText>
-          <ThemedText type="caption" style={styles.date}>{formatDate(item.datePlayed)}</ThemedText>
-        </View>
+        <ThemedText type="subtitle" numberOfLines={1} style={styles.course}>
+          {item.courseName || 'Untitled round'}
+        </ThemedText>
 
-        <View style={styles.scoreRow}>
-          <ThemedText style={styles.toPar}>{toPar}</ThemedText>
-          {played ? (
-            <View style={styles.grossBlock}>
-              <ThemedText style={styles.gross}>{summary.totalScore}</ThemedText>
-            </View>
-          ) : null}
+        <View style={styles.scoreBlock}>
+          <View style={styles.scoreCol}>
+            <ThemedText type="caption">TO PAR</ThemedText>
+            <ThemedText style={styles.toPar}>{toPar}</ThemedText>
+          </View>
+          <View style={styles.scoreColDivider} />
+          <View style={styles.scoreCol}>
+            <ThemedText type="caption">GROSS</ThemedText>
+            <ThemedText style={styles.scoreSecondary}>{played ? summary.totalScore : '—'}</ThemedText>
+          </View>
         </View>
 
         <SketchDivider seed={`feed-div-${item.ownerId}-${item.id}`} />
@@ -357,51 +355,49 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     ownerHandle: {
       fontSize: 12,
     },
-    metaRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      gap: spacing.sm,
+    date: {
+      fontSize: 12,
+      alignSelf: 'flex-start',
     },
     course: {
-      flex: 1,
-      color: colors.textSecondary,
+      color: colors.textPrimary,
+      paddingTop: spacing.xs,
     },
-    scoreRow: {
+    scoreBlock: {
       flexDirection: 'row',
-      alignItems: 'baseline',
-      gap: spacing.sm,
+      alignItems: 'stretch',
       paddingVertical: spacing.xs,
+    },
+    scoreCol: {
+      flex: 1,
+      alignItems: 'center',
+      gap: 2,
+    },
+    scoreColDivider: {
+      width: 1,
+      alignSelf: 'stretch',
+      marginVertical: 2,
+      backgroundColor: colors.border,
     },
     toPar: {
       fontFamily: fonts.serifBold,
-      fontSize: 40,
-      lineHeight: 44,
+      fontSize: 34,
+      lineHeight: 40,
       color: colors.accent,
     },
-    grossBlock: {
-      flexDirection: 'row',
-      alignItems: 'baseline',
-      gap: 4,
-    },
-    gross: {
+    scoreSecondary: {
       fontFamily: fonts.serif,
-      fontSize: 20,
-      lineHeight: 27,
-      color: colors.textSecondary,
-    },
-    grossLabel: {
-      color: colors.textMuted,
-    },
-    date: {
-      fontSize: 10,
+      fontSize: 22,
+      lineHeight: 40,
+      color: colors.textPrimary,
     },
     cardStats: {
       flexDirection: 'row',
-      alignItems: 'flex-end',
-      gap: spacing.xl,
+      alignItems: 'center',
+      gap: spacing.sm,
     },
     stat: {
+      flex: 1,
       gap: 2,
     },
     statValue: {
@@ -414,7 +410,7 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.xs,
-      marginLeft: 'auto',
+      marginLeft: spacing.sm,
     },
     likeCount: {
       fontFamily: fonts.serif,
