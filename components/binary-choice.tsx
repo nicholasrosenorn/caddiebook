@@ -4,8 +4,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 
 type Props = {
   label: string;
@@ -16,7 +16,8 @@ type Props = {
 
 export function BinaryChoice({ label, hint, value, onChange }: Props) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -61,7 +62,7 @@ export function BinaryChoice({ label, hint, value, onChange }: Props) {
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   container: {
     gap: spacing.sm,
@@ -70,7 +71,7 @@ const makeStyles = (colors: Palette) =>
     gap: 2,
   },
   label: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 15,
     color: colors.textPrimary,
   },

@@ -16,8 +16,8 @@ import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS, sortByDriveLength } from '@/constants/clubs';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { getBag, getClubYardages, setBag, setClubYardage } from '@/db/queries';
 
 const DEFAULT_YDS = 100;
@@ -35,7 +35,8 @@ function clubsFromBag(bag: string[]): string[] {
 
 export default function YardagesScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [bag, setBagState] = useState<string[]>([...CLUB_OPTIONS]);
   const [clubs, setClubs] = useState<string[]>([]);
   const [yardages, setYardages] = useState<Record<string, number>>({});
@@ -115,7 +116,8 @@ export default function YardagesScreen() {
 // The whole-bag silhouette plate: nested trajectories at a glance.
 function BagPlate({ items }: { items: { carry: number; loft: number }[] }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [width, setWidth] = useState(0);
   const onLayout = (e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
@@ -150,7 +152,8 @@ function ArcCard({
   onCommit: (next: number | null) => void;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [bandW, setBandW] = useState(0);
   const [drag, setDrag] = useState<number | null>(null);
   const display = drag ?? yards;
@@ -227,7 +230,7 @@ function ArcCard({
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   content: {
     paddingVertical: spacing.md,
@@ -273,25 +276,27 @@ const makeStyles = (colors: Palette) =>
     justifyContent: 'space-between',
   },
   club: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 18,
+    lineHeight: 24,
     color: colors.textPrimary,
   },
   yards: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 18,
+    lineHeight: 24,
     color: colors.textPrimary,
   },
   yardsActive: {
     color: colors.accent,
   },
   unit: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 12,
     color: colors.textSecondary,
   },
   empty: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 14,
     color: colors.textMuted,
   },

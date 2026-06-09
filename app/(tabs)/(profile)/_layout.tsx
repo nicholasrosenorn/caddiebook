@@ -1,21 +1,21 @@
 import { router, Stack } from 'expo-router';
-import { Pressable } from 'react-native';
 
+import { HeaderIconButton } from '@/components/header-icon-button';
 import { MenuButton } from '@/components/menu-button';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { fontFamily } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { useColors, useFontSet } from '@/constants/theme-context';
 
 export default function ProfileStackLayout() {
   const colors = useColors();
+  const fonts = useFontSet();
   return (
     <Stack
       screenOptions={{
         headerStyle: { backgroundColor: colors.background },
         headerTitleStyle: {
           color: colors.textPrimary,
-          fontFamily: fontFamily.serifBold,
+          fontFamily: fonts.serifBold,
           fontSize: 22,
+          lineHeight: 30,
         },
         headerShadowVisible: false,
       }}>
@@ -25,20 +25,11 @@ export default function ProfileStackLayout() {
           title: '',
           headerLeft: () => <MenuButton />,
           headerRight: () => (
-            <Pressable
-              accessibilityRole="button"
+            <HeaderIconButton
+              name="gearshape"
               accessibilityLabel="Settings"
               onPress={() => router.push('/settings')}
-              hitSlop={12}
-              style={({ pressed }) => ({
-                width: 32,
-                height: 32,
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: pressed ? 0.6 : 1,
-              })}>
-              <IconSymbol name="gearshape" size={24} color={colors.accent} />
-            </Pressable>
+            />
           ),
         }}
       />

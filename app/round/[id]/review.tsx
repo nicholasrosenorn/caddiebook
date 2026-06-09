@@ -14,8 +14,8 @@ import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { getReview, setRoundCompletedAt, upsertReview } from '@/db/queries';
 import { syncNow } from '@/lib/sync/engine';
 import type { CommonMiss, MostCostly, RangeFocus } from '@/db/types';
@@ -30,7 +30,8 @@ const TOTAL_PAGES = 5;
 
 export default function ReviewScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const [pageHeight, setPageHeight] = useState<number | null>(null);
@@ -291,7 +292,8 @@ function QuestionPage({
   children: React.ReactNode;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={{ height }}>
       <View style={styles.pageContent}>
@@ -331,7 +333,8 @@ function ChipList<T extends string>({
   onChange: (next: T) => void;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={styles.chipList}>
       {options.map((opt) => {
@@ -367,7 +370,8 @@ function RatingGrid({
   onChange: (next: number) => void;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const row1 = RATING_VALUES.slice(0, 5);
   const row2 = RATING_VALUES.slice(5, 10);
   const renderTile = (n: number) => {
@@ -407,7 +411,8 @@ function PageDots({
   currentPage: number;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={styles.dotsContainer} pointerEvents="none">
       {Array.from({ length: totalPages }).map((_, i) => (
@@ -420,7 +425,7 @@ function PageDots({
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   flex: { flex: 1 },
   pageContent: {
@@ -481,8 +486,9 @@ const makeStyles = (colors: Palette) =>
     justifyContent: 'center',
   },
   chipLabel: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 17,
+    lineHeight: 23,
     color: colors.textPrimary,
   },
   chipLabelSelected: {
@@ -505,8 +511,9 @@ const makeStyles = (colors: Palette) =>
     justifyContent: 'center',
   },
   ratingValue: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 22,
+    lineHeight: 30,
     color: colors.textPrimary,
   },
   ratingValueSelected: {
@@ -528,8 +535,9 @@ const makeStyles = (colors: Palette) =>
   },
   primaryCtaLabel: {
     color: colors.accentOn,
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 17,
+    lineHeight: 23,
   },
   closeButton: {
     position: 'absolute',

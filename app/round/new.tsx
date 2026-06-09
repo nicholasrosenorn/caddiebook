@@ -21,8 +21,8 @@ import { SettingToggle } from '@/components/setting-toggle';
 import { SketchDivider, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS } from '@/constants/clubs';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import {
   createRound,
   createTee,
@@ -41,8 +41,9 @@ const HOLE_OPTIONS = [
 
 export default function NewRoundScreen() {
   const colors = useColors();
+  const fonts = useFontSet();
   const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [courseName, setCourseName] = useState('');
   const [date, setDate] = useState(new Date());
   const [holeCount, setHoleCount] = useState<9 | 18>(18);
@@ -432,7 +433,7 @@ function formatIsoDate(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   flex: { flex: 1 },
   scrollContent: {
@@ -501,7 +502,7 @@ const makeStyles = (colors: Palette) =>
     borderTopColor: colors.border,
   },
   suggestLabel: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 15,
     color: colors.textPrimary,
   },
@@ -518,7 +519,7 @@ const makeStyles = (colors: Palette) =>
     justifyContent: 'center',
   },
   chipLabel: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 14,
     color: colors.textSecondary,
   },
@@ -549,7 +550,8 @@ const makeStyles = (colors: Palette) =>
   },
   ctaLabel: {
     color: colors.accentOn,
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 16,
+    lineHeight: 22,
   },
 });

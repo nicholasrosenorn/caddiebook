@@ -3,11 +3,12 @@ import { StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DEFAULT_AVATAR } from '@/components/avatar';
+import { BrandMark } from '@/components/brand-mark';
 import { ProfileForm } from '@/components/profile-form';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 
 export function Onboarding() {
   return (
@@ -19,15 +20,19 @@ export function Onboarding() {
 
 function OnboardingContent() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const insets = useSafeAreaInsets();
 
   const header = (
     <View style={styles.hero}>
+      <View style={styles.crest}>
+        <BrandMark />
+      </View>
       <ThemedText type="caption">CADDIE BOOK</ThemedText>
       <ThemedText style={styles.title}>Set up{'\n'}your profile.</ThemedText>
       <ThemedText type="muted" style={styles.subtitle}>
-        This is how you&apos;ll show up across your devices.
+        Your name and a glyph — this is how friends see you in the feed.
       </ThemedText>
     </View>
   );
@@ -47,13 +52,16 @@ function OnboardingContent() {
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     hero: {
       gap: spacing.xs,
     },
+    crest: {
+      marginBottom: spacing.md,
+    },
     title: {
-      fontFamily: fontFamily.serifBold,
+      fontFamily: fonts.serifBold,
       fontSize: 32,
       lineHeight: 38,
       color: colors.textPrimary,

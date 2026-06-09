@@ -11,12 +11,13 @@ import {
 import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 
 import { EdgeSwipeOpener } from '@/components/edge-swipe-opener';
+import { HeaderIconButton } from '@/components/header-icon-button';
 import { Screen } from '@/components/screen';
 import { SketchDivider, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { getFeed, getIncomingRequestCount, likeRound, unlikeRound } from '@/lib/api/client';
 import { wireHoleToHole } from '@/lib/community/map';
 import { formatToPar } from '@/lib/lifetime-stats';
@@ -26,7 +27,8 @@ import type { FeedRound } from '@/lib/sync/wire';
 
 export default function CommunityScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const tabBarHeight = useBottomTabBarHeight();
   const { session } = useSync();
 
@@ -109,33 +111,27 @@ export default function CommunityScreen() {
 
   const headerLeft = useCallback(
     () => (
-      <View style={styles.headerActionsLeft}>
-        <Pressable
-          onPress={() => router.push('/add-friend' as any)}
-          hitSlop={8}
-          accessibilityLabel="Add friends">
-          <IconSymbol name="person.badge.plus" size={24} color={colors.textPrimary} />
-        </Pressable>
-      </View>
+      <HeaderIconButton
+        name="person.badge.plus"
+        accessibilityLabel="Add friends"
+        color={colors.textPrimary}
+        onPress={() => router.push('/add-friend' as any)}
+      />
     ),
-    [colors.textPrimary, styles],
+    [colors.textPrimary],
   );
 
   const headerRight = useCallback(
     () => (
-      <View style={styles.headerActions}>
-        <Pressable
-          onPress={() => router.push('/requests' as any)}
-          hitSlop={8}
-          accessibilityLabel="Friend requests">
-          <View>
-            <IconSymbol name="bell" size={24} color={colors.textPrimary} />
-            {badge > 0 ? <View style={styles.badge} /> : null}
-          </View>
-        </Pressable>
-      </View>
+      <HeaderIconButton
+        name="bell"
+        accessibilityLabel="Friend requests"
+        color={colors.textPrimary}
+        badge={badge > 0}
+        onPress={() => router.push('/requests' as any)}
+      />
     ),
-    [badge, colors.textPrimary, styles],
+    [badge, colors.textPrimary],
   );
 
   if (!session) {
@@ -313,7 +309,7 @@ function formatDate(iso: string | null): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     empty: {
       flex: 1,
@@ -326,27 +322,6 @@ const makeStyles = (colors: Palette) =>
     copy: {
       textAlign: 'center',
       maxWidth: 280,
-    },
-    headerActions: {
-      width: 32,
-      height: 32,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    headerActionsLeft: {
-      width: 32,
-      height: 32,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    badge: {
-      position: 'absolute',
-      top: -2,
-      right: -3,
-      width: 9,
-      height: 9,
-      borderRadius: 4.5,
-      backgroundColor: colors.danger,
     },
     list: {
       paddingHorizontal: spacing.md,
@@ -374,8 +349,9 @@ const makeStyles = (colors: Palette) =>
       flex: 1,
     },
     ownerName: {
-      fontFamily: fontFamily.serifBold,
+      fontFamily: fonts.serifBold,
       fontSize: 17,
+      lineHeight: 23,
       color: colors.textPrimary,
     },
     ownerHandle: {
@@ -398,7 +374,7 @@ const makeStyles = (colors: Palette) =>
       paddingVertical: spacing.xs,
     },
     toPar: {
-      fontFamily: fontFamily.serifBold,
+      fontFamily: fonts.serifBold,
       fontSize: 40,
       lineHeight: 44,
       color: colors.accent,
@@ -409,8 +385,9 @@ const makeStyles = (colors: Palette) =>
       gap: 4,
     },
     gross: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 20,
+      lineHeight: 27,
       color: colors.textSecondary,
     },
     grossLabel: {
@@ -428,8 +405,9 @@ const makeStyles = (colors: Palette) =>
       gap: 2,
     },
     statValue: {
-      fontFamily: fontFamily.serifBold,
+      fontFamily: fonts.serifBold,
       fontSize: 18,
+      lineHeight: 24,
       color: colors.textPrimary,
     },
     likeBtn: {
@@ -439,7 +417,7 @@ const makeStyles = (colors: Palette) =>
       marginLeft: 'auto',
     },
     likeCount: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 15,
       color: colors.textSecondary,
     },

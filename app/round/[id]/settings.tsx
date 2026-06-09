@@ -7,8 +7,8 @@ import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import {
   getRound,
   setRoundExcludeFromSharing,
@@ -19,7 +19,8 @@ import type { Round } from '@/db/types';
 
 export default function RoundSettingsScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const [round, setRound] = useState<Round | null>(null);
@@ -78,6 +79,8 @@ export default function RoundSettingsScreen() {
           styles.content,
           { paddingTop: insets.top + spacing.xxl, paddingBottom: insets.bottom + spacing.xl },
         ]}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <ThemedText type="caption">ROUND SETTINGS</ThemedText>
@@ -206,7 +209,7 @@ function parseNum(value: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     content: {
       paddingHorizontal: spacing.md,
@@ -263,7 +266,7 @@ const makeStyles = (colors: Palette) =>
       fontSize: 11,
       letterSpacing: 0.8,
       color: colors.textMuted,
-      fontFamily: fontFamily.sans,
+      fontFamily: fonts.body,
     },
     inputSurface: {
       minHeight: 48,

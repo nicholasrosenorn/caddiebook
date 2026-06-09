@@ -18,8 +18,8 @@ import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { getSetting, setSetting } from '@/db/queries';
 
 const TEMPOS = [126, 144, 156, 184] as const;
@@ -50,7 +50,8 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 export default function TempoScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [bpm, setBpm] = useState<number>(144);
   const [running, setRunning] = useState(false);
 
@@ -254,7 +255,7 @@ export default function TempoScreen() {
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   container: {
     flex: 1,
@@ -271,7 +272,7 @@ const makeStyles = (colors: Palette) =>
     gap: 2,
   },
   bpm: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 56,
     color: colors.textPrimary,
     lineHeight: 60,
@@ -291,8 +292,9 @@ const makeStyles = (colors: Palette) =>
     justifyContent: 'center',
   },
   chipLabel: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 18,
+    lineHeight: 24,
     color: colors.textPrimary,
   },
   chipLabelSel: {
@@ -306,8 +308,9 @@ const makeStyles = (colors: Palette) =>
     paddingVertical: spacing.md,
   },
   playLabel: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 18,
+    lineHeight: 24,
     color: colors.accent,
   },
   playLabelOn: {

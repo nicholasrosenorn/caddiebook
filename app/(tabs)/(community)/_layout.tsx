@@ -1,18 +1,19 @@
 import { Stack } from 'expo-router';
 
-import { fontFamily } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { useColors, useFontSet } from '@/constants/theme-context';
 
 export default function CommunityStackLayout() {
   const colors = useColors();
+  const fonts = useFontSet();
   return (
     <Stack
       screenOptions={{
         headerStyle: { backgroundColor: colors.background },
         headerTitleStyle: {
           color: colors.textPrimary,
-          fontFamily: fontFamily.serifBold,
+          fontFamily: fonts.serifBold,
           fontSize: 22,
+          lineHeight: 30,
         },
         headerShadowVisible: false,
       }}>

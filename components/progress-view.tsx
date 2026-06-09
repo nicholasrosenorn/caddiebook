@@ -10,8 +10,8 @@ import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { TrendChart } from '@/components/trend-chart';
 import { CLUB_OPTIONS, sortByDriveLength } from '@/constants/clubs';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import {
   getAllHoles,
   getAllPutts,
@@ -112,7 +112,8 @@ function sortByClubOrder(clubs: string[]): string[] {
 
 export function ProgressView({ header }: { header?: ReactNode }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const tabBarHeight = useBottomTabBarHeight();
   const [data, setData] = useState<Data | null>(null);
   const [holeFilter, setHoleFilter] = useState<HoleCountFilter>(18);
@@ -347,7 +348,8 @@ function StatsBody({
   onDriveClubChange: (value: ClubFilter) => void;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const { stats, trend, review } = view;
   // Full-history points (true index at each round), windowed to the recency
   // dropdown only — the scoring-bar value stays the unfiltered current index.
@@ -558,7 +560,8 @@ function ScoringCard({
   handicapIndex: number | null;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   // Single hole-count → a real scoring average. Mixed → fair per-18 to-par.
   const single = holeFilter !== 'all';
   const primaryLabel = single ? 'SCORING AVG' : 'TO PAR /18';
@@ -596,7 +599,8 @@ function ScoringCard({
 
 function BestRoundCallout({ best, uniform }: { best: RoundDerived; uniform: boolean }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <SketchSurface
       seed="stats-best"
@@ -637,7 +641,8 @@ function TrendCard({
   formatValue: (n: number) => string;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   if (points.length < 2) return null;
   return (
     <SketchSurface seed={`trend-${title}`} style={styles.trendCard}>
@@ -657,7 +662,8 @@ function TrendCard({
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={styles.section}>
       <ThemedText type="subtitle">{title}</ThemedText>
@@ -668,7 +674,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function StatTile({ label, value }: { label: string; value: string }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <SketchSurface seed={`stats-tile-${label}`} style={styles.statTile}>
       <ThemedText type="caption" numberOfLines={1}>
@@ -683,7 +690,8 @@ function StatTile({ label, value }: { label: string; value: string }) {
 
 function PerParTile({ label, value }: { label: string; value: number | null }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <SketchSurface seed={`stats-perpar-${label}`} style={styles.perParTile}>
       <ThemedText type="caption" numberOfLines={1}>
@@ -704,7 +712,8 @@ function ScoreDistributionBars({
   empty?: boolean;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const DIST_ROWS: {
     key: keyof LifetimeStats['distribution'];
     label: string;
@@ -768,7 +777,8 @@ function SplitDistanceBars({
   seedPrefix: string;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={styles.barList}>
       {rows.map((r) => {
@@ -836,7 +846,8 @@ function SplitDistanceBars({
 
 function MentalGameCard({ review, empty }: { review: ReviewInsights; empty: boolean }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   if (empty || review.count === 0) {
     return (
@@ -908,7 +919,8 @@ function FrequencyBars<T extends string>({
   rows: { value: T; label: string; count: number }[];
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   if (rows.length === 0) return null;
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
@@ -957,7 +969,7 @@ function formatDate(iso: string): string {
   });
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   flex: {
     flex: 1,
@@ -1010,7 +1022,7 @@ const makeStyles = (colors: Palette) =>
     marginVertical: spacing.xs,
   },
   bigScore: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 28,
     color: colors.textPrimary,
     lineHeight: 32,
@@ -1028,13 +1040,13 @@ const makeStyles = (colors: Palette) =>
     minWidth: 56,
   },
   bestScore: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 30,
     lineHeight: 32,
     color: colors.accent,
   },
   bestScoreSuffix: {
-    fontFamily: fontFamily.sans,
+    fontFamily: fonts.body,
     fontSize: 9,
     fontWeight: '600',
     letterSpacing: 1,
@@ -1052,15 +1064,16 @@ const makeStyles = (colors: Palette) =>
     gap: 2,
   },
   bestLabel: {
-    fontFamily: fontFamily.sans,
+    fontFamily: fonts.body,
     fontSize: 10,
     fontWeight: '600',
     letterSpacing: 1.4,
     color: colors.accent,
   },
   bestCourse: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 16,
+    lineHeight: 22,
     color: colors.textPrimary,
   },
   perParRow: {
@@ -1077,8 +1090,9 @@ const makeStyles = (colors: Palette) =>
     gap: 4,
   },
   perParValue: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 20,
+    lineHeight: 27,
     color: colors.textPrimary,
   },
   statGrid: {
@@ -1098,8 +1112,9 @@ const makeStyles = (colors: Palette) =>
     alignItems: 'center',
   },
   statTileValue: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 20,
+    lineHeight: 27,
     color: colors.textPrimary,
   },
   trendCard: {
@@ -1112,8 +1127,9 @@ const makeStyles = (colors: Palette) =>
     alignItems: 'center',
   },
   trendTitle: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 16,
+    lineHeight: 22,
     color: colors.textPrimary,
   },
   barList: {
@@ -1126,7 +1142,7 @@ const makeStyles = (colors: Palette) =>
   },
   barLabel: {
     width: 64,
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 14,
     color: colors.textPrimary,
   },
@@ -1146,7 +1162,7 @@ const makeStyles = (colors: Palette) =>
     alignItems: 'flex-end',
   },
   splitPct: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 15,
     color: colors.textPrimary,
   },

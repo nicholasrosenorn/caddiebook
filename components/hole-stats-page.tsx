@@ -7,8 +7,8 @@ import { ScoreGrid } from '@/components/score-grid';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { updateHole } from '@/db/queries';
 import type { Hole } from '@/db/types';
 import { computeRoundSummary, deriveGir, formatPct, resolveGir, resolveUpAndDown } from '@/lib/stats';
@@ -24,7 +24,8 @@ type Props = {
 
 export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   const update = async <K extends HoleField>(field: K, value: Hole[K]) => {
     try {
@@ -148,7 +149,8 @@ export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
 
 function SummaryStat({ label, value }: { label: string; value: string }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={styles.summaryStat}>
       <ThemedText type="caption">{label.toUpperCase()}</ThemedText>
@@ -157,7 +159,7 @@ function SummaryStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   scroll: {
     flex: 1,
@@ -185,15 +187,16 @@ const makeStyles = (colors: Palette) =>
     gap: 2,
   },
   summaryValue: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 18,
+    lineHeight: 24,
     color: colors.textPrimary,
   },
   girStatus: {
     gap: spacing.sm,
   },
   girStatusLabel: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 15,
     color: colors.textPrimary,
   },

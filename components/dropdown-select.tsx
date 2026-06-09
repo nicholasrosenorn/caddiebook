@@ -4,8 +4,8 @@ import { Modal, Pressable, StyleSheet, View } from 'react-native';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 
 export type DropdownOption<T extends string | number> = {
   value: T;
@@ -34,7 +34,8 @@ export function DropdownSelect<T extends string | number>({
   style,
 }: Props<T>) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const ref = useRef<View>(null);
@@ -103,7 +104,7 @@ export function DropdownSelect<T extends string | number>({
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   block: {
     flex: 1,
@@ -121,8 +122,9 @@ const makeStyles = (colors: Palette) =>
     paddingHorizontal: spacing.md,
   },
   value: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 17,
+    lineHeight: 23,
     color: colors.textPrimary,
   },
   menuWrap: {
@@ -147,12 +149,13 @@ const makeStyles = (colors: Palette) =>
     backgroundColor: colors.accentMuted,
   },
   rowLabel: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 16,
+    lineHeight: 22,
     color: colors.textSecondary,
   },
   rowLabelSelected: {
     color: colors.accent,
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
   },
 });

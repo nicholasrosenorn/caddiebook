@@ -6,19 +6,54 @@ architecture and data flow). When you add a screen, a control, or a chart, it
 should look like it was drawn by the same hand as everything already here —
 this doc is how you stay in that hand.
 
+## Direction (2026): crisp editorial elegance
+
+The app is evolving from the warm, hand-drawn "field notebook" look toward a
+**crisp editorial elegance** — gentlemanly, minimal, refined. The touchstones are
+**Journal18** (academic art-journal restraint), **Masters** (deep pine green,
+understated luxury), and **Medium** (serif reading, generous whitespace, hairline
+rules). Hierarchy comes from **type and air, not boxes**.
+
+What this means concretely:
+
+- **Cooler near-white page**, not warm cream — e.g. `#FAF9F5` instead of `#F1EBDC`.
+- **Masters pine-green ink** — deeper, greener, e.g. `#103D2C` (vs the old `#1B4D3E`).
+- **Hairline chrome.** Crisp 1px borders and rules. **No paper grain, no drawn
+  jitter** — cards/buttons are clean framed surfaces (a `Plate`), dividers are 1px
+  rules (a `Rule`).
+- **Fraunces serif + generous whitespace** carry the page; letterspaced sans
+  kickers as labels.
+- **One ornament only:** the architect's **crop mark**. Everything else stays quiet.
+
+**Unchanged:** the interaction language — tap-first, shape-encodes-meaning,
+position-is-data, derived stats (P1–P4 below) — is independent of texture and still
+holds.
+
+**Status:** shipped app-wide as a **theme-identity system**. A theme is now color
+**+ fonts + chrome** (`ThemeMeta` in `constants/theme.ts`), driven at runtime by
+`useColors()` / `useFontSet()` / `useChrome()`. The shared `SketchSurface` / `Paper`
+/ `SketchDivider` render crisp (`editorial`) or hand-drawn (`notebook`) from the
+active `chrome`, so call sites never change. Six selectable identities ship —
+**Augusta** (editorial pine, the default), **Broadsheet**, **Links**, **Clay**,
+**Twilight** (dark), and **Field Notebook** (the original hand-drawn look,
+preserved). The targets (`driver-target` / `approach-target`) stay drawn
+illustrations in every theme.
+
 ## 1. The one-line brief
 
-> A field notebook for your golf game: warm paper, deep-green ink, drawn by a
-> precise hand. Data entry is **tapping on shapes that mean something**, not
-> typing into boxes.
+> A field notebook for your golf game, set like a fine journal: a cool near-white
+> page, deep pine-green ink, Fraunces serif, hairline rules. Data entry is
+> **tapping on shapes that mean something**, not typing into boxes.
 
 Two ideas do all the work, and they pull in the same direction:
 
 - **Tap-first, spatial input.** You record a round by touching shaped, position-
   aware surfaces — a fairway, a ring target, a putt grid — not by filling a form.
-- **Editorial print aesthetic.** Two colors, a serif display face, hand-drawn
-  line work, registration marks, and a faint paper grain. It reads like a
-  printed scorecard / course-architecture plate, not a SaaS dashboard.
+- **Editorial elegance.** A near-white page, deep pine-green ink, a serif display
+  face, generous whitespace, and hairline rules — with the architect's crop mark as
+  the lone flourish. It reads like a fine journal / course-architecture plate, not a
+  SaaS dashboard. (See _Direction_ above; the older warm, hand-drawn-and-grain
+  treatment is being refined out.)
 
 If a change makes the app feel more like a spreadsheet or more like a generic
 mobile UI kit, it's wrong even if it "works."
@@ -66,13 +101,23 @@ column. The user is never blocked waiting on us to compute something.
 ### P5 — Restraint is the aesthetic
 Two colors carry everything. Resist adding hues, drop shadows, gradients, or a
 third weight of border. When a surface needs emphasis, **fill it green**; when
-it needs to recede, **leave it on paper**. The hand-drawn line work is *subtle* —
-a precise draftsman, not a doodle (see §5).
+it needs to recede, **leave it on paper**. **Direction:** restraint now leans fully
+crisp — prefer hairline rules and whitespace over drawn frames and grain (see
+_Direction_ at top). The line work, where it remains, is *subtle* — a precise
+draftsman, not a doodle (see §5).
 
 ## 3. Palette
 
-Single warm light theme (`constants/theme.ts`). No dark mode; the status bar is
-forced to dark content.
+Themes are full identities in `constants/theme.ts` (palette + fonts + chrome). The
+default is **Augusta** (editorial); the table below documents the **Field Notebook**
+(hand-drawn) theme. One dark theme ships (**Twilight**) — `dark: true` flips the
+status bar to light; the rest force dark content.
+
+> **Direction note:** the default is now the **Augusta** editorial palette (cooler
+> near-white page, deep Masters pine ink). The warm values in the table below are
+> the **Field Notebook** theme (still selectable). Every theme supplies its own full
+> `Palette` + `FontSet` + `chrome`; read tokens via `useColors()` / `useFontSet()`
+> and never hardcode.
 
 | Token | Value | Use |
 | --- | --- | --- |
@@ -112,6 +157,13 @@ All hand-drawn geometry is **deterministic**: seeded by a string so a shape
 looks sketched but never reflows or re-randomizes between renders. The seeded
 PRNG and geometry live in `lib/sketch.ts`; the React components in
 `components/sketch.tsx`. Reuse them; do not hand-roll new SVG paths.
+
+> **Direction note:** `SketchSurface`, `Paper`, and `SketchDivider` are now
+> **chrome-aware** — in an `editorial` theme they render crisp native hairlines
+> with no grain; in a `notebook` theme they render the drawn frame + grain below.
+> Call sites don't change; the active theme's `chrome` decides. The seeded geometry
+> still powers the **targets and score glyphs** in every theme — illustration, not
+> chrome.
 
 ### Geometry helpers (`lib/sketch.ts`)
 - `roughCirclePath` — irregular ring / disc (greens, putt glyphs, score circles)

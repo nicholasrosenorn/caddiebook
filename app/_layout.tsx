@@ -3,6 +3,12 @@ import {
   Fraunces_700Bold,
   useFonts,
 } from '@expo-google-fonts/fraunces';
+import {
+  LibreBaskerville_500Medium,
+  LibreBaskerville_700Bold,
+} from '@expo-google-fonts/libre-baskerville';
+import { Newsreader_500Medium, Newsreader_600SemiBold } from '@expo-google-fonts/newsreader';
+import { Spectral_500Medium, Spectral_600SemiBold } from '@expo-google-fonts/spectral';
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import * as Notifications from 'expo-notifications';
 import { router, Stack } from 'expo-router';
@@ -15,8 +21,13 @@ import 'react-native-reanimated';
 import { Intro } from '@/components/intro';
 import { Onboarding } from '@/components/onboarding';
 import { SignIn } from '@/components/sign-in';
-import { fontFamily, themes } from '@/constants/theme';
-import { ThemeProvider as AppThemeProvider, useColors, useTheme } from '@/constants/theme-context';
+import { themes } from '@/constants/theme';
+import {
+  ThemeProvider as AppThemeProvider,
+  useColors,
+  useFontSet,
+  useTheme,
+} from '@/constants/theme-context';
 import { loadSession, type Session } from '@/lib/auth/tokens';
 import { SyncProvider, useSync } from '@/lib/sync/provider';
 import { initDb } from '@/db/client';
@@ -34,6 +45,7 @@ SplashScreen.preventAutoHideAsync();
 
 function Navigation() {
   const colors = useColors();
+  const fonts = useFontSet();
   const { themeId } = useTheme();
   const isDark = themes[themeId].dark ?? false;
 
@@ -69,7 +81,7 @@ function Navigation() {
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: colors.background },
-          headerTitleStyle: { color: colors.textPrimary, fontFamily: fontFamily.serifBold },
+          headerTitleStyle: { color: colors.textPrimary, fontFamily: fonts.serifBold },
           headerTintColor: colors.accent,
           contentStyle: { backgroundColor: colors.background },
         }}>
@@ -145,6 +157,12 @@ export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     Fraunces_500Medium,
     Fraunces_700Bold,
+    Newsreader_500Medium,
+    Newsreader_600SemiBold,
+    Spectral_500Medium,
+    Spectral_600SemiBold,
+    LibreBaskerville_500Medium,
+    LibreBaskerville_700Bold,
   });
 
   useEffect(() => {

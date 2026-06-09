@@ -3,11 +3,12 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BrandMark } from '@/components/brand-mark';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { useSync } from '@/lib/sync/provider';
 
 // Was the auth flow dismissed by the user? Those aren't real errors to surface.
@@ -27,7 +28,8 @@ export function SignIn() {
 
 function SignInContent() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const insets = useSafeAreaInsets();
   const { signInApple, signInGoogle } = useSync();
   const [busy, setBusy] = useState<'apple' | 'google' | null>(null);
@@ -55,10 +57,13 @@ function SignInContent() {
           { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl },
         ]}>
         <View style={styles.hero}>
+          <View style={styles.crest}>
+            <BrandMark />
+          </View>
           <ThemedText type="caption">CADDIE BOOK</ThemedText>
-          <ThemedText style={styles.title}>Your round,{'\n'}on every device.</ThemedText>
+          <ThemedText style={styles.title}>Your rounds,{'\n'}on every device.</ThemedText>
           <ThemedText type="muted" style={styles.subtitle}>
-            Sign in to back up your rounds and keep your stats in sync.
+            Sign in to back up every round, keep your stats in sync, and share with friends.
           </ThemedText>
         </View>
 
@@ -101,7 +106,7 @@ function SignInContent() {
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     root: {
       flex: 1,
@@ -113,8 +118,11 @@ const makeStyles = (colors: Palette) =>
       justifyContent: 'center',
       gap: spacing.sm,
     },
+    crest: {
+      marginBottom: spacing.md,
+    },
     title: {
-      fontFamily: fontFamily.serifBold,
+      fontFamily: fonts.serifBold,
       fontSize: 34,
       lineHeight: 40,
       color: colors.textPrimary,
@@ -137,8 +145,9 @@ const makeStyles = (colors: Palette) =>
       justifyContent: 'center',
     },
     googleLabel: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 17,
+      lineHeight: 23,
       color: colors.textPrimary,
     },
     pressed: {

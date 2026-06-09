@@ -4,8 +4,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { GlassSurface } from '@/components/glass-surface';
 import { HoleJumpPicker } from '@/components/hole-jump-picker';
 import { ThemedText } from '@/components/themed-text';
-import { fontFamily, radius, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { radius, spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import type { Hole } from '@/db/types';
 
 type Props = {
@@ -35,7 +35,8 @@ export function HoleStepper({
   onFinish,
 }: Props) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={styles.outer} pointerEvents="box-none">
       <View style={styles.pill}>
@@ -84,7 +85,7 @@ export function HoleStepper({
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   outer: {
     position: 'absolute',
@@ -122,8 +123,9 @@ const makeStyles = (colors: Palette) =>
     opacity: 0.25,
   },
   title: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 16,
+    lineHeight: 22,
     color: colors.textPrimary,
     paddingHorizontal: spacing.xs,
   },

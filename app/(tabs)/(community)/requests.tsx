@@ -6,14 +6,15 @@ import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { acceptFriendRequest, declineFriendRequest, listNotifications } from '@/lib/api/client';
 import type { NotificationItem } from '@/lib/sync/wire';
 
 export default function NotificationsScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [items, setItems] = useState<NotificationItem[] | null>(null);
 
   const load = useCallback(async () => {
@@ -139,7 +140,7 @@ export default function NotificationsScreen() {
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     list: {
       paddingHorizontal: spacing.md,
@@ -164,8 +165,9 @@ const makeStyles = (colors: Palette) =>
       gap: 2,
     },
     handle: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 16,
+      lineHeight: 22,
       color: colors.textPrimary,
     },
     actions: {
@@ -181,12 +183,12 @@ const makeStyles = (colors: Palette) =>
     },
     actionLabel: {
       color: colors.accentOn,
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 15,
     },
     declineLabel: {
       color: colors.textSecondary,
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 15,
     },
     pressed: {

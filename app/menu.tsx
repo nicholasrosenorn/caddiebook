@@ -13,8 +13,8 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { Paper, SketchDivider } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { getGoals } from '@/db/queries';
 import type { PreRoundGoals } from '@/db/types';
 import { GOAL_CATEGORIES } from '@/lib/goals';
@@ -41,7 +41,8 @@ const ITEMS: ToolItem[] = [
 
 export default function MenuScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const panelWidth = Math.min(320, width * 0.82);
@@ -230,7 +231,7 @@ export default function MenuScreen() {
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     root: {
       flex: 1,
@@ -264,8 +265,9 @@ const makeStyles = (colors: Palette) =>
       paddingBottom: spacing.lg,
     },
     title: {
-      fontFamily: fontFamily.serifBold,
+      fontFamily: fonts.serifBold,
       fontSize: 20,
+      lineHeight: 27,
       color: colors.textPrimary,
       marginTop: 5,
     },
@@ -291,14 +293,14 @@ const makeStyles = (colors: Palette) =>
       gap: 1,
     },
     focusLabel: {
-      fontFamily: fontFamily.sans,
+      fontFamily: fonts.body,
       fontSize: 10,
       letterSpacing: 1,
       textTransform: 'uppercase',
       color: colors.textMuted,
     },
     focusValue: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 15,
       color: colors.textPrimary,
     },
@@ -331,8 +333,9 @@ const makeStyles = (colors: Palette) =>
       gap: 2,
     },
     rowLabel: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 18,
+      lineHeight: 24,
       color: colors.textPrimary,
     },
     rowLabelDisabled: {
@@ -342,7 +345,7 @@ const makeStyles = (colors: Palette) =>
       fontSize: 12,
     },
     soon: {
-      fontFamily: fontFamily.sans,
+      fontFamily: fonts.body,
       fontSize: 10,
       letterSpacing: 1,
       color: colors.textMuted,

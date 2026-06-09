@@ -6,8 +6,8 @@ import { GlassSurface } from '@/components/glass-surface';
 import { HoleJumpPicker } from '@/components/hole-jump-picker';
 import { SketchDivider, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import type { Hole } from '@/db/types';
 
 type Props = {
@@ -36,7 +36,8 @@ export function StickyHoleNav({
   onFinish,
 }: Props) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const insets = useSafeAreaInsets();
   return (
     <View style={styles.outer}>
@@ -98,7 +99,7 @@ export function StickyHoleNav({
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   outer: {
     position: 'absolute',
@@ -145,8 +146,9 @@ const makeStyles = (colors: Palette) =>
     gap: 2,
   },
   titleText: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 18,
+    lineHeight: 24,
     color: colors.textPrimary,
   },
   subTitle: {

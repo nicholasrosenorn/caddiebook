@@ -4,8 +4,8 @@ import { FlatList, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS } from '@/constants/clubs';
-import { fontFamily, radius, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { radius, spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 
 type Props = {
   value: string[];
@@ -21,7 +21,8 @@ type Props = {
 // club picker, but rows toggle membership and emit clubs in canonical order.
 export function BagPicker({ value, onChange, label, options = CLUB_OPTIONS }: Props) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [open, setOpen] = useState(false);
   const selected = new Set(value);
   const optionSet = new Set(options);
@@ -111,7 +112,7 @@ export function BagPicker({ value, onChange, label, options = CLUB_OPTIONS }: Pr
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   field: {
     flexDirection: 'row',
@@ -161,7 +162,7 @@ const makeStyles = (colors: Palette) =>
     paddingBottom: spacing.sm,
   },
   quickAction: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 13,
     color: colors.accent,
   },

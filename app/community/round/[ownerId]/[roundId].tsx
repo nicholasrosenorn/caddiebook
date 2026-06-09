@@ -9,8 +9,8 @@ import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { getFriendRound, likeRound, unlikeRound } from '@/lib/api/client';
 import { wireHoleToHole, wireShotToShot } from '@/lib/community/map';
 import type { FriendRoundDetail } from '@/lib/sync/wire';
@@ -18,7 +18,8 @@ import { computeRoundSummary, formatPct, totalPar } from '@/lib/stats';
 
 export default function FriendRoundScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const { ownerId, roundId } = useLocalSearchParams<{ ownerId: string; roundId: string }>();
   const [detail, setDetail] = useState<FriendRoundDetail | null>(null);
   const [error, setError] = useState(false);
@@ -235,7 +236,7 @@ function formatToPar(toPar: number): string {
   return `${toPar}`;
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     content: {
       paddingHorizontal: spacing.md,
@@ -256,7 +257,7 @@ const makeStyles = (colors: Palette) =>
       gap: spacing.sm,
     },
     ownerName: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 15,
       color: colors.textSecondary,
     },
@@ -278,14 +279,15 @@ const makeStyles = (colors: Palette) =>
       marginVertical: spacing.xs,
     },
     bigScore: {
-      fontFamily: fontFamily.serifBold,
+      fontFamily: fonts.serifBold,
       fontSize: 36,
       color: colors.textPrimary,
       lineHeight: 40,
     },
     bigScoreSuffix: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 18,
+      lineHeight: 24,
       color: colors.textSecondary,
     },
     statRow: {
@@ -302,8 +304,9 @@ const makeStyles = (colors: Palette) =>
       alignItems: 'center',
     },
     statTileValue: {
-      fontFamily: fontFamily.serifBold,
+      fontFamily: fonts.serifBold,
       fontSize: 20,
+      lineHeight: 27,
       color: colors.textPrimary,
     },
     likeRow: {
@@ -312,8 +315,9 @@ const makeStyles = (colors: Palette) =>
       gap: spacing.sm,
     },
     likeLabel: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 16,
+      lineHeight: 22,
       color: colors.textSecondary,
     },
     pressed: {

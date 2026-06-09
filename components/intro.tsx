@@ -7,60 +7,24 @@ import {
   StyleSheet,
   useWindowDimensions,
   View,
+  type ViewProps,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 import { ApproachTarget } from '@/components/approach-target';
+import { Avatar } from '@/components/avatar';
 import type { TargetPin } from '@/components/driver-target';
 import { DriverTarget } from '@/components/driver-target';
-import { Board as PuttBoard } from '@/components/putting-page';
 import { Screen } from '@/components/screen';
-import { Crosshair, SketchSurface, TickPair } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { WedgeRangeChart, type RowKey } from '@/components/wedge-range-chart';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
-import type { Putt } from '@/db/types';
+import { TrendChart } from '@/components/trend-chart';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { spacing, themes, type FontSet, type Palette } from '@/constants/theme';
+import { ThemeContext, useColors, useFontSet } from '@/constants/theme-context';
+import { topoRings } from '@/lib/sketch';
 
-const TOTAL_PAGES = 4;
-
-// WedgeRangeChart renders at a fixed internal height; PuttBoard's height is
-// content-driven (header + 5 lanes + padding). These feed the scaled clip boxes
-// on the final page — generous enough that nothing meaningful is cropped.
-const WEDGE_CHART_HEIGHT = 300;
-const PUTT_BOARD_WIDTH = 300;
-const PUTT_BOARD_HEIGHT = 360;
-
-// Sample carries (yds) so the range chart looks lived-in. The grid below it in
-// the real tool is the editor; here it's a static read-out.
-const SAMPLE_WEDGES = ['PW', '50°', '54°', '58°'];
-const SAMPLE_CARRY: Record<string, Record<RowKey, number>> = {
-  PW: { full: 125, tq: 112, half: 95, quarter: 78 },
-  '50°': { full: 108, tq: 96, half: 82, quarter: 66 },
-  '54°': { full: 92, tq: 82, half: 70, quarter: 55 },
-  '58°': { full: 78, tq: 68, half: 56, quarter: 42 },
-};
-const sampleCarry = (club: string, row: RowKey): number | null =>
-  SAMPLE_CARRY[club]?.[row] ?? null;
-
-// A handful of putts across the distance bands so the board shows made/missed
-// glyphs. holeNumber matches the board's so they render at full strength; the
-// whole board is non-interactive in the intro (pointerEvents="none").
-const SAMPLE_PUTTS: Putt[] = [
-  { distanceFt: 3, made: true },
-  { distanceFt: 3, made: true },
-  { distanceFt: 10, made: true },
-  { distanceFt: 10, made: false },
-  { distanceFt: 15, made: false },
-  { distanceFt: 25, made: false },
-  { distanceFt: 50, made: false },
-].map((p, i) => ({
-  id: `intro-putt-${i}`,
-  roundId: 'intro',
-  holeNumber: 1,
-  createdAt: '',
-  ...p,
-}));
+const TOTAL_PAGES = 5;
 
 // A drive that found the fairway, framed by a few muted "other rounds" pins —
 // the same dispersion overlay the round flow builds for real.
@@ -78,27 +42,55 @@ const APPROACH_PINS: TargetPin[] = [
   { xNorm: 0.66, yNorm: 0.36, variant: 'muted', key: 'a3' },
 ];
 
+// Sample scoring (strokes to par, oldest → newest) for the insight trend — a
+// game trending toward par. Static, like the dispersion pins above.
+const SCORE_TREND = [7, 5, 6, 4, 3, 2];
+const fmtToPar = (n: number) => {
+  const r = Math.round(n);
+  return r === 0 ? 'E' : r > 0 ? `+${r}` : `${r}`;
+};
+
 /**
  * One-time welcome flow. Rendered outside the router (see app/_layout) on first
  * launch, so it carries its own theme + safe-area providers. Tells the app's
- * story by reusing the real play surfaces — tap a drive, place an approach,
- * read your score in shapes — then hands off to the app via onDone.
+ * story end to end — a drawn cover, the tap-first surfaces you record on, the
+ * stats they roll up into, and the friends you share them with — then hands off
+ * to the app via onDone.
+ *
+ * The flow is pinned to the Augusta (editorial) theme via a scoped ThemeContext
+ * so the welcome always reads as the crisp editorial showcase, regardless of the
+ * theme a returning user has chosen.
  */
 export function Intro({ onDone }: { onDone: () => void }) {
+  const editorialTheme = useMemo(
+    () => ({
+      themeId: themes.augusta.id,
+      palette: themes.augusta.palette,
+      fonts: themes.augusta.fonts,
+      chrome: themes.augusta.chrome,
+      setTheme: () => {},
+    }),
+    [],
+  );
   return (
     <SafeAreaProvider>
-      <IntroFlow onDone={onDone} />
+      <ThemeContext.Provider value={editorialTheme}>
+        <IntroFlow onDone={onDone} />
+      </ThemeContext.Provider>
     </SafeAreaProvider>
   );
 }
 
 function IntroFlow({ onDone }: { onDone: () => void }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
-  // Page content padding is paddingLeft (lg) + paddingRight (xl) — see pageContent.
-  const contentWidth = windowWidth - (spacing.lg + spacing.xl);
+  // Page content uses symmetric horizontal padding (lg each side) — see pageContent.
+  const contentWidth = windowWidth - spacing.lg * 2;
+  const approachSize = Math.min(300, contentWidth);
+  const heroSize = Math.min(232, contentWidth * 0.7);
   const [pageHeight, setPageHeight] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
@@ -119,7 +111,7 @@ function IntroFlow({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <Screen padded={false}>
+    <Screen padded={false} paper={false}>
       <View style={[styles.flex, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <View
           style={styles.flex}
@@ -136,26 +128,13 @@ function IntroFlow({ onDone }: { onDone: () => void }) {
                 showsVerticalScrollIndicator={false}
                 onScroll={onScroll}
                 scrollEventThrottle={16}>
-                <IntroPage
-                  height={pageHeight}
-                  caption="Caddie Book"
-                  title="A pocket caddie for the thinking golfer."
-                  body="Built for golfers who want to track, analyze, and improve their game. No stats are more than a tap away, and every shot is a chance to learn."
-                  visual={
-                    <View style={styles.welcomeMark}>
-                      <Crosshair size={64} strokeWidth={1.4} />
-                      <TickPair width={40} />
-                    </View>
-                  }
-                  cta="Show me"
-                  onCta={() => scrollToPage(1)}
-                />
+                <CoverPage height={pageHeight} heroSize={heroSize} onCta={() => scrollToPage(1)} />
 
                 <IntroPage
                   height={pageHeight}
                   caption="Drives"
                   title="Mark it in the fairway."
-                  body="Left, center, or right of the fairway. Every drive drops a pin, and your dispersion draws itself."
+                  body="Record every drive with a simple tap. Every drive drops a pin and your dispersion draws itself."
                   visual={<DriverTarget pins={DRIVE_PINS} width={220} height={370} />}
                   cta="Next"
                   onCta={() => scrollToPage(2)}
@@ -165,39 +144,28 @@ function IntroFlow({ onDone }: { onDone: () => void }) {
                   height={pageHeight}
                   caption="Approaches"
                   title="Place it on the green."
-                  body="Proximity to the pin and greens-in-regulation derive themselves from a single tap on the target."
-                  visual={<ApproachTarget pins={APPROACH_PINS} size={300} />}
+                  body="One tap sets your proximity to the pin. Greens in regulation and putts by distance derive themselves."
+                  visual={<ApproachTarget pins={APPROACH_PINS} size={approachSize} />}
                   cta="Next"
                   onCta={() => scrollToPage(3)}
                 />
 
                 <IntroPage
                   height={pageHeight}
-                  caption="Dial it in"
-                  title="Sharpen the scoring clubs."
-                  body="Map your wedge yardages, and log every putt by distance — made or missed."
-                  visual={
-                    <View style={styles.toolsColumn}>
-                      <ScaledBox width={contentWidth} height={WEDGE_CHART_HEIGHT} scale={0.58}>
-                        <WedgeRangeChart
-                          wedges={SAMPLE_WEDGES}
-                          getValue={sampleCarry}
-                          selected={null}
-                        />
-                      </ScaledBox>
-                      <ScaledBox width={PUTT_BOARD_WIDTH} height={PUTT_BOARD_HEIGHT} scale={0.5}>
-                        <View pointerEvents="none">
-                          <PuttBoard
-                            width={PUTT_BOARD_WIDTH}
-                            putts={SAMPLE_PUTTS}
-                            holeNumber={1}
-                            onAdd={() => {}}
-                            onRemove={() => {}}
-                          />
-                        </View>
-                      </ScaledBox>
-                    </View>
-                  }
+                  caption="Your game"
+                  title="Watch the picture sharpen."
+                  body="Every round feeds your stats, your trends, and a real handicap index — so you always know what to work on."
+                  visual={<InsightPlate />}
+                  cta="Next"
+                  onCta={() => scrollToPage(4)}
+                />
+
+                <IntroPage
+                  height={pageHeight}
+                  caption="Playing partners"
+                  title="Share the good ones."
+                  body="Post a round, follow your friends, and cheer each other on. Your best days don't stay in your pocket."
+                  visual={<FeedCard />}
                   cta="Start tracking"
                   onCta={onDone}
                   primary
@@ -226,6 +194,99 @@ function IntroFlow({ onDone }: { onDone: () => void }) {
   );
 }
 
+// The opening cover — a drawn green-contour "course plate" with a flag as the
+// hero, the wordmark lockup beneath it, then the value-prop line + CTA. An open
+// editorial cover, not a boxed certificate.
+function CoverPage({
+  height,
+  heroSize,
+  onCta,
+}: {
+  height: number;
+  heroSize: number;
+  onCta: () => void;
+}) {
+  const colors = useColors();
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  return (
+    <View style={{ height }}>
+      <View style={styles.pageContent}>
+        <View style={styles.coverHeroGroup}>
+          <CoverHero size={heroSize} />
+          <View style={styles.coverTitle}>
+            <ThemedText type="caption" style={styles.kicker}>
+              A GOLFER&apos;S FIELD NOTEBOOK
+            </ThemedText>
+            <ThemedText style={styles.coverWordmark} numberOfLines={1} adjustsFontSizeToFit>
+              Caddie Book
+            </ThemedText>
+            <View style={styles.coverDivider}>
+              <Rule />
+            </View>
+            <ThemedText style={styles.coverTagline}>Track every shot. Visualize your game.</ThemedText>
+          </View>
+        </View>
+
+        <View style={styles.footer}>
+          <ThemedText type="muted" style={[styles.body, styles.coverBody]}>
+            Tap shapes that mean something to log a hole — months of rounds become trends,
+            dispersion maps, and a real handicap.
+          </ThemedText>
+          <CtaButton label="Show me" onPress={onCta} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// A bespoke cover illustration: a green drawn in plan view (a faint wash + rough
+// contour rings via topoRings) with a flag rising from the cup, framed by two
+// faint crop marks. Decorative — pointerEvents none. Two colors only.
+function CoverHero({ size }: { size: number }) {
+  const colors = useColors();
+  const cx = size / 2;
+  const cy = size * 0.56;
+  const maxR = size * 0.36;
+  const rings = useMemo(() => topoRings(cx, cy, maxR, 4, 'cover-green'), [cx, cy, maxR]);
+  const stickTop = size * 0.12;
+  const pennant = `M${cx} ${stickTop} L${cx + size * 0.15} ${stickTop + size * 0.045} L${cx} ${
+    stickTop + size * 0.09
+  } Z`;
+  const crop = size * 0.06;
+  const tick = size * 0.06;
+  return (
+    <Svg width={size} height={size} pointerEvents="none">
+      <Circle cx={cx} cy={cy} r={maxR} fill={colors.accent} fillOpacity={0.08} />
+      {rings.map((d, i) => (
+        <Path key={i} d={d} stroke={colors.borderStrong} strokeWidth={1} fill="none" opacity={0.6} />
+      ))}
+      <Line x1={cx} y1={cy} x2={cx} y2={stickTop} stroke={colors.accent} strokeWidth={1.6} />
+      <Path d={pennant} fill={colors.accent} />
+      <Circle cx={cx} cy={cy} r={size * 0.018} fill={colors.accent} />
+      {/* crop marks — top-left + bottom-right, an architect's-plate framing */}
+      <Line x1={crop} y1={crop} x2={crop + tick} y2={crop} stroke={colors.borderStrong} strokeWidth={1} />
+      <Line x1={crop} y1={crop} x2={crop} y2={crop + tick} stroke={colors.borderStrong} strokeWidth={1} />
+      <Line
+        x1={size - crop}
+        y1={size - crop}
+        x2={size - crop - tick}
+        y2={size - crop}
+        stroke={colors.borderStrong}
+        strokeWidth={1}
+      />
+      <Line
+        x1={size - crop}
+        y1={size - crop}
+        x2={size - crop}
+        y2={size - crop - tick}
+        stroke={colors.borderStrong}
+        strokeWidth={1}
+      />
+    </Svg>
+  );
+}
+
 function IntroPage({
   height,
   caption,
@@ -246,13 +307,16 @@ function IntroPage({
   primary?: boolean;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={{ height }}>
       <View style={styles.pageContent}>
         <View style={styles.headerBlock}>
-          <ThemedText type="caption">{caption.toUpperCase()}</ThemedText>
-          <ThemedText type="title">{title}</ThemedText>
+          <ThemedText type="caption" style={styles.kicker}>
+            {caption.toUpperCase()}
+          </ThemedText>
+          <ThemedText style={styles.pageTitle}>{title}</ThemedText>
         </View>
 
         <View style={styles.visual}>{visual}</View>
@@ -261,52 +325,175 @@ function IntroPage({
           <ThemedText type="muted" style={styles.body}>
             {body}
           </ThemedText>
-          <Pressable
-            onPress={onCta}
-            style={({ pressed }) => [styles.ctaWrap, pressed && styles.pressed]}>
-            <SketchSurface
-              seed={`intro-cta-${caption}`}
-              fill={primary ? colors.accent : colors.surface}
-              stroke={primary ? colors.accent : colors.borderStrong}
-              grain={primary}
-              style={styles.cta}>
-              <ThemedText style={[styles.ctaLabel, primary && styles.ctaLabelPrimary]}>
-                {cta}
-              </ThemedText>
-            </SketchSurface>
-          </Pressable>
+          <CtaButton label={cta} onPress={onCta} primary={primary} />
         </View>
       </View>
     </View>
   );
 }
 
-// Renders a fixed-size visual at a smaller footprint by scaling from the
-// top-left and clipping to the scaled box — so two tall charts fit one page
-// without leaving the centered-scale gaps a bare transform would.
-function ScaledBox({
-  width,
-  height,
-  scale,
+// A crisp editorial surface: a hairline-framed card/button — the drawn-line
+// SketchSurface's calm cousin, with no jitter and no grain.
+function Plate({
+  fill,
+  stroke,
+  radius = 12,
+  style,
   children,
-}: {
-  width: number;
-  height: number;
-  scale: number;
-  children: React.ReactNode;
-}) {
+  ...rest
+}: ViewProps & { fill?: string; stroke?: string; radius?: number }) {
+  const colors = useColors();
   return (
-    <View style={{ width: width * scale, height: height * scale, overflow: 'hidden' }}>
-      <View style={{ width, height, transformOrigin: 'top left', transform: [{ scale }] }}>
-        {children}
+    <View
+      style={[
+        {
+          backgroundColor: fill ?? colors.surface,
+          borderColor: stroke ?? colors.border,
+          borderWidth: 1,
+          borderRadius: radius,
+        },
+        style,
+      ]}
+      {...rest}>
+      {children}
+    </View>
+  );
+}
+
+// A hairline rule — the crisp replacement for the wavy SketchDivider.
+function Rule() {
+  const colors = useColors();
+  return <View style={{ height: 1, backgroundColor: colors.border }} />;
+}
+
+// The CTA — a hairline-outlined button, or a filled pine plate for the final
+// "Start tracking".
+function CtaButton({
+  label,
+  onPress,
+  primary = false,
+}: {
+  label: string;
+  onPress: () => void;
+  primary?: boolean;
+}) {
+  const colors = useColors();
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.ctaWrap, pressed && styles.pressed]}>
+      <Plate
+        fill={primary ? colors.accent : colors.surface}
+        stroke={primary ? colors.accent : colors.borderStrong}
+        radius={10}
+        style={styles.cta}>
+        <ThemedText style={[styles.ctaLabel, primary && styles.ctaLabelPrimary]}>{label}</ThemedText>
+      </Plate>
+    </Pressable>
+  );
+}
+
+// Page-4 payoff: a single composed "report card" plate — handicap index, a
+// scoring trend, and a couple of headline rates. One cohesive surface rather
+// than several charts competing for the page.
+function InsightPlate() {
+  const colors = useColors();
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  return (
+    <Plate radius={14} style={styles.report}>
+      <View style={styles.reportHead}>
+        <ThemedText type="caption" style={styles.kicker}>
+          HANDICAP INDEX
+        </ThemedText>
+        <ThemedText style={styles.handicap}>8.4</ThemedText>
       </View>
+
+      <Rule />
+
+      <ThemedText type="caption" style={[styles.reportLabel, styles.kicker]}>
+        SCORING — LAST 6
+      </ThemedText>
+      <TrendChart
+        points={SCORE_TREND}
+        height={66}
+        baseline={0}
+        baselineLabel="E"
+        formatValue={fmtToPar}
+      />
+
+      <Rule />
+
+      <View style={styles.statRow}>
+        <MiniStat label="GIR" value="61%" />
+        <MiniStat label="FIR" value="57%" />
+        <MiniStat label="PUTTS / RD" value="30" />
+      </View>
+    </Plate>
+  );
+}
+
+// Page-5 payoff: a representative friend's round, drawn with the same vocabulary
+// as the real community feed card.
+function FeedCard() {
+  const colors = useColors();
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  return (
+    <Plate radius={14} style={styles.feed}>
+      <View style={styles.feedHead}>
+        <Avatar avatar="flag.fill" size={40} seed="intro-feed-av" />
+        <View style={styles.feedName}>
+          <ThemedText style={styles.feedNameText}>Jordan Vale</ThemedText>
+          <ThemedText type="muted" style={styles.feedHandle}>
+            @birdiemaker
+          </ThemedText>
+        </View>
+      </View>
+
+      <View style={styles.feedMeta}>
+        <ThemedText type="subtitle" numberOfLines={1} style={styles.feedCourse}>
+          Pebble Dunes
+        </ThemedText>
+        <ThemedText type="caption">JUN 2</ThemedText>
+      </View>
+
+      <View style={styles.feedScore}>
+        <ThemedText style={styles.feedToPar}>−3</ThemedText>
+        <ThemedText style={styles.feedGross}>69</ThemedText>
+      </View>
+
+      <Rule />
+
+      <View style={styles.feedStats}>
+        <MiniStat label="GIR" value="72%" />
+        <MiniStat label="FIR" value="64%" />
+        <MiniStat label="PUTTS" value="28" />
+        <View style={styles.likeBlock}>
+          <IconSymbol name="hand.thumbsup.fill" size={20} color={colors.accent} />
+          <ThemedText style={styles.likeCount}>12</ThemedText>
+        </View>
+      </View>
+    </Plate>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  const colors = useColors();
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  return (
+    <View style={styles.miniStat}>
+      <ThemedText style={styles.miniValue}>{value}</ThemedText>
+      <ThemedText type="caption">{label}</ThemedText>
     </View>
   );
 }
 
 function PageDots({ totalPages, currentPage }: { totalPages: number; currentPage: number }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={styles.dotsContainer} pointerEvents="none">
       {Array.from({ length: totalPages }).map((_, i) => (
@@ -316,34 +503,41 @@ function PageDots({ totalPages, currentPage }: { totalPages: number; currentPage
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     flex: { flex: 1 },
     pageContent: {
       flex: 1,
-      paddingLeft: spacing.lg,
-      paddingRight: spacing.xl,
-      paddingTop: spacing.xl,
-      paddingBottom: spacing.lg,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.xxl,
+      paddingBottom: spacing.xl,
     },
     headerBlock: {
       gap: spacing.sm,
+    },
+    pageTitle: {
+      fontFamily: fonts.serifBold,
+      fontSize: 33,
+      lineHeight: 39,
+      letterSpacing: -0.4,
+      color: colors.textPrimary,
+    },
+    kicker: {
+      fontWeight: '500',
+      letterSpacing: 2,
+      color: colors.textMuted,
     },
     visual: {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    welcomeMark: {
-      alignItems: 'center',
-      gap: spacing.lg,
-    },
     footer: {
       gap: spacing.lg,
     },
     body: {
       fontSize: 17,
-      lineHeight: 24,
+      lineHeight: 27,
     },
     ctaWrap: {
       minHeight: 52,
@@ -356,8 +550,9 @@ const makeStyles = (colors: Palette) =>
       minHeight: 52,
     },
     ctaLabel: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 17,
+      lineHeight: 23,
       color: colors.textPrimary,
     },
     ctaLabelPrimary: {
@@ -366,10 +561,138 @@ const makeStyles = (colors: Palette) =>
     pressed: {
       opacity: 0.6,
     },
-    toolsColumn: {
+    // Cover
+    coverHeroGroup: {
+      flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      gap: spacing.md,
+      gap: spacing.lg,
+    },
+    coverTitle: {
+      alignItems: 'center',
+    },
+    coverWordmark: {
+      fontFamily: fonts.serifBold,
+      fontSize: 44,
+      lineHeight: 50,
+      color: colors.textPrimary,
+      textAlign: 'center',
+      marginTop: spacing.xs,
+      letterSpacing: -0.5,
+    },
+    coverDivider: {
+      width: 72,
+      marginVertical: spacing.sm,
+    },
+    coverTagline: {
+      fontFamily: fonts.serif,
+      fontSize: 15,
+      lineHeight: 21,
+      color: colors.textSecondary,
+      textAlign: 'center',
+    },
+    coverBody: {
+      textAlign: 'center',
+    },
+    // Insight report card
+    report: {
+      width: '100%',
+      padding: spacing.lg,
+      gap: spacing.sm,
+    },
+    reportHead: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      justifyContent: 'space-between',
+    },
+    handicap: {
+      fontFamily: fonts.serifBold,
+      fontSize: 38,
+      lineHeight: 42,
+      color: colors.accent,
+    },
+    reportLabel: {
+      marginTop: spacing.xs,
+    },
+    statRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: spacing.xs,
+    },
+    miniStat: {
+      gap: 2,
+    },
+    miniValue: {
+      fontFamily: fonts.serifBold,
+      fontSize: 20,
+      lineHeight: 27,
+      color: colors.textPrimary,
+    },
+    // Community feed card
+    feed: {
+      width: '100%',
+      padding: spacing.lg,
+      gap: spacing.sm,
+    },
+    feedHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+    feedName: {
+      flex: 1,
+      gap: 1,
+    },
+    feedNameText: {
+      fontFamily: fonts.serifBold,
+      fontSize: 17,
+      lineHeight: 23,
+      color: colors.textPrimary,
+    },
+    feedHandle: {
+      fontSize: 13,
+    },
+    feedMeta: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+      marginTop: spacing.xs,
+    },
+    feedCourse: {
+      flex: 1,
+    },
+    feedScore: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: spacing.sm,
+    },
+    feedToPar: {
+      fontFamily: fonts.serifBold,
+      fontSize: 34,
+      lineHeight: 38,
+      color: colors.accent,
+    },
+    feedGross: {
+      fontFamily: fonts.serif,
+      fontSize: 18,
+      lineHeight: 24,
+      color: colors.textMuted,
+    },
+    feedStats: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    likeBlock: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+    likeCount: {
+      fontFamily: fonts.serif,
+      fontSize: 15,
+      color: colors.textSecondary,
     },
     skip: {
       position: 'absolute',

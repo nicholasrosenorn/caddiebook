@@ -4,8 +4,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ScoreGlyph, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import type { Hole } from '@/db/types';
 import { resolveGir, scoreIndicator } from '@/lib/stats';
 
@@ -34,7 +34,8 @@ type Props = {
 
 export function Scorecard({ holes, onPressHole }: Props) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   const sorted = [...holes].sort((a, b) => a.holeNumber - b.holeNumber);
   const front = sorted.filter((h) => h.holeNumber <= 9);
@@ -62,7 +63,8 @@ function Nine({
   onPressHole?: (holeNumber: number) => void;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   const totals = {
     par: sum(holes.map((h) => h.par)),
@@ -87,7 +89,8 @@ function Nine({
 
 function LabelColumn() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={[styles.col, styles.labelCol]}>
       {ROWS.map((row, i) => (
@@ -111,7 +114,8 @@ function HoleColumn({
   onPress?: (holeNumber: number) => void;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const isPar3 = hole.par === 3;
   const gir = resolveGir(hole);
   return (
@@ -150,7 +154,8 @@ function TotalColumn({
   totals: { par: number | null; score: number | null; putt: number | null; fir: number; gir: number };
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={[styles.col, styles.totalCol]}>
       <Cell rowIndex={0}>
@@ -179,7 +184,8 @@ function TotalColumn({
 
 function Cell({ rowIndex, children }: { rowIndex: number; children: React.ReactNode }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={[styles.cell, striped(rowIndex) && styles.cellStriped]}>{children}</View>
   );
@@ -187,7 +193,8 @@ function Cell({ rowIndex, children }: { rowIndex: number; children: React.ReactN
 
 function ScoreCellContent({ score, par }: { score: number | null; par: number | null }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   if (score == null) return <ThemedText style={styles.numMuted}>–</ThemedText>;
   const indicator = par != null ? scoreIndicator(score, par) : 'none';
   const hasGlyph = indicator !== 'none' && indicator !== 'par';
@@ -205,7 +212,8 @@ function ScoreCellContent({ score, par }: { score: number | null; par: number | 
 
 function Mark({ value }: { value: boolean | null }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   if (value == null) return <ThemedText style={styles.numMuted}>–</ThemedText>;
   return (
     <IconSymbol
@@ -222,7 +230,7 @@ function sum(values: (number | null)[]): number | null {
   return present.reduce((a, b) => a + b, 0);
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     wrap: {
       gap: spacing.sm,
@@ -268,17 +276,17 @@ const makeStyles = (colors: Palette) =>
       letterSpacing: 0.5,
     },
     numText: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 14,
       color: colors.textPrimary,
     },
     numMuted: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 14,
       color: colors.textSecondary,
     },
     numStrong: {
-      fontFamily: fontFamily.serifBold,
+      fontFamily: fonts.serifBold,
       fontSize: 14,
       color: colors.textPrimary,
     },

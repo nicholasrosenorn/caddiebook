@@ -6,8 +6,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { getGoals, getRound, upsertGoals } from '@/db/queries';
 import type { Round } from '@/db/types';
 import { GOAL_CATEGORIES, type GoalCategory, type GoalCategoryKey } from '@/lib/goals';
@@ -18,7 +18,8 @@ const EMPTY_GOALS: GoalState = { execution: null, strategic: null, mental: null 
 
 export default function GoalsScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
 
@@ -74,6 +75,7 @@ export default function GoalsScreen() {
           { paddingTop: insets.top + spacing.xxl, paddingBottom: insets.bottom + spacing.xl },
         ]}
         keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <ThemedText type="caption">PRE-ROUND</ThemedText>
@@ -141,7 +143,8 @@ function GoalBlock({
   onChangeText: (text: string) => void;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   return (
     <View style={styles.block}>
@@ -174,7 +177,7 @@ function normalize(value: string | null): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     content: {
       paddingHorizontal: spacing.md,
@@ -201,7 +204,7 @@ const makeStyles = (colors: Palette) =>
       marginTop: spacing.xs,
     },
     input: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 17,
       lineHeight: 24,
       color: colors.textPrimary,
@@ -226,8 +229,9 @@ const makeStyles = (colors: Palette) =>
     },
     primaryCtaLabel: {
       color: colors.accentOn,
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 17,
+      lineHeight: 23,
     },
     skipButton: {
       position: 'absolute',
@@ -246,7 +250,7 @@ const makeStyles = (colors: Palette) =>
       backgroundColor: colors.accentMuted,
     },
     skipLabel: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 15,
       color: colors.textSecondary,
     },

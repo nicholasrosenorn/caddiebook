@@ -4,8 +4,8 @@ import Svg, { Circle, G, Line, Path, Polygon } from 'react-native-svg';
 
 import { InfoHint } from '@/components/info-hint';
 import { ThemedText } from '@/components/themed-text';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { createPutt, deletePutt } from '@/db/queries';
 import type { Hole, Putt } from '@/db/types';
 import { roughCirclePath, roughRectPath, stippleInRect } from '@/lib/sketch';
@@ -34,7 +34,8 @@ type Props = {
 
 export function PuttingPage({ roundId, hole, putts, onChange }: Props) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const { width: screenWidth } = useWindowDimensions();
   const boardWidth = Math.min(340, screenWidth - 32);
 
@@ -107,7 +108,8 @@ export function Board({
   onRemove: (id: string) => void;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   // Same beige-green / fringe palette as the approach + driver targets.
   const GREEN_FILL = colors.fairway;
   const FRINGE_GREEN = colors.rough;
@@ -215,7 +217,8 @@ function PuttZone({
   onRemove: (id: string) => void;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const total = editable.length + muted.length;
   return (
     <Pressable onPress={onAdd} style={({ pressed }) => [styles.zone, pressed && styles.zonePressed]}>
@@ -273,7 +276,7 @@ function Cup() {
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   container: {
     flex: 1,
@@ -323,7 +326,7 @@ const makeStyles = (colors: Palette) =>
     paddingVertical: 4,
   },
   headerText: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 11,
     letterSpacing: 1.5,
     color: colors.textSecondary,
@@ -339,12 +342,13 @@ const makeStyles = (colors: Palette) =>
     borderTopColor: colors.border,
   },
   laneLabel: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 18,
+    lineHeight: 24,
     color: colors.accent,
   },
   laneUnit: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 10,
     color: colors.textMuted,
     marginTop: -2,
@@ -381,7 +385,7 @@ const makeStyles = (colors: Palette) =>
     position: 'absolute',
     top: 2,
     right: 6,
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 11,
     color: colors.accent,
     opacity: 0.45,

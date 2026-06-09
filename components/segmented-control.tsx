@@ -3,8 +3,8 @@ import { Pressable, StyleSheet } from 'react-native';
 
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 
 export type SegmentOption<T extends string> = { value: T; label: string };
 
@@ -23,7 +23,8 @@ export function SegmentedControl<T extends string>({
   seed?: string;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
 
   return (
     <SketchSurface seed={seed} radius={10} fill={colors.surfaceAlt} style={styles.track}>
@@ -56,7 +57,7 @@ export function SegmentedControl<T extends string>({
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     track: {
       flexDirection: 'row',
@@ -76,7 +77,7 @@ const makeStyles = (colors: Palette) =>
     },
     label: {
       textAlign: 'center',
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 15,
       color: colors.textSecondary,
       paddingVertical: spacing.xs,

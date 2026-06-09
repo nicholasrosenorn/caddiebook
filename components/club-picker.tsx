@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import {
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   TextInput,
@@ -48,6 +50,9 @@ export function ClubPicker({ value, onChange }: ClubPickerProps) {
         transparent
         animationType="fade"
         onRequestClose={() => setOpen(false)}>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
             <View style={styles.sheetHeader}>
@@ -117,6 +122,7 @@ export function ClubPicker({ value, onChange }: ClubPickerProps) {
             ) : null}
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );
@@ -124,6 +130,9 @@ export function ClubPicker({ value, onChange }: ClubPickerProps) {
 
 const makeStyles = (colors: Palette) =>
   StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   fieldWrap: {
     minHeight: 44,
   },

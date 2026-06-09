@@ -5,8 +5,8 @@ import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 
 
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { deleteRound, getHolesForRound, listRounds } from '@/db/queries';
 import type { Round, RoundSummary } from '@/db/types';
 import { useSync } from '@/lib/sync/provider';
@@ -16,7 +16,8 @@ type RoundWithSummary = Round & { summary: RoundSummary };
 
 export function MyRoundsView({ header }: { header?: ReactNode }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [rounds, setRounds] = useState<RoundWithSummary[] | null>(null);
   const tabBarHeight = useBottomTabBarHeight();
   const { session, syncState } = useSync();
@@ -165,7 +166,8 @@ export function MyRoundsView({ header }: { header?: ReactNode }) {
 
 function Stat({ label, value }: { label: string; value: string }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={styles.stat}>
       <ThemedText type="caption">{label.toUpperCase()}</ThemedText>
@@ -182,7 +184,7 @@ function formatDate(iso: string): string {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   flex: {
     flex: 1,
@@ -215,8 +217,9 @@ const makeStyles = (colors: Palette) =>
   },
   ctaLabel: {
     color: colors.accentOn,
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 16,
+    lineHeight: 22,
   },
   list: {
     paddingHorizontal: spacing.md,
@@ -252,8 +255,9 @@ const makeStyles = (colors: Palette) =>
     gap: 2,
   },
   statValue: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 18,
+    lineHeight: 24,
     color: colors.textPrimary,
   },
 });

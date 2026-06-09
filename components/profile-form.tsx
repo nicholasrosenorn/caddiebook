@@ -16,8 +16,8 @@ import { Avatar, AVATAR_ICONS, DEFAULT_AVATAR } from '@/components/avatar';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { UsernameTakenError } from '@/lib/api/client';
 import { useSync } from '@/lib/sync/provider';
 
@@ -50,7 +50,8 @@ export function ProfileForm({
   contentStyle?: StyleProp<ViewStyle>;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const { updateProfile } = useSync();
 
   const [firstName, setFirstName] = useState(initial.firstName);
@@ -217,7 +218,8 @@ export function ProfileForm({
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={styles.field}>
       <ThemedText type="caption">{label}</ThemedText>
@@ -228,7 +230,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     flex: { flex: 1 },
     content: {
@@ -246,8 +248,9 @@ const makeStyles = (colors: Palette) =>
       gap: 2,
     },
     previewName: {
-      fontFamily: fontFamily.serifBold,
+      fontFamily: fonts.serifBold,
       fontSize: 20,
+      lineHeight: 27,
       color: colors.textPrimary,
     },
     previewHandle: {
@@ -265,8 +268,9 @@ const makeStyles = (colors: Palette) =>
       minHeight: 50,
     },
     input: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 17,
+      lineHeight: 23,
       color: colors.textPrimary,
       paddingVertical: spacing.sm,
     },
@@ -275,8 +279,9 @@ const makeStyles = (colors: Palette) =>
       alignItems: 'center',
     },
     at: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 17,
+      lineHeight: 23,
       color: colors.textMuted,
     },
     usernameInput: {
@@ -311,8 +316,9 @@ const makeStyles = (colors: Palette) =>
       justifyContent: 'center',
     },
     submitLabel: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 17,
+      lineHeight: 23,
       color: colors.accentOn,
     },
     disabled: {

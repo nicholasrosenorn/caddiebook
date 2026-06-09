@@ -2,18 +2,20 @@ import { router, Stack, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
+import { HeaderIconButton } from '@/components/header-icon-button';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { listFriends, unfriend } from '@/lib/api/client';
 import type { PublicProfile } from '@/lib/sync/wire';
 
 export default function FriendsScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [friends, setFriends] = useState<PublicProfile[] | null>(null);
 
   const load = useCallback(async () => {
@@ -57,16 +59,14 @@ export default function FriendsScreen() {
 
   const headerRight = useCallback(
     () => (
-      <Pressable
-        onPress={() => router.push('/add-friends' as any)}
-        hitSlop={8}
-        accessibilityRole="button"
+      <HeaderIconButton
+        name="person.badge.plus"
         accessibilityLabel="Add friends"
-        style={styles.headerRight}>
-        <IconSymbol name="person.badge.plus" size={24} color={colors.textPrimary} />
-      </Pressable>
+        color={colors.textPrimary}
+        onPress={() => router.push('/add-friends' as any)}
+      />
     ),
-    [colors.textPrimary, styles],
+    [colors.textPrimary],
   );
 
   if (friends === null) {
@@ -144,7 +144,7 @@ export default function FriendsScreen() {
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     list: {
       paddingHorizontal: spacing.md,
@@ -165,9 +165,6 @@ const makeStyles = (colors: Palette) =>
       textAlign: 'center',
       maxWidth: 280,
     },
-    headerRight: {
-      paddingRight: spacing.xs,
-    },
     ctaWrap: {
       marginTop: spacing.md,
     },
@@ -180,8 +177,9 @@ const makeStyles = (colors: Palette) =>
     },
     ctaLabel: {
       color: colors.accentOn,
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 16,
+      lineHeight: 22,
     },
     row: {
       flexDirection: 'row',
@@ -193,8 +191,9 @@ const makeStyles = (colors: Palette) =>
       gap: 2,
     },
     handle: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 16,
+      lineHeight: 22,
       color: colors.textPrimary,
     },
     actionBtn: {
@@ -206,7 +205,7 @@ const makeStyles = (colors: Palette) =>
     },
     removeLabel: {
       color: colors.textSecondary,
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 15,
     },
     pressed: {

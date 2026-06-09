@@ -7,8 +7,8 @@ import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import {
   createJournalEntry,
   deleteJournalEntry,
@@ -20,7 +20,8 @@ import { JOURNAL_TAGS, journalTagPlaceholder } from '@/lib/journal';
 
 export default function JournalEntryScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const isNew = id === 'new';
@@ -139,6 +140,7 @@ export default function JournalEntryScreen() {
           { paddingTop: spacing.lg, paddingBottom: insets.bottom + spacing.xl },
         ]}
         keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
         showsVerticalScrollIndicator={false}>
         <ThemedText type="caption">TAG</ThemedText>
         <View style={styles.tagRow}>
@@ -196,7 +198,7 @@ export default function JournalEntryScreen() {
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     content: {
       paddingHorizontal: spacing.md,
@@ -218,13 +220,13 @@ const makeStyles = (colors: Palette) =>
       justifyContent: 'center',
     },
     chipLabel: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 15,
       color: colors.textSecondary,
     },
     chipLabelSelected: {
       color: colors.accentOn,
-      fontFamily: fontFamily.serifBold,
+      fontFamily: fonts.serifBold,
     },
     inputSurface: {
       minHeight: 220,
@@ -233,7 +235,7 @@ const makeStyles = (colors: Palette) =>
     },
     input: {
       flex: 1,
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 17,
       lineHeight: 25,
       color: colors.textPrimary,
@@ -252,13 +254,15 @@ const makeStyles = (colors: Palette) =>
       marginTop: spacing.md,
     },
     deleteLabel: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 16,
+      lineHeight: 22,
       color: colors.danger,
     },
     doneLabel: {
-      fontFamily: fontFamily.serifBold,
+      fontFamily: fonts.serifBold,
       fontSize: 17,
+      lineHeight: 23,
       color: colors.accent,
     },
   });

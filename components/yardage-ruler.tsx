@@ -10,8 +10,8 @@ import {
 
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 
 type Props = {
   value: number | null;
@@ -37,7 +37,8 @@ export function YardageRuler({
   defaultValue = 125,
 }: Props) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const scrollRef = useRef<ScrollView>(null);
   const [width, setWidth] = useState(0);
   const [display, setDisplay] = useState<number>(value ?? defaultValue);
@@ -127,7 +128,7 @@ export function YardageRuler({
 
 const TRACK_HEIGHT = 46;
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   surface: {
     paddingVertical: spacing.sm,
@@ -140,7 +141,7 @@ const makeStyles = (colors: Palette) =>
     paddingBottom: 2,
   },
   readout: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 28,
     color: colors.textPrimary,
     lineHeight: 30,
@@ -149,7 +150,7 @@ const makeStyles = (colors: Palette) =>
     color: colors.textMuted,
   },
   unit: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 13,
     color: colors.textSecondary,
   },
@@ -178,7 +179,7 @@ const makeStyles = (colors: Palette) =>
     left: -16,
     width: 32,
     textAlign: 'center',
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 11,
     color: colors.textMuted,
   },

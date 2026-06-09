@@ -3,8 +3,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 
 export type OptionRowOption = { value: number; label: string };
 
@@ -25,7 +25,8 @@ type Props = {
 
 export function OptionRow({ label, value, options = COUNT_OPTIONS, onChange }: Props) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={styles.container}>
       <ThemedText style={styles.label}>{label}</ThemedText>
@@ -59,13 +60,13 @@ export function OptionRow({ label, value, options = COUNT_OPTIONS, onChange }: P
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   container: {
     gap: spacing.sm,
   },
   label: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 15,
     color: colors.textPrimary,
   },

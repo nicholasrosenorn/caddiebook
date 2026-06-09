@@ -98,24 +98,24 @@ const clay: Palette = {
   info: '#4A6B7A',
 };
 
-// Near-black ink on cream — the highest-contrast, most neutral set.
+// Black ink on warm white — a press / broadsheet editorial set.
 const charcoal: Palette = {
-  background: '#F4EFE4',
-  surface: '#FAF5EA',
-  surfaceAlt: '#EAE3D2',
-  border: '#DBD3C0',
-  borderStrong: '#B9AE94',
+  background: '#FCFBF8',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F2F0EA',
+  border: '#E6E3DB',
+  borderStrong: '#CDC8BC',
   textPrimary: '#1A1A1A',
   textSecondary: '#55504A',
   textMuted: '#8C8576',
-  accent: '#2B2B2B',
-  accentPressed: '#161616',
-  accentMuted: '#2B2B2B14',
-  accentSoft: '#D8D4C8',
-  accentOn: '#F4EFE4',
-  fairway: '#E4E2CB',
-  rough: '#C0D0AC',
-  roughDeep: '#A6BC90',
+  accent: '#232323',
+  accentPressed: '#111111',
+  accentMuted: '#23232314',
+  accentSoft: '#E2DFD7',
+  accentOn: '#FCFBF8',
+  fairway: '#E9E7DD',
+  rough: '#C2CFB6',
+  roughDeep: '#A7BC97',
   danger: '#9B3B2E',
   warning: '#B58A2A',
   info: '#4A6B7A',
@@ -144,35 +144,113 @@ const midnight: Palette = {
   info: '#6FA0B8',
 };
 
-export type ThemeId = 'pinehurst' | 'links' | 'clay' | 'charcoal' | 'midnight';
+// Pine green on a cool near-white page — the crisp editorial default (Augusta).
+const augusta: Palette = {
+  background: '#FAF9F5',
+  surface: '#FFFFFF',
+  surfaceAlt: '#F1EFE9',
+  border: '#E4E1D8',
+  borderStrong: '#C9C4B6',
+  textPrimary: '#1A1A1A',
+  textSecondary: '#55524A',
+  textMuted: '#8C8676',
+  accent: '#00563B',
+  accentPressed: '#003D2C',
+  accentMuted: '#103D2C12',
+  accentSoft: '#DCE5DE',
+  accentOn: '#FAF9F5',
+  fairway: '#E9E7DD',
+  rough: '#C2CFB6',
+  roughDeep: '#A7BC97',
+  danger: '#9B3B2E',
+  warning: '#B58A2A',
+  info: '#4A6B7A',
+};
+
+export const fontFamily = {
+  sans: Platform.select({
+    ios: 'System',
+    android: 'sans-serif',
+    default: 'system-ui',
+  })!,
+  serif: 'Fraunces_500Medium',
+  serifBold: 'Fraunces_700Bold',
+};
+
+/** Texture identity: crisp hairline "editorial" vs the warm hand-drawn "notebook". */
+export type Chrome = 'editorial' | 'notebook';
+
+/** Per-theme font families (loaded family-name strings). */
+export type FontSet = {
+  body: string;
+  serif: string;
+  serifBold: string;
+};
+
+/** Build-time fallback font set (Fraunces + system sans). */
+export const defaultFonts: FontSet = {
+  body: fontFamily.sans,
+  serif: fontFamily.serif,
+  serifBold: fontFamily.serifBold,
+};
+
+// A press / Scotch serif — high legibility, editorial authority.
+const newsreader: FontSet = {
+  body: fontFamily.sans,
+  serif: 'Newsreader_500Medium',
+  serifBold: 'Newsreader_600SemiBold',
+};
+
+// A calm literary serif — quiet and refined.
+const spectral: FontSet = {
+  body: fontFamily.sans,
+  serif: 'Spectral_500Medium',
+  serifBold: 'Spectral_600SemiBold',
+};
+
+// Libre Baskerville — a warm, classical Baskerville (in the spirit of New Baskerville).
+const baskerville: FontSet = {
+  body: fontFamily.sans,
+  serif: 'LibreBaskerville_500Medium',
+  serifBold: 'LibreBaskerville_700Bold',
+};
+
+export type ThemeId = 'augusta' | 'charcoal' | 'links' | 'clay' | 'midnight' | 'pinehurst';
 
 export type ThemeMeta = {
   id: ThemeId;
   label: string;
   hint: string;
   palette: Palette;
+  /** Type identity — the serif/body families this theme renders in. */
+  fonts: FontSet;
+  /** Texture identity — crisp editorial chrome or the hand-drawn notebook. */
+  chrome: Chrome;
   /** Dark-ground theme — flips the status-bar content to light. */
   dark?: boolean;
 };
 
-// Order = the order they appear in the Settings gallery.
+// Order = the order they appear in the Settings gallery. Each theme is a full
+// identity: color palette + font set + chrome (crisp editorial vs hand-drawn
+// notebook). Ids are stable so a user's saved choice survives a relabel.
 export const themes: Record<ThemeId, ThemeMeta> = {
-  pinehurst: { id: 'pinehurst', label: 'Pinehurst', hint: 'Deep green on warm paper', palette: pinehurst },
-  links: { id: 'links', label: 'Links', hint: 'Navy ink on cool sand', palette: links },
-  clay: { id: 'clay', label: 'Clay', hint: 'Terracotta on bone', palette: clay },
-  charcoal: { id: 'charcoal', label: 'Charcoal', hint: 'Near-black ink on cream', palette: charcoal },
-  midnight: { id: 'midnight', label: 'Midnight', hint: 'Light sage on dark', palette: midnight, dark: true },
+  augusta: { id: 'augusta', label: 'Augusta', hint: 'Pine green on near-white', palette: augusta, fonts: baskerville, chrome: 'editorial' },
+  charcoal: { id: 'charcoal', label: 'Broadsheet', hint: 'Black ink on warm white', palette: charcoal, fonts: newsreader, chrome: 'editorial' },
+  links: { id: 'links', label: 'Links', hint: 'Navy on cool sand', palette: links, fonts: spectral, chrome: 'editorial' },
+  clay: { id: 'clay', label: 'Clay', hint: 'Terracotta on bone', palette: clay, fonts: newsreader, chrome: 'editorial' },
+  midnight: { id: 'midnight', label: 'Twilight', hint: 'Sage on charcoal', palette: midnight, fonts: spectral, chrome: 'editorial', dark: true },
+  pinehurst: { id: 'pinehurst', label: 'Field Notebook', hint: 'Hand-drawn green on cream', palette: pinehurst, fonts: baskerville, chrome: 'notebook' },
 };
 
-export const THEME_ORDER: ThemeId[] = ['pinehurst', 'links', 'clay', 'charcoal', 'midnight'];
-export const DEFAULT_THEME_ID: ThemeId = 'pinehurst';
+export const THEME_ORDER: ThemeId[] = ['charcoal', 'augusta', 'links', 'clay', 'midnight', 'pinehurst'];
+export const DEFAULT_THEME_ID: ThemeId = 'charcoal';
 
 /**
  * Static default palette. Components read the *active* palette via
  * `useColors()` (see `theme-context`); this export is the build-time fallback
  * for non-React modules and the default theme.
  */
-export const colors: Palette = pinehurst;
+export const colors: Palette = augusta;
 
 export const spacing = {
   xs: 4,
@@ -190,63 +268,53 @@ export const radius = {
   pill: 999,
 } as const;
 
-export const fontFamily = {
-  sans: Platform.select({
-    ios: 'System',
-    android: 'sans-serif',
-    default: 'system-ui',
-  })!,
-  serif: 'Fraunces_500Medium',
-  serifBold: 'Fraunces_700Bold',
-};
-
-export const typography = {
+/**
+ * Typography is a factory so the active theme's font set is injected at runtime.
+ * Sizes / leading / tracking are constant; the color is applied by `ThemedText`.
+ */
+export const makeTypography = (fonts: FontSet): Record<string, TextStyle> => ({
   title: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 30,
-    lineHeight: 36,
-    color: colors.textPrimary,
+    lineHeight: 40,
     letterSpacing: -0.2,
-  } satisfies TextStyle,
+  },
   subtitle: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 20,
-    lineHeight: 26,
-    color: colors.textPrimary,
-  } satisfies TextStyle,
+    lineHeight: 28,
+  },
   body: {
-    fontFamily: fontFamily.sans,
+    fontFamily: fonts.body,
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 22,
-    color: colors.textPrimary,
-  } satisfies TextStyle,
+  },
   bodyMuted: {
-    fontFamily: fontFamily.sans,
+    fontFamily: fonts.body,
     fontSize: 16,
     fontWeight: '400',
     lineHeight: 22,
-    color: colors.textSecondary,
-  } satisfies TextStyle,
+  },
   caption: {
-    fontFamily: fontFamily.sans,
+    fontFamily: fonts.body,
     fontSize: 11,
     fontWeight: '600',
     lineHeight: 14,
-    color: colors.textMuted,
     letterSpacing: 1.4,
-  } satisfies TextStyle,
+  },
   label: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 13,
-    lineHeight: 16,
-    color: colors.textSecondary,
+    lineHeight: 18,
     letterSpacing: 0.3,
-  } satisfies TextStyle,
+  },
   display: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 56,
-    lineHeight: 60,
-    color: colors.textPrimary,
-  } satisfies TextStyle,
-} as const;
+    lineHeight: 68,
+  },
+});
+
+/** Static default typography (Fraunces); `ThemedText` builds a themed copy at runtime. */
+export const typography = makeTypography(defaultFonts);

@@ -5,8 +5,7 @@ import { Platform, type ImageSourcePropType } from 'react-native';
 import type { AppleIcon } from 'react-native-bottom-tabs';
 
 import { Tabs } from '@/components/bottom-tabs';
-import { fontFamily } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { useColors, useFontSet } from '@/constants/theme-context';
 
 type TabIcon = ImageSourcePropType | AppleIcon;
 
@@ -45,6 +44,7 @@ function useAndroidTabIcons() {
 
 export default function TabLayout() {
   const colors = useColors();
+  const fonts = useFontSet();
   const androidIcons = useAndroidTabIcons();
 
   const icon = (key: keyof typeof ANDROID_ICONS, sfSymbol: AppleIcon['sfSymbol']): TabIcon =>
@@ -56,7 +56,7 @@ export default function TabLayout() {
         tabBarActiveTintColor={colors.accent}
         tabBarInactiveTintColor={colors.textMuted}
         tabBarStyle={{ backgroundColor: colors.surface }}
-        tabLabelStyle={{ fontFamily: fontFamily.serif, fontSize: 11 }}
+        tabLabelStyle={{ fontFamily: fonts.serif, fontSize: 11 }}
         activeIndicatorColor={colors.accentMuted}
         rippleColor={colors.accentMuted}
         hapticFeedbackEnabled
@@ -73,7 +73,7 @@ export default function TabLayout() {
           name="play"
           options={{
             title: 'Play',
-            tabBarIcon: () => icon('play', 'plus.circle.fill'),
+            tabBarIcon: () => icon('play', 'plus'),
             // `role: 'search'` makes iOS 26 lift this tab out of the bar into its own
             // detached glass capsule on the trailing edge (the native "search button"
             // presentation). We repurpose that slot for New Round; on iOS ≤25 and

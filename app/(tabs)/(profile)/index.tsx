@@ -8,8 +8,8 @@ import { ProgressView } from '@/components/progress-view';
 import { Screen } from '@/components/screen';
 import { SegmentedControl } from '@/components/segmented-control';
 import { ThemedText } from '@/components/themed-text';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type FontSet, type Palette } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { useSync } from '@/lib/sync/provider';
 
 type Tab = 'progress' | 'rounds';
@@ -21,7 +21,8 @@ const TABS = [
 
 export default function ProfileScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const { session } = useSync();
   const user = session?.user;
   const [tab, setTab] = useState<Tab>('progress');
@@ -67,7 +68,7 @@ export default function ProfileScreen() {
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     fill: {
       flex: 1,
@@ -90,11 +91,13 @@ const makeStyles = (colors: Palette) =>
       gap: 2,
     },
     name: {
-      fontFamily: fontFamily.serifBold,
+      fontFamily: fonts.serifBold,
       fontSize: 22,
+      lineHeight: 30,
       color: colors.textPrimary,
     },
     handle: {
       fontSize: 14,
+      lineHeight: 20,
     },
   });

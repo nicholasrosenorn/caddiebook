@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent, type ViewProps } from 'react-native';
 import Svg, { Circle, G, Line, Path } from 'react-native-svg';
 
-import { useColors } from '@/constants/theme-context';
+import { useChrome, useColors } from '@/constants/theme-context';
 import {
   bunkerPath,
   roughRectPath,
@@ -99,6 +99,7 @@ export function Paper({
   grainOpacity?: number;
 }) {
   const colors = useColors();
+  const chrome = useChrome();
   const [size, setSize] = useState({ w: 0, h: 0 });
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -111,6 +112,9 @@ export function Paper({
     const count = Math.min(420, Math.round((size.w * size.h) / 1600));
     return stippleInRect(size.w, size.h, count, seed);
   }, [size.w, size.h, seed]);
+
+  // Editorial chrome: a clean page — no grain field.
+  if (chrome === 'editorial') return null;
 
   return (
     <View style={StyleSheet.absoluteFill} onLayout={onLayout} pointerEvents="none">
@@ -148,6 +152,7 @@ export function SketchSurface({
   grain?: boolean;
 }) {
   const colors = useColors();
+  const chrome = useChrome();
   const fillColor = fill ?? colors.surface;
   const strokeColor = stroke ?? colors.borderStrong;
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -165,6 +170,27 @@ export function SketchSurface({
         : [],
     };
   }, [size.w, size.h, radius, seed, grain]);
+
+  // Editorial chrome: a crisp native-bordered surface — no grain, no SVG frame.
+  // `grain`/`seed` are accepted-and-ignored so the 119 call sites stay unchanged;
+  // selection still reads via the accent `fill`.
+  if (chrome === 'editorial') {
+    return (
+      <View
+        style={[
+          {
+            backgroundColor: fillColor,
+            borderColor: strokeColor,
+            borderWidth: strokeWidth <= 1.3 ? 1 : Math.round(strokeWidth),
+            borderRadius: radius,
+          },
+          style,
+        ]}
+        {...rest}>
+        {children}
+      </View>
+    );
+  }
 
   return (
     <View style={style} onLayout={onLayout} {...rest}>
@@ -192,6 +218,7 @@ export function SketchDivider({
   strokeWidth?: number;
 }) {
   const colors = useColors();
+  const chrome = useChrome();
   const tint = color ?? colors.border;
   const [width, setWidth] = useState(0);
   const onLayout = (e: LayoutChangeEvent) => {
@@ -199,6 +226,10 @@ export function SketchDivider({
     if (w !== width) setWidth(w);
   };
   const path = useMemo(() => (width > 0 ? sketchDividerPath(width, seed) : ''), [width, seed]);
+
+  // Editorial chrome: a 1px hairline rule.
+  if (chrome === 'editorial') return <View style={{ height: 1, backgroundColor: tint }} />;
+
   return (
     <View style={dividerStyles.wrap} onLayout={onLayout}>
       {width > 0 && (

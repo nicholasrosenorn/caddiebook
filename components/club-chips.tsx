@@ -4,8 +4,8 @@ import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS, OTHER_CLUB } from '@/constants/clubs';
-import { fontFamily, radius, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { radius, spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 
 type Props = {
   value: string | null;
@@ -18,7 +18,8 @@ type Props = {
 // convention — filled green when active, paper + drawn outline otherwise).
 export function ClubChips({ value, onChange, clubs = CLUB_OPTIONS }: Props) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const isStandard = value != null && (CLUB_OPTIONS as readonly string[]).includes(value);
   const showOther = value != null && !isStandard;
   // If a previously-saved standard club isn't in the bag, still show it so the
@@ -74,7 +75,8 @@ function Chip({
   onPress: () => void;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
       <SketchSurface
@@ -92,7 +94,7 @@ function Chip({
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   wrap: {
     gap: spacing.sm,
@@ -111,8 +113,9 @@ const makeStyles = (colors: Palette) =>
     justifyContent: 'center',
   },
   chipLabel: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 16,
+    lineHeight: 22,
     color: colors.textPrimary,
   },
   chipLabelSelected: {

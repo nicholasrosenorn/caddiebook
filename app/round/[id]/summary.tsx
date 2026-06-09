@@ -11,8 +11,8 @@ import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import {
   getAllHoles,
   getGoals,
@@ -52,7 +52,8 @@ const PUTT_BUCKETS = [
 
 export default function SummaryScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const [round, setRound] = useState<Round | null>(null);
@@ -319,7 +320,8 @@ export default function SummaryScreen() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <View style={styles.section}>
       <ThemedText type="subtitle">{title}</ThemedText>
@@ -330,7 +332,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function StatTile({ label, value }: { label: string; value: string }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <SketchSurface seed={`summary-stat-${label}`} style={styles.statTile}>
       <ThemedText type="caption" numberOfLines={1}>
@@ -345,7 +348,8 @@ function StatTile({ label, value }: { label: string; value: string }) {
 
 function PerParTile({ label, value }: { label: string; value: number | null }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <SketchSurface seed={`summary-perpar-${label}`} style={styles.perParTile}>
       <ThemedText type="caption" numberOfLines={1}>
@@ -364,7 +368,8 @@ function ScoreDistributionBars({
   distribution: ReturnType<typeof computeScoreDistribution>;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const DIST_ROWS: {
     key: keyof ReturnType<typeof computeScoreDistribution>;
     label: string;
@@ -415,7 +420,8 @@ function ScoreDistributionBars({
 
 function PuttingDistribution({ putts }: { putts: Putt[] }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const buckets = PUTT_BUCKETS.map((b) => {
     const inBucket = putts.filter((p) => p.distanceFt === b.ft);
     const makes = inBucket.filter((p) => p.made).length;
@@ -489,7 +495,8 @@ function PuttingDistribution({ putts }: { putts: Putt[] }) {
 
 function RoundGoals({ goals }: { goals: PreRoundGoals | null }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const rows = GOAL_CATEGORIES.map((c) => ({ label: c.label, value: goals?.[c.key] ?? null })).filter(
     (r): r is { label: string; value: string } => !!r.value,
   );
@@ -518,7 +525,8 @@ function RoundGoals({ goals }: { goals: PreRoundGoals | null }) {
 
 function ReviewAnswers({ review }: { review: PostRoundReview }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const rows: { question: string; answer: string | null; emphasis?: 'rating' }[] = [
     {
       question: 'Cost me the most strokes',
@@ -568,7 +576,8 @@ function ReviewAnswers({ review }: { review: PostRoundReview }) {
 
 function NoReview() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
     <SketchSurface seed="summary-noreview" style={styles.reviewCard}>
       <View style={styles.reviewRow}>
@@ -597,7 +606,7 @@ function formatDelta(delta: number): string {
   return delta > 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1);
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   content: {
     paddingHorizontal: spacing.md,
@@ -624,14 +633,15 @@ const makeStyles = (colors: Palette) =>
     marginVertical: spacing.xs,
   },
   bigScore: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 36,
     color: colors.textPrimary,
     lineHeight: 40,
   },
   bigScoreSuffix: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 18,
+    lineHeight: 24,
     color: colors.textSecondary,
   },
   statGrid: {
@@ -651,8 +661,9 @@ const makeStyles = (colors: Palette) =>
     alignItems: 'center',
   },
   statTileValue: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 22,
+    lineHeight: 30,
     color: colors.textPrimary,
   },
   perParRow: {
@@ -669,8 +680,9 @@ const makeStyles = (colors: Palette) =>
     gap: 4,
   },
   perParValue: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 22,
+    lineHeight: 30,
     color: colors.textPrimary,
   },
   section: {
@@ -689,7 +701,7 @@ const makeStyles = (colors: Palette) =>
   },
   distRowLabel: {
     width: 64,
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 14,
     color: colors.textPrimary,
   },
@@ -724,7 +736,7 @@ const makeStyles = (colors: Palette) =>
   },
   puttLabel: {
     width: 64,
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 14,
     color: colors.textPrimary,
   },
@@ -748,7 +760,7 @@ const makeStyles = (colors: Palette) =>
     alignItems: 'flex-end',
   },
   puttPct: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 15,
     color: colors.textPrimary,
   },
@@ -791,8 +803,9 @@ const makeStyles = (colors: Palette) =>
     paddingHorizontal: spacing.md,
   },
   goalValue: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 16,
+    lineHeight: 22,
     color: colors.textPrimary,
   },
   reviewQuestion: {
@@ -829,8 +842,9 @@ const makeStyles = (colors: Palette) =>
   },
   editCtaLabel: {
     color: colors.accentOn,
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 17,
+    lineHeight: 23,
   },
   closeButton: {
     position: 'absolute',

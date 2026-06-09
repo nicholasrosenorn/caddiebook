@@ -3,8 +3,8 @@ import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Circle, G, Path } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
-import { fontFamily, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { roughRectPath, sketchDividerPath, stippleInRect, wavyLines } from '@/lib/sketch';
 
 export type RowKey = 'full' | 'tq' | 'half' | 'quarter';
@@ -46,7 +46,8 @@ function computeDomain(values: number[]): { min: number; max: number } {
 
 function WedgeRangeChartImpl({ wedges, getValue, selected }: Props) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [width, setWidth] = useState(0);
 
   const onLayout = (e: LayoutChangeEvent) => {
@@ -192,7 +193,7 @@ function WedgeRangeChartImpl({ wedges, getValue, selected }: Props) {
 
 export const WedgeRangeChart = memo(WedgeRangeChartImpl);
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     wrap: {
       width: '100%',
@@ -205,7 +206,7 @@ const makeStyles = (colors: Palette) =>
       alignItems: 'flex-end',
     },
     yLabelText: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 11,
       color: colors.textMuted,
     },
@@ -215,7 +216,7 @@ const makeStyles = (colors: Palette) =>
       alignItems: 'center',
     },
     xLabelText: {
-      fontFamily: fontFamily.serifBold,
+      fontFamily: fonts.serifBold,
       fontSize: 13,
       color: colors.textSecondary,
     },

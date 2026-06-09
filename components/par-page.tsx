@@ -4,8 +4,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { InfoHint } from '@/components/info-hint';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import { updateHole } from '@/db/queries';
 import type { Hole } from '@/db/types';
 
@@ -20,7 +20,8 @@ type Props = {
 
 export function ParPage({ roundId, hole, onChange, onPicked }: Props) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const handlePick = async (par: number) => {
     try {
       await updateHole(roundId, hole.holeNumber, { par });
@@ -82,7 +83,7 @@ export function ParPage({ roundId, hole, onChange, onPicked }: Props) {
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   container: {
     flex: 1,
@@ -115,7 +116,7 @@ const makeStyles = (colors: Palette) =>
     opacity: 0.6,
   },
   parNumber: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 48,
     color: colors.textPrimary,
     lineHeight: 60,

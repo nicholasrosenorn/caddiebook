@@ -8,8 +8,8 @@ import { SketchDivider, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { WedgeRangeChart } from '@/components/wedge-range-chart';
 import { CLUB_OPTIONS, isWedge } from '@/constants/clubs';
-import { fontFamily, spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 import {
   getBag,
   getClubYardages,
@@ -52,7 +52,8 @@ function wedgesFromBag(bag: string[]): string[] {
 
 export default function WedgeGridScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [bag, setBagState] = useState<string[]>([...CLUB_OPTIONS]);
   const [wedges, setWedges] = useState<string[]>([]);
   const [yardages, setYardages] = useState<Record<string, number>>({});
@@ -283,7 +284,7 @@ function CellInput({
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   bagPicker: {
     paddingVertical: spacing.lg,
@@ -313,7 +314,7 @@ const makeStyles = (colors: Palette) =>
     backgroundColor: colors.accentPressed,
   },
   legendLabel: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 13,
     color: colors.textSecondary,
   },
@@ -335,7 +336,7 @@ const makeStyles = (colors: Palette) =>
     marginTop: 1,
   },
   infoI: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 12,
     lineHeight: 14,
     color: colors.textSecondary,
@@ -360,7 +361,7 @@ const makeStyles = (colors: Palette) =>
     alignItems: 'flex-end',
   },
   axisLabel: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 15,
     color: colors.textSecondary,
   },
@@ -377,8 +378,9 @@ const makeStyles = (colors: Palette) =>
     justifyContent: 'center',
   },
   loft: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 16,
+    lineHeight: 22,
     color: colors.textPrimary,
   },
   cell: {
@@ -390,21 +392,24 @@ const makeStyles = (colors: Palette) =>
     justifyContent: 'center',
   },
   value: {
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 20,
+    lineHeight: 27,
     color: colors.textPrimary,
   },
   valueEmpty: {
-    fontFamily: fontFamily.serif,
+    fontFamily: fonts.serif,
     fontSize: 18,
+    lineHeight: 24,
     color: colors.textMuted,
   },
   cellInput: {
     alignSelf: 'stretch',
     flex: 1,
     textAlign: 'center',
-    fontFamily: fontFamily.serifBold,
+    fontFamily: fonts.serifBold,
     fontSize: 20,
+    lineHeight: 27,
     color: colors.textPrimary,
     padding: 0,
   },

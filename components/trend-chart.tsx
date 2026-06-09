@@ -3,8 +3,8 @@ import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
-import { fontFamily, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
+import { type Palette, type FontSet } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
 
 type TrendChartProps = {
   /** Chronological values, oldest → newest. */
@@ -31,7 +31,8 @@ export function TrendChart({
   color,
 }: TrendChartProps) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const tint = color ?? colors.accent;
   const [width, setWidth] = useState(0);
   const onLayout = (e: LayoutChangeEvent) => {
@@ -121,7 +122,7 @@ export function TrendChart({
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   wrap: {
     width: '100%',
@@ -130,7 +131,7 @@ const makeStyles = (colors: Palette) =>
   axis: {
     position: 'absolute',
     left: 2,
-    fontFamily: fontFamily.sans,
+    fontFamily: fonts.body,
     fontSize: 10,
     color: colors.textMuted,
   },
@@ -144,7 +145,7 @@ const makeStyles = (colors: Palette) =>
     position: 'absolute',
     right: 2,
     textAlign: 'right',
-    fontFamily: fontFamily.sans,
+    fontFamily: fonts.body,
     fontSize: 10,
     color: colors.textMuted,
   },

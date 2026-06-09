@@ -7,8 +7,8 @@ import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { fontFamily, spacing, THEME_ORDER, themes, type Palette, type ThemeId } from '@/constants/theme';
-import { useColors, useTheme } from '@/constants/theme-context';
+import { spacing, THEME_ORDER, themes, type Palette, type ThemeId, type FontSet } from '@/constants/theme';
+import { useColors, useTheme, useFontSet } from '@/constants/theme-context';
 import { setSetting } from '@/db/queries';
 import { listFriends } from '@/lib/api/client';
 import { clearAllRounds, seedSampleRounds } from '@/lib/dev-seed';
@@ -29,7 +29,8 @@ function formatSyncedAt(iso: string | null): string {
 
 export default function SettingsScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const { themeId, setTheme } = useTheme();
   const { session, syncState, syncNow, signOut } = useSync();
   const [devBusy, setDevBusy] = useState(false);
@@ -146,9 +147,9 @@ export default function SettingsScreen() {
 
         <View style={styles.section}>
           <ThemedText type="caption">APPEARANCE</ThemedText>
-          <ThemedText type="subtitle">Color theme</ThemedText>
+          <ThemedText type="subtitle">Theme</ThemedText>
           <ThemedText type="muted" style={styles.sectionHint}>
-            Two-color schemes — deep ink on warm paper. Tap one to recolor the whole app.
+            Each theme is its own feel — color, type, and texture. Tap one to restyle the whole app.
           </ThemedText>
         </View>
 
@@ -247,8 +248,9 @@ function ThemeCard({
   onSelect: () => void;
 }) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { label, hint, palette } = themes[id];
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  const { label, hint, palette, fonts: themeFonts } = themes[id];
 
   return (
     <Pressable
@@ -271,7 +273,9 @@ function ThemeCard({
         </View>
 
         <View style={styles.cardText}>
-          <ThemedText style={styles.cardLabel}>{label}</ThemedText>
+          <ThemedText style={[styles.cardLabel, { fontFamily: themeFonts.serifBold }]}>
+            {label}
+          </ThemedText>
           <ThemedText type="muted" style={styles.cardHint}>
             {hint}
           </ThemedText>
@@ -287,7 +291,7 @@ function ThemeCard({
   );
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     content: {
       paddingVertical: spacing.md,
@@ -310,8 +314,9 @@ const makeStyles = (colors: Palette) =>
       gap: 1,
     },
     accountName: {
-      fontFamily: fontFamily.serifBold,
+      fontFamily: fonts.serifBold,
       fontSize: 19,
+      lineHeight: 26,
       color: colors.textPrimary,
     },
     accountHandle: {
@@ -327,7 +332,7 @@ const makeStyles = (colors: Palette) =>
       gap: 4,
     },
     editLabel: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 14,
       color: colors.accent,
     },
@@ -355,7 +360,7 @@ const makeStyles = (colors: Palette) =>
       backgroundColor: colors.accentMuted,
     },
     countText: {
-      fontFamily: fontFamily.serifBold,
+      fontFamily: fonts.serifBold,
       fontSize: 14,
       color: colors.accent,
     },
@@ -363,7 +368,7 @@ const makeStyles = (colors: Palette) =>
       fontSize: 13,
       marginTop: 2,
       color: colors.textSecondary,
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
     },
     gallery: {
       gap: spacing.sm,
@@ -412,8 +417,9 @@ const makeStyles = (colors: Palette) =>
       gap: 2,
     },
     cardLabel: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 18,
+      lineHeight: 24,
       color: colors.textPrimary,
     },
     cardHint: {
@@ -447,12 +453,12 @@ const makeStyles = (colors: Palette) =>
       paddingVertical: spacing.sm,
     },
     devSeedLabel: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 14,
       color: colors.accentOn,
     },
     devClearLabel: {
-      fontFamily: fontFamily.serif,
+      fontFamily: fonts.serif,
       fontSize: 14,
       color: colors.textSecondary,
     },
