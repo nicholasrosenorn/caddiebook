@@ -48,6 +48,12 @@
       "expo-font",
       "expo-audio",
       "react-native-bottom-tabs",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "CaddieBook uses your location to show live yardages on the course map."
+        }
+      ],
       "expo-secure-store",
       "expo-apple-authentication",
       "expo-notifications",

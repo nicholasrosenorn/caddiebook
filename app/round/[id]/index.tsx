@@ -16,6 +16,7 @@ import { DrivePage } from '@/components/drive-page';
 import { GlassSurface } from '@/components/glass-surface';
 import { HoleStatsPage } from '@/components/hole-stats-page';
 import { HoleStepper } from '@/components/hole-stepper';
+import { MapPage } from '@/components/map-page';
 import { ParPage } from '@/components/par-page';
 import { PuttingPage } from '@/components/putting-page';
 import { ScorePage } from '@/components/score-page';
@@ -55,6 +56,7 @@ export default function RoundScreen() {
   });
   const [pageHeight, setPageHeight] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
+  const [mapOpen, setMapOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const didInitialJump = useRef(false);
   const insets = useSafeAreaInsets();
@@ -293,6 +295,12 @@ export default function RoundScreen() {
         </View>
       </View>
 
+      {mapOpen && (
+        <View style={styles.mapOverlay}>
+          <MapPage />
+        </View>
+      )}
+
       <Pressable
         onPress={() => router.push(`/menu?roundId=${id}` as any)}
         hitSlop={10}
@@ -304,6 +312,25 @@ export default function RoundScreen() {
             <GlassSurface borderRadius={18} />
             {pressed && <View style={styles.buttonPressedOverlay} pointerEvents="none" />}
             <IconSymbol name="line.3.horizontal" size={18} color={colors.textPrimary} />
+          </>
+        )}
+      </Pressable>
+
+      <Pressable
+        onPress={() => setMapOpen((v) => !v)}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel={mapOpen ? 'Close course map' : 'Open course map'}
+        style={[styles.mapButton, { top: insets.top + 8 }]}>
+        {({ pressed }) => (
+          <>
+            <GlassSurface borderRadius={18} />
+            {pressed && <View style={styles.buttonPressedOverlay} pointerEvents="none" />}
+            <IconSymbol
+              name="map.fill"
+              size={18}
+              color={mapOpen ? colors.accent : colors.textPrimary}
+            />
           </>
         )}
       </Pressable>
@@ -377,6 +404,22 @@ const makeStyles = (colors: Palette) =>
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 30,
+  },
+  mapButton: {
+    position: 'absolute',
+    left: 56,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 30,
+  },
+  mapOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 25,
+    backgroundColor: colors.background,
   },
   buttonPressedOverlay: {
     ...StyleSheet.absoluteFillObject,

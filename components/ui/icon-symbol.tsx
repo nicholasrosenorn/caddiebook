@@ -48,6 +48,9 @@ const MAPPING = {
   'flame.fill': 'local-fire-department',
   'trophy.fill': 'emoji-events',
   'target': 'my-location',
+  'location.fill': 'near-me',
+  'map.fill': 'map',
+  'aqi.medium': 'grain',
   'mountain.2.fill': 'terrain',
   // Community.
   'bell': 'notifications-none',
