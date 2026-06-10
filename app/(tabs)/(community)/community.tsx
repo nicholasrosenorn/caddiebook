@@ -1,3 +1,4 @@
+import * as Haptics from 'expo-haptics';
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
@@ -9,12 +10,21 @@ import {
   View,
 } from 'react-native';
 import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { Avatar } from '@/components/avatar';
 import { EdgeSwipeOpener } from '@/components/edge-swipe-opener';
 import { HeaderIconButton } from '@/components/header-icon-button';
+import { PressableScale } from '@/components/pressable-scale';
 import { Screen } from '@/components/screen';
-import { SketchDivider, SketchSurface } from '@/components/sketch';
+import { SketchDivider, SketchSurface, TopoChip } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
@@ -22,6 +32,7 @@ import { useColors, useFontSet } from '@/constants/theme-context';
 import { getFeed, getIncomingRequestCount, likeRound, unlikeRound } from '@/lib/api/client';
 import { wireHoleToHole } from '@/lib/community/map';
 import { formatToPar } from '@/lib/lifetime-stats';
+import { listItemIn } from '@/lib/motion';
 import { computeRoundSummary, formatPct, totalPar } from '@/lib/stats';
 import { useSync } from '@/lib/sync/provider';
 import type { FeedRound } from '@/lib/sync/wire';
@@ -139,6 +150,7 @@ export default function CommunityScreen() {
     return (
       <Screen marks>
         <View style={styles.empty}>
+          <TopoChip seed="community-signed-out" />
           <ThemedText type="subtitle">Community</ThemedText>
           <ThemedText type="muted" style={styles.copy}>
             Sign in to follow friends and compare rounds.
@@ -162,6 +174,14 @@ export default function CommunityScreen() {
           keyExtractor={(item) => `${item.ownerId}:${item.id}`}
           contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + spacing.md }]}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListHeaderComponent={
+            <View style={styles.lockup}>
+              <ThemedText type="caption" style={styles.kicker}>
+                FRIENDS&apos; ROUNDS
+              </ThemedText>
+              <ThemedText style={styles.lockupTitle}>Clubhouse</ThemedText>
+            </View>
+          }
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />
           }
@@ -169,10 +189,24 @@ export default function CommunityScreen() {
           onEndReachedThreshold={0.5}
           ListEmptyComponent={
             <View style={styles.empty}>
+              <TopoChip seed="community-empty" />
               <ThemedText type="subtitle">Quiet out here</ThemedText>
               <ThemedText type="muted" style={styles.copy}>
                 Add friends to see their rounds, or share your own from a round&apos;s settings.
               </ThemedText>
+              <PressableScale
+                onPress={() => router.push('/add-friend' as any)}
+                accessibilityRole="button"
+                style={styles.emptyCtaWrap}>
+                <SketchSurface
+                  seed="feed-empty-cta"
+                  fill={colors.accent}
+                  stroke={colors.accent}
+                  radius={10}
+                  style={styles.emptyCta}>
+                  <ThemedText style={styles.emptyCtaLabel}>Find friends</ThemedText>
+                </SketchSurface>
+              </PressableScale>
             </View>
           }
           ListFooterComponent={
@@ -182,8 +216,10 @@ export default function CommunityScreen() {
               </View>
             ) : null
           }
-          renderItem={({ item }) => (
-            <FeedCard item={item} onToggleLike={() => onToggleLike(item)} colors={colors} styles={styles} />
+          renderItem={({ item, index }) => (
+            <Animated.View entering={listItemIn(index)}>
+              <FeedCard item={item} onToggleLike={() => onToggleLike(item)} colors={colors} styles={styles} />
+            </Animated.View>
           )}
         />
       )}
@@ -213,9 +249,10 @@ function FeedCard({
   const handle = fullName && item.owner.username ? `@${item.owner.username}` : null;
 
   return (
-    <Pressable
-      onPress={() => router.push(`/community/round/${item.ownerId}/${item.id}` as any)}
-      style={({ pressed }) => pressed && styles.pressed}>
+    <PressableScale
+      pressedScale={0.98}
+      haptic={false}
+      onPress={() => router.push(`/community/round/${item.ownerId}/${item.id}` as any)}>
       <SketchSurface seed={`feed-${item.ownerId}-${item.id}`} style={styles.card}>
         <View style={styles.owner}>
           <Avatar avatar={item.owner.avatar} size={40} seed={`feed-av-${item.ownerId}`} />
@@ -236,16 +273,9 @@ function FeedCard({
           {item.courseName || 'Untitled round'}
         </ThemedText>
 
-        <View style={styles.scoreBlock}>
-          <View style={styles.scoreCol}>
-            <ThemedText type="caption">TO PAR</ThemedText>
-            <ThemedText style={styles.toPar}>{toPar}</ThemedText>
-          </View>
-          <View style={styles.scoreColDivider} />
-          <View style={styles.scoreCol}>
-            <ThemedText type="caption">GROSS</ThemedText>
-            <ThemedText style={styles.scoreSecondary}>{played ? summary.totalScore : '—'}</ThemedText>
-          </View>
+        <View style={styles.scoreRow}>
+          <ThemedText style={styles.toPar}>{toPar}</ThemedText>
+          <ThemedText style={styles.gross}>{played ? summary.totalScore : '—'}</ThemedText>
         </View>
 
         <SketchDivider seed={`feed-div-${item.ownerId}-${item.id}`} />
@@ -255,28 +285,60 @@ function FeedCard({
           <Stat label="FIR" value={formatPct(summary.firPct)} styles={styles} />
           <Stat label="Putts" value={summary.totalPutts > 0 ? String(summary.totalPutts) : '—'} styles={styles} />
           <View style={styles.likeBtn}>
-            <Pressable
-              onPress={onToggleLike}
-              hitSlop={8}
-              style={({ pressed }) => pressed && styles.pressed}>
-              <IconSymbol
-                name={item.likedByMe ? 'hand.thumbsup.fill' : 'hand.thumbsup'}
-                size={20}
-                color={item.likedByMe ? colors.accent : colors.textMuted}
-              />
-            </Pressable>
-            <Pressable
+            <LikeButton liked={item.likedByMe} onPress={onToggleLike} colors={colors} />
+            <PressableScale
+              haptic={false}
               onPress={() =>
                 router.push(`/community/likes/${item.ownerId}/${item.id}` as any)
               }
               hitSlop={8}
-              accessibilityLabel="See who liked this round"
-              style={({ pressed }) => pressed && styles.pressed}>
+              accessibilityLabel="See who liked this round">
               <ThemedText style={styles.likeCount}>{item.likeCount}</ThemedText>
-            </Pressable>
+            </PressableScale>
           </View>
         </View>
       </SketchSurface>
+    </PressableScale>
+  );
+}
+
+// The like tap pops: a quick press-down then a springy return with a slight
+// overshoot — physical feedback for the one real action on the card. The
+// optimistic state change happens in the parent; this is purely the feel.
+function LikeButton({
+  liked,
+  onPress,
+  colors,
+}: {
+  liked: boolean;
+  onPress: () => void;
+  colors: Palette;
+}) {
+  const scale = useSharedValue(1);
+  const pop = () => {
+    if (process.env.EXPO_OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    scale.value = withSequence(
+      withTiming(0.8, { duration: 90, easing: Easing.out(Easing.quad) }),
+      withSpring(1, { stiffness: 420, damping: 14 }),
+    );
+    onPress();
+  };
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return (
+    <Pressable
+      onPress={pop}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={liked ? 'Unlike round' : 'Like round'}>
+      <Animated.View style={popStyle}>
+        <IconSymbol
+          name={liked ? 'hand.thumbsup.fill' : 'hand.thumbsup'}
+          size={20}
+          color={liked ? colors.accent : colors.textMuted}
+        />
+      </Animated.View>
     </Pressable>
   );
 }
@@ -331,8 +393,40 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     footer: {
       paddingVertical: spacing.md,
     },
-    pressed: {
-      opacity: 0.6,
+    lockup: {
+      gap: spacing.xs,
+      paddingTop: spacing.xs,
+      paddingBottom: spacing.md,
+    },
+    kicker: {
+      fontWeight: '500',
+      letterSpacing: 2,
+      color: colors.textMuted,
+    },
+    lockupTitle: {
+      fontFamily: fonts.serifBold,
+      fontSize: 33,
+      lineHeight: 40,
+      letterSpacing: -0.4,
+      color: colors.textPrimary,
+    },
+    emptyCtaWrap: {
+      marginTop: spacing.md,
+      minHeight: 48,
+      alignSelf: 'stretch',
+    },
+    emptyCta: {
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 48,
+    },
+    emptyCtaLabel: {
+      fontFamily: fonts.serif,
+      fontSize: 16,
+      lineHeight: 22,
+      color: colors.accentOn,
     },
     card: {
       padding: spacing.md,
@@ -363,21 +457,11 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       color: colors.textPrimary,
       paddingTop: spacing.xs,
     },
-    scoreBlock: {
+    scoreRow: {
       flexDirection: 'row',
-      alignItems: 'stretch',
+      alignItems: 'baseline',
+      gap: spacing.sm,
       paddingVertical: spacing.xs,
-    },
-    scoreCol: {
-      flex: 1,
-      alignItems: 'center',
-      gap: 2,
-    },
-    scoreColDivider: {
-      width: 1,
-      alignSelf: 'stretch',
-      marginVertical: 2,
-      backgroundColor: colors.border,
     },
     toPar: {
       fontFamily: fonts.serifBold,
@@ -385,11 +469,11 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       lineHeight: 40,
       color: colors.accent,
     },
-    scoreSecondary: {
+    gross: {
       fontFamily: fonts.serif,
-      fontSize: 22,
-      lineHeight: 40,
-      color: colors.textPrimary,
+      fontSize: 18,
+      lineHeight: 24,
+      color: colors.textMuted,
     },
     cardStats: {
       flexDirection: 'row',

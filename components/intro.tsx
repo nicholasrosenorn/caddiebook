@@ -1,27 +1,42 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import * as Haptics from 'expo-haptics';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  NativeScrollEvent,
-  NativeSyntheticEvent,
   Pressable,
-  ScrollView,
   StyleSheet,
   useWindowDimensions,
   View,
-  type ViewProps,
+  type StyleProp,
+  type ViewStyle,
 } from 'react-native';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  Easing,
+  Keyframe,
+  useAnimatedRef,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+  type SharedValue,
+} from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { scheduleOnRN } from 'react-native-worklets';
 
 import { ApproachTarget } from '@/components/approach-target';
 import { Avatar } from '@/components/avatar';
 import type { TargetPin } from '@/components/driver-target';
 import { DriverTarget } from '@/components/driver-target';
+import { FirstRunTheme } from '@/components/first-run-theme';
 import { Screen } from '@/components/screen';
+import { SketchDivider, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { TrendChart } from '@/components/trend-chart';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { spacing, themes, type FontSet, type Palette } from '@/constants/theme';
-import { ThemeContext, useColors, useFontSet } from '@/constants/theme-context';
+import { spacing, type FontSet, type Palette } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
+import { revealRule, revealUp } from '@/lib/motion';
 import { topoRings } from '@/lib/sketch';
 
 const TOTAL_PAGES = 5;
@@ -50,6 +65,32 @@ const fmtToPar = (n: number) => {
   return r === 0 ? 'E' : r > 0 ? `+${r}` : `${r}`;
 };
 
+// The cover plate settles in as a whole (never from scale 0), then the flag
+// rises out of the cup once the green has landed.
+const heroIn = new Keyframe({
+  0: { opacity: 0, transform: [{ scale: 0.96 }] },
+  100: { opacity: 1, transform: [{ scale: 1 }], easing: Easing.out(Easing.cubic) },
+}).duration(650);
+
+const flagIn = new Keyframe({
+  0: { opacity: 0, transform: [{ translateY: 10 }] },
+  100: { opacity: 1, transform: [{ translateY: 0 }], easing: Easing.out(Easing.cubic) },
+})
+  .duration(450)
+  .delay(380);
+
+const lightTap = () => {
+  if (process.env.EXPO_OS === 'ios') {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }
+};
+
+const settleTap = () => {
+  if (process.env.EXPO_OS === 'ios') {
+    Haptics.selectionAsync();
+  }
+};
+
 /**
  * One-time welcome flow. Rendered outside the router (see app/_layout) on first
  * launch, so it carries its own theme + safe-area providers. Tells the app's
@@ -57,27 +98,18 @@ const fmtToPar = (n: number) => {
  * stats they roll up into, and the friends you share them with — then hands off
  * to the app via onDone.
  *
- * The flow is pinned to the Augusta (editorial) theme via a scoped ThemeContext
- * so the welcome always reads as the crisp editorial showcase, regardless of the
- * theme a returning user has chosen.
+ * Pinned to the Augusta (editorial) theme via FirstRunTheme. Editorial-pager
+ * composition: each page is its own spread (a bleeding fairway, a cropped
+ * approach circle, an open typographic stat plate, a feed deck) rather than a
+ * repeated template. Swipe carries all navigation — the only button in the flow
+ * is the final "Start tracking"; progress reads on a hairline rail, not dots.
+ * Content reveals once, in a short stagger, the first time a page is focused.
  */
 export function Intro({ onDone }: { onDone: () => void }) {
-  const editorialTheme = useMemo(
-    () => ({
-      themeId: themes.augusta.id,
-      palette: themes.augusta.palette,
-      fonts: themes.augusta.fonts,
-      chrome: themes.augusta.chrome,
-      setTheme: () => {},
-    }),
-    [],
-  );
   return (
-    <SafeAreaProvider>
-      <ThemeContext.Provider value={editorialTheme}>
-        <IntroFlow onDone={onDone} />
-      </ThemeContext.Provider>
-    </SafeAreaProvider>
+    <FirstRunTheme>
+      <IntroFlow onDone={onDone} />
+    </FirstRunTheme>
   );
 }
 
@@ -87,28 +119,49 @@ function IntroFlow({ onDone }: { onDone: () => void }) {
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
-  // Page content uses symmetric horizontal padding (lg each side) — see pageContent.
-  const contentWidth = windowWidth - spacing.lg * 2;
-  const approachSize = Math.min(300, contentWidth);
-  const heroSize = Math.min(232, contentWidth * 0.7);
+  const heroSize = Math.min(232, (windowWidth - spacing.lg * 2) * 0.7);
   const [pageHeight, setPageHeight] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
+  // Reveal-once flags per page; the cover (page 0) choreographs on mount.
+  const [revealed, setRevealed] = useState<boolean[]>(() => {
+    const initial = new Array<boolean>(TOTAL_PAGES).fill(false);
+    initial[0] = true;
+    return initial;
+  });
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+
+  // Scroll position lives on the UI thread (it drives the progress rail); page
+  // changes hop back to JS for state + a soft settle haptic.
+  const scrollY = useSharedValue(0);
+  const pageH = useSharedValue(0);
+  const pageIdx = useSharedValue(0);
+  useEffect(() => {
+    if (pageHeight != null) pageH.value = pageHeight;
+  }, [pageHeight, pageH]);
+
+  const onPageSettle = useCallback((idx: number) => {
+    setCurrentPage(idx);
+    setRevealed((prev) => (prev[idx] ? prev : prev.map((r, i) => (i === idx ? true : r))));
+    settleTap();
+  }, []);
+
+  const onScroll = useAnimatedScrollHandler((e) => {
+    scrollY.value = e.contentOffset.y;
+    if (pageH.value <= 0) return;
+    const idx = Math.min(TOTAL_PAGES - 1, Math.max(0, Math.round(e.contentOffset.y / pageH.value)));
+    if (idx !== pageIdx.value) {
+      pageIdx.value = idx;
+      scheduleOnRN(onPageSettle, idx);
+    }
+  });
 
   const scrollToPage = useCallback(
     (page: number) => {
       if (pageHeight == null) return;
       scrollRef.current?.scrollTo({ y: page * pageHeight, animated: true });
     },
-    [pageHeight],
+    [pageHeight, scrollRef],
   );
-
-  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (pageHeight == null) return;
-    const y = e.nativeEvent.contentOffset.y;
-    const idx = Math.min(TOTAL_PAGES - 1, Math.max(0, Math.round(y / pageHeight)));
-    if (idx !== currentPage) setCurrentPage(idx);
-  };
 
   return (
     <Screen padded={false} paper={false}>
@@ -121,58 +174,33 @@ function IntroFlow({ onDone }: { onDone: () => void }) {
           }}>
           {pageHeight !== null && (
             <>
-              <ScrollView
+              <Animated.ScrollView
                 ref={scrollRef}
                 pagingEnabled
                 decelerationRate="fast"
                 showsVerticalScrollIndicator={false}
                 onScroll={onScroll}
                 scrollEventThrottle={16}>
-                <CoverPage height={pageHeight} heroSize={heroSize} onCta={() => scrollToPage(1)} />
-
-                <IntroPage
+                <CoverPage height={pageHeight} heroSize={heroSize} onAdvance={() => scrollToPage(1)} />
+                <DrivesSpread
                   height={pageHeight}
-                  caption="Drives"
-                  title="Mark it in the fairway."
-                  body="Record every drive with a simple tap. Every drive drops a pin and your dispersion draws itself."
-                  visual={<DriverTarget pins={DRIVE_PINS} width={220} height={370} />}
-                  cta="Next"
-                  onCta={() => scrollToPage(2)}
+                  revealed={revealed[1]}
+                  onAdvance={() => scrollToPage(2)}
                 />
-
-                <IntroPage
+                <ApproachSpread
                   height={pageHeight}
-                  caption="Approaches"
-                  title="Place it on the green."
-                  body="One tap sets your proximity to the pin. Greens in regulation and putts by distance derive themselves."
-                  visual={<ApproachTarget pins={APPROACH_PINS} size={approachSize} />}
-                  cta="Next"
-                  onCta={() => scrollToPage(3)}
+                  revealed={revealed[2]}
+                  onAdvance={() => scrollToPage(3)}
                 />
-
-                <IntroPage
+                <GameSpread
                   height={pageHeight}
-                  caption="Your game"
-                  title="Watch the picture sharpen."
-                  body="Every round feeds your stats, your trends, and a real handicap index — so you always know what to work on."
-                  visual={<InsightPlate />}
-                  cta="Next"
-                  onCta={() => scrollToPage(4)}
+                  revealed={revealed[3]}
+                  onAdvance={() => scrollToPage(4)}
                 />
+                <PartnersSpread height={pageHeight} revealed={revealed[4]} onDone={onDone} />
+              </Animated.ScrollView>
 
-                <IntroPage
-                  height={pageHeight}
-                  caption="Playing partners"
-                  title="Share the good ones."
-                  body="Post a round, follow your friends, and cheer each other on. Your best days don't stay in your pocket."
-                  visual={<FeedCard />}
-                  cta="Start tracking"
-                  onCta={onDone}
-                  primary
-                />
-              </ScrollView>
-
-              <PageDots totalPages={TOTAL_PAGES} currentPage={currentPage} />
+              <ProgressRail scrollY={scrollY} pageH={pageH} />
             </>
           )}
         </View>
@@ -194,17 +222,141 @@ function IntroFlow({ onDone }: { onDone: () => void }) {
   );
 }
 
+// A reveal-once block: invisible until its page first scrolls into focus, then
+// it fades up in stagger order. Swapping View → Animated.View remounts the
+// node, which is what fires the entering animation exactly once.
+function Reveal({
+  revealed,
+  order,
+  style,
+  children,
+}: {
+  revealed: boolean;
+  order: number;
+  style?: StyleProp<ViewStyle>;
+  children: React.ReactNode;
+}) {
+  if (!revealed) return <View style={[style, { opacity: 0 }]}>{children}</View>;
+  return (
+    <Animated.View entering={revealUp(order)} style={style}>
+      {children}
+    </Animated.View>
+  );
+}
+
+// The reading-progress rail — a hairline on the right edge whose ink fill
+// tracks the journey through the flow, in place of page dots. Transform-only,
+// driven on the UI thread.
+const RAIL_HEIGHT = 120;
+
+function ProgressRail({
+  scrollY,
+  pageH,
+}: {
+  scrollY: SharedValue<number>;
+  pageH: SharedValue<number>;
+}) {
+  const colors = useColors();
+  const fillStyle = useAnimatedStyle(() => {
+    const total = pageH.value * (TOTAL_PAGES - 1);
+    const p = total > 0 ? Math.min(1, Math.max(0, scrollY.value / total)) : 0;
+    return { transform: [{ translateY: -RAIL_HEIGHT * (1 - p) }] };
+  });
+  return (
+    <View style={[railStyles.track, { backgroundColor: colors.border }]} pointerEvents="none">
+      <Animated.View style={[railStyles.fill, { backgroundColor: colors.accent }, fillStyle]} />
+    </View>
+  );
+}
+
+const railStyles = StyleSheet.create({
+  track: {
+    position: 'absolute',
+    right: 14,
+    top: '50%',
+    marginTop: -RAIL_HEIGHT / 2,
+    width: 2,
+    height: RAIL_HEIGHT,
+    borderRadius: 1,
+    overflow: 'hidden',
+  },
+  fill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: 2,
+    height: RAIL_HEIGHT,
+    borderRadius: 1,
+  },
+});
+
+// The folio line — "01 · DRIVES" — the chapter mark of the sequence.
+function Folio({ n, label, revealed }: { n: number; label: string; revealed: boolean }) {
+  const colors = useColors();
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  return (
+    <Reveal revealed={revealed} order={0}>
+      <ThemedText type="caption" style={styles.kicker}>
+        {`0${n} · ${label.toUpperCase()}`}
+      </ThemedText>
+    </Reveal>
+  );
+}
+
+// A gently bobbing chevron in the cover's footer: the swipe affordance that
+// replaces a "Next" button. Tapping it advances too. The one looping animation
+// in the flow — it communicates "there's more below", matching the round
+// flow's scroll-hint convention.
+function SwipeCue({ onPress }: { onPress: () => void }) {
+  const colors = useColors();
+  const bob = useSharedValue(0);
+  useEffect(() => {
+    bob.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0, { duration: 900, easing: Easing.inOut(Easing.quad) }),
+      ),
+      -1,
+      false,
+    );
+  }, [bob]);
+  const bobStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: 6 * bob.value }],
+    opacity: 0.45 + 0.4 * bob.value,
+  }));
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={lightTap}
+      hitSlop={16}
+      accessibilityRole="button"
+      accessibilityLabel="Continue to the next page"
+      style={cueStyles.wrap}>
+      <Animated.View style={bobStyle}>
+        <IconSymbol name="chevron.down" size={28} color={colors.accent} />
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+const cueStyles = StyleSheet.create({
+  // Stretch + center so the chevron stays centered even inside footers that
+  // align their copy to one side (e.g. the Approaches spread).
+  wrap: { alignSelf: 'stretch', alignItems: 'center' },
+});
+
 // The opening cover — a drawn green-contour "course plate" with a flag as the
-// hero, the wordmark lockup beneath it, then the value-prop line + CTA. An open
-// editorial cover, not a boxed certificate.
+// hero, the wordmark lockup beneath it, then the value-prop line and a swipe
+// cue. An open editorial cover, not a boxed certificate.
 function CoverPage({
   height,
   heroSize,
-  onCta,
+  onAdvance,
 }: {
   height: number;
   heroSize: number;
-  onCta: () => void;
+  onAdvance: () => void;
 }) {
   const colors = useColors();
   const fonts = useFontSet();
@@ -213,27 +365,41 @@ function CoverPage({
     <View style={{ height }}>
       <View style={styles.pageContent}>
         <View style={styles.coverHeroGroup}>
-          <CoverHero size={heroSize} />
+          <Animated.View entering={heroIn}>
+            <CoverHero size={heroSize} />
+          </Animated.View>
           <View style={styles.coverTitle}>
-            <ThemedText type="caption" style={styles.kicker}>
-              A GOLFER&apos;S FIELD NOTEBOOK
-            </ThemedText>
-            <ThemedText style={styles.coverWordmark} numberOfLines={1} adjustsFontSizeToFit>
-              Caddie Book
-            </ThemedText>
-            <View style={styles.coverDivider}>
-              <Rule />
-            </View>
-            <ThemedText style={styles.coverTagline}>Track every shot. Visualize your game.</ThemedText>
+            <Animated.View entering={revealUp(2)}>
+              <ThemedText type="caption" style={styles.kicker}>
+                A GOLFER&apos;S FIELD NOTEBOOK
+              </ThemedText>
+            </Animated.View>
+            <Animated.View entering={revealUp(3)}>
+              <ThemedText style={styles.coverWordmark} numberOfLines={1}>
+                Caddie Book
+              </ThemedText>
+            </Animated.View>
+            <Animated.View entering={revealRule(4)} style={styles.coverDivider}>
+              <SketchDivider seed="cover-rule" />
+            </Animated.View>
+            <Animated.View entering={revealUp(5)}>
+              <ThemedText style={styles.coverTagline}>
+                Track every shot. Visualize your game.
+              </ThemedText>
+            </Animated.View>
           </View>
         </View>
 
         <View style={styles.footer}>
-          <ThemedText type="muted" style={[styles.body, styles.coverBody]}>
-            Tap shapes that mean something to log a hole — months of rounds become trends,
-            dispersion maps, and a real handicap.
-          </ThemedText>
-          <CtaButton label="Show me" onPress={onCta} />
+          <Animated.View entering={revealUp(6)}>
+            <ThemedText type="muted" style={[styles.body, styles.coverBody]}>
+              Built for the improving golfer — turn months of rounds into trends,
+              dispersion maps, and a real handicap.
+            </ThemedText>
+          </Animated.View>
+          <Animated.View entering={revealUp(7)}>
+            <SwipeCue onPress={onAdvance} />
+          </Animated.View>
         </View>
       </View>
     </View>
@@ -242,7 +408,8 @@ function CoverPage({
 
 // A bespoke cover illustration: a green drawn in plan view (a faint wash + rough
 // contour rings via topoRings) with a flag rising from the cup, framed by two
-// faint crop marks. Decorative — pointerEvents none. Two colors only.
+// faint crop marks. Decorative — pointerEvents none. Two colors only. The flag
+// layer is separate so it can rise out of the cup after the plate settles.
 function CoverHero({ size }: { size: number }) {
   const colors = useColors();
   const cx = size / 2;
@@ -256,55 +423,160 @@ function CoverHero({ size }: { size: number }) {
   const crop = size * 0.06;
   const tick = size * 0.06;
   return (
-    <Svg width={size} height={size} pointerEvents="none">
-      <Circle cx={cx} cy={cy} r={maxR} fill={colors.accent} fillOpacity={0.08} />
-      {rings.map((d, i) => (
-        <Path key={i} d={d} stroke={colors.borderStrong} strokeWidth={1} fill="none" opacity={0.6} />
-      ))}
-      <Line x1={cx} y1={cy} x2={cx} y2={stickTop} stroke={colors.accent} strokeWidth={1.6} />
-      <Path d={pennant} fill={colors.accent} />
-      <Circle cx={cx} cy={cy} r={size * 0.018} fill={colors.accent} />
-      {/* crop marks — top-left + bottom-right, an architect's-plate framing */}
-      <Line x1={crop} y1={crop} x2={crop + tick} y2={crop} stroke={colors.borderStrong} strokeWidth={1} />
-      <Line x1={crop} y1={crop} x2={crop} y2={crop + tick} stroke={colors.borderStrong} strokeWidth={1} />
-      <Line
-        x1={size - crop}
-        y1={size - crop}
-        x2={size - crop - tick}
-        y2={size - crop}
-        stroke={colors.borderStrong}
-        strokeWidth={1}
-      />
-      <Line
-        x1={size - crop}
-        y1={size - crop}
-        x2={size - crop}
-        y2={size - crop - tick}
-        stroke={colors.borderStrong}
-        strokeWidth={1}
-      />
-    </Svg>
+    <View style={{ width: size, height: size }} pointerEvents="none">
+      <Svg width={size} height={size}>
+        <Circle cx={cx} cy={cy} r={maxR} fill={colors.accent} fillOpacity={0.08} />
+        {rings.map((d, i) => (
+          <Path key={i} d={d} stroke={colors.borderStrong} strokeWidth={1} fill="none" opacity={0.6} />
+        ))}
+        {/* crop marks — top-left + bottom-right, an architect's-plate framing */}
+        <Line x1={crop} y1={crop} x2={crop + tick} y2={crop} stroke={colors.borderStrong} strokeWidth={1} />
+        <Line x1={crop} y1={crop} x2={crop} y2={crop + tick} stroke={colors.borderStrong} strokeWidth={1} />
+        <Line
+          x1={size - crop}
+          y1={size - crop}
+          x2={size - crop - tick}
+          y2={size - crop}
+          stroke={colors.borderStrong}
+          strokeWidth={1}
+        />
+        <Line
+          x1={size - crop}
+          y1={size - crop}
+          x2={size - crop}
+          y2={size - crop - tick}
+          stroke={colors.borderStrong}
+          strokeWidth={1}
+        />
+      </Svg>
+      <Animated.View entering={flagIn} style={StyleSheet.absoluteFill}>
+        <Svg width={size} height={size}>
+          <Line x1={cx} y1={cy} x2={cx} y2={stickTop} stroke={colors.accent} strokeWidth={1.6} />
+          <Path d={pennant} fill={colors.accent} />
+          <Circle cx={cx} cy={cy} r={size * 0.018} fill={colors.accent} />
+        </Svg>
+      </Animated.View>
+    </View>
   );
 }
 
-function IntroPage({
+// Vertical room reserved for a spread's footer (a ~4-line body + the swipe
+// cue + page padding) so the bleeding visuals can never run into the copy.
+const FOOTER_CLEARANCE = 204;
+
+// 01 · Drives — the tall fairway bleeds off the right edge, oversized, the
+// headline overlapping its top rough; body copy tucked bottom-left.
+function DrivesSpread({
   height,
-  caption,
-  title,
-  body,
-  visual,
-  cta,
-  onCta,
-  primary = false,
+  revealed,
+  onAdvance,
 }: {
   height: number;
-  caption: string;
-  title: string;
-  body: string;
-  visual: React.ReactNode;
-  cta: string;
-  onCta: () => void;
-  primary?: boolean;
+  revealed: boolean;
+  onAdvance: () => void;
+}) {
+  const colors = useColors();
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  // Anchor below the headline and stop above the footer, whatever the screen.
+  const targetTop = Math.max(150, Math.round(height * 0.2));
+  const targetH = Math.min(440, height - targetTop - FOOTER_CLEARANCE);
+  const targetW = Math.round(targetH * 0.56);
+  return (
+    <View style={{ height }}>
+      <View style={styles.pageContent}>
+        <View style={styles.spreadHeader}>
+          <Folio n={1} label="Drives" revealed={revealed} />
+          <Reveal revealed={revealed} order={1}>
+            <ThemedText style={styles.pageTitle}>Mark it in{'\n'}the fairway.</ThemedText>
+          </Reveal>
+        </View>
+
+        <Reveal revealed={revealed} order={2} style={[styles.driveBleed, { top: targetTop }]}>
+          <View pointerEvents="none">
+            <DriverTarget pins={DRIVE_PINS} width={targetW} height={targetH} />
+          </View>
+        </Reveal>
+
+        <View style={styles.spreadFooter}>
+          <Reveal revealed={revealed} order={3}>
+            <ThemedText type="muted" style={[styles.body, styles.bodyNarrow]}>
+              Record every drive with a simple tap. Every drive drops a pin and your dispersion
+              draws itself.
+            </ThemedText>
+          </Reveal>
+          <Reveal revealed={revealed} order={4}>
+            <SwipeCue onPress={onAdvance} />
+          </Reveal>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// 02 · Approaches — the ring target bleeds off the LEFT edge as a big cropped
+// circle; the body copy sits bottom-right to balance it.
+function ApproachSpread({
+  height,
+  revealed,
+  onAdvance,
+}: {
+  height: number;
+  revealed: boolean;
+  onAdvance: () => void;
+}) {
+  const colors = useColors();
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  const { width: windowWidth } = useWindowDimensions();
+  // Anchor below the headline and stop above the footer, whatever the screen.
+  const circleTop = Math.max(168, Math.round(height * 0.24));
+  const size = Math.min(Math.round(windowWidth * 0.92), height - circleTop - FOOTER_CLEARANCE);
+  return (
+    <View style={{ height }}>
+      <View style={styles.pageContent}>
+        <View style={styles.spreadHeader}>
+          <Folio n={2} label="Approaches" revealed={revealed} />
+          <Reveal revealed={revealed} order={1}>
+            <ThemedText style={styles.pageTitle}>Place it on{'\n'}the green.</ThemedText>
+          </Reveal>
+        </View>
+
+        <Reveal
+          revealed={revealed}
+          order={2}
+          style={[styles.approachBleed, { top: circleTop, left: -Math.round(size * 0.36) }]}>
+          <View pointerEvents="none">
+            <ApproachTarget pins={APPROACH_PINS} size={size} />
+          </View>
+        </Reveal>
+
+        <View style={[styles.spreadFooter, styles.spreadFooterRight]}>
+          <Reveal revealed={revealed} order={3}>
+            <ThemedText type="muted" style={[styles.body, styles.bodyNarrow]}>
+              One tap sets your proximity to the pin. Greens in regulation and putts by distance
+              derive themselves.
+            </ThemedText>
+          </Reveal>
+          <Reveal revealed={revealed} order={4} style={styles.cueReveal}>
+            <SwipeCue onPress={onAdvance} />
+          </Reveal>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// 03 · Your game — an open typographic plate, no card: the handicap index set
+// huge in ink, a scoring trend, and the headline rates between hairline rules.
+function GameSpread({
+  height,
+  revealed,
+  onAdvance,
+}: {
+  height: number;
+  revealed: boolean;
+  onAdvance: () => void;
 }) {
   const colors = useColors();
   const fonts = useFontSet();
@@ -312,135 +584,143 @@ function IntroPage({
   return (
     <View style={{ height }}>
       <View style={styles.pageContent}>
-        <View style={styles.headerBlock}>
-          <ThemedText type="caption" style={styles.kicker}>
-            {caption.toUpperCase()}
-          </ThemedText>
-          <ThemedText style={styles.pageTitle}>{title}</ThemedText>
+        <View style={styles.spreadHeader}>
+          <Folio n={3} label="Your game" revealed={revealed} />
+          <Reveal revealed={revealed} order={1}>
+            <ThemedText style={styles.pageTitle}>Watch the{'\n'}picture sharpen.</ThemedText>
+          </Reveal>
         </View>
 
-        <View style={styles.visual}>{visual}</View>
+        <View style={styles.gamePlate}>
+          <Reveal revealed={revealed} order={2}>
+            <ThemedText style={styles.gameIndex}>8.4</ThemedText>
+            <ThemedText type="caption" style={styles.kicker}>
+              HANDICAP INDEX
+            </ThemedText>
+          </Reveal>
 
-        <View style={styles.footer}>
-          <ThemedText type="muted" style={styles.body}>
-            {body}
-          </ThemedText>
-          <CtaButton label={cta} onPress={onCta} primary={primary} />
+          <Reveal revealed={revealed} order={3}>
+            <SketchDivider seed="game-rule-1" />
+          </Reveal>
+
+          <Reveal revealed={revealed} order={4}>
+            <ThemedText type="caption" style={[styles.kicker, styles.gameTrendLabel]}>
+              SCORING — LAST 6
+            </ThemedText>
+            <TrendChart
+              points={SCORE_TREND}
+              height={70}
+              baseline={0}
+              baselineLabel="E"
+              formatValue={fmtToPar}
+            />
+          </Reveal>
+
+          <Reveal revealed={revealed} order={5}>
+            <SketchDivider seed="game-rule-2" />
+          </Reveal>
+
+          <Reveal revealed={revealed} order={6} style={styles.statRow}>
+            <MiniStat label="GIR" value="61%" />
+            <MiniStat label="FIR" value="57%" />
+            <MiniStat label="PUTTS / RD" value="30" />
+          </Reveal>
+        </View>
+
+        <View style={styles.spreadFooter}>
+          <Reveal revealed={revealed} order={7}>
+            <ThemedText type="muted" style={styles.body}>
+              Every round feeds your stats, your trends, and a real handicap index — so you always
+              know what to work on.
+            </ThemedText>
+          </Reveal>
+          <Reveal revealed={revealed} order={8}>
+            <SwipeCue onPress={onAdvance} />
+          </Reveal>
         </View>
       </View>
     </View>
   );
 }
 
-// A crisp editorial surface: a hairline-framed card/button — the drawn-line
-// SketchSurface's calm cousin, with no jitter and no grain.
-function Plate({
-  fill,
-  stroke,
-  radius = 12,
-  style,
-  children,
-  ...rest
-}: ViewProps & { fill?: string; stroke?: string; radius?: number }) {
-  const colors = useColors();
-  return (
-    <View
-      style={[
-        {
-          backgroundColor: fill ?? colors.surface,
-          borderColor: stroke ?? colors.border,
-          borderWidth: 1,
-          borderRadius: radius,
-        },
-        style,
-      ]}
-      {...rest}>
-      {children}
-    </View>
-  );
-}
-
-// A hairline rule — the crisp replacement for the wavy SketchDivider.
-function Rule() {
-  const colors = useColors();
-  return <View style={{ height: 1, backgroundColor: colors.border }} />;
-}
-
-// The CTA — a hairline-outlined button, or a filled pine plate for the final
-// "Start tracking".
-function CtaButton({
-  label,
-  onPress,
-  primary = false,
+// 04 · Partners — a friend's round as the real feed card, stacked on a ghost
+// card to suggest the feed behind it. Ends on the flow's only button.
+function PartnersSpread({
+  height,
+  revealed,
+  onDone,
 }: {
-  label: string;
-  onPress: () => void;
-  primary?: boolean;
+  height: number;
+  revealed: boolean;
+  onDone: () => void;
 }) {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.ctaWrap, pressed && styles.pressed]}>
-      <Plate
-        fill={primary ? colors.accent : colors.surface}
-        stroke={primary ? colors.accent : colors.borderStrong}
-        radius={10}
-        style={styles.cta}>
-        <ThemedText style={[styles.ctaLabel, primary && styles.ctaLabelPrimary]}>{label}</ThemedText>
-      </Plate>
-    </Pressable>
+    <View style={{ height }}>
+      <View style={styles.pageContent}>
+        <View style={styles.spreadHeader}>
+          <Folio n={4} label="Playing partners" revealed={revealed} />
+          <Reveal revealed={revealed} order={1}>
+            <ThemedText style={styles.pageTitle}>Share the{'\n'}good ones.</ThemedText>
+          </Reveal>
+        </View>
+
+        <Reveal revealed={revealed} order={2} style={styles.deckWrap}>
+          <View style={styles.deck}>
+            <View style={styles.deckGhost} />
+            <FeedCard />
+          </View>
+        </Reveal>
+
+        <View style={styles.spreadFooter}>
+          <Reveal revealed={revealed} order={3}>
+            <ThemedText type="muted" style={styles.body}>
+              Post a round, follow your friends, and cheer each other on. Your best days don&apos;t
+              stay in your pocket.
+            </ThemedText>
+          </Reveal>
+          <Reveal revealed={revealed} order={4}>
+            <CtaButton label="Start tracking" onPress={onDone} />
+          </Reveal>
+        </View>
+      </View>
+    </View>
   );
 }
 
-// Page-4 payoff: a single composed "report card" plate — handicap index, a
-// scoring trend, and a couple of headline rates. One cohesive surface rather
-// than several charts competing for the page.
-function InsightPlate() {
+// The flow's single button — a filled pine plate. Press feedback is a physical
+// scale-down + a light haptic.
+function CtaButton({ label, onPress }: { label: string; onPress: () => void }) {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
-    <Plate radius={14} style={styles.report}>
-      <View style={styles.reportHead}>
-        <ThemedText type="caption" style={styles.kicker}>
-          HANDICAP INDEX
-        </ThemedText>
-        <ThemedText style={styles.handicap}>8.4</ThemedText>
-      </View>
-
-      <Rule />
-
-      <ThemedText type="caption" style={[styles.reportLabel, styles.kicker]}>
-        SCORING — LAST 6
-      </ThemedText>
-      <TrendChart
-        points={SCORE_TREND}
-        height={66}
-        baseline={0}
-        baselineLabel="E"
-        formatValue={fmtToPar}
-      />
-
-      <Rule />
-
-      <View style={styles.statRow}>
-        <MiniStat label="GIR" value="61%" />
-        <MiniStat label="FIR" value="57%" />
-        <MiniStat label="PUTTS / RD" value="30" />
-      </View>
-    </Plate>
+    <Pressable
+      onPress={onPress}
+      onPressIn={lightTap}
+      style={({ pressed }) => [styles.ctaWrap, pressed && styles.ctaPressed]}>
+      <SketchSurface
+        seed={`intro-cta-${label}`}
+        fill={colors.accent}
+        stroke={colors.accent}
+        radius={10}
+        style={styles.cta}>
+        <ThemedText style={styles.ctaLabel}>{label}</ThemedText>
+      </SketchSurface>
+    </Pressable>
   );
 }
 
-// Page-5 payoff: a representative friend's round, drawn with the same vocabulary
-// as the real community feed card.
+// A representative friend's round, drawn with the same vocabulary as the real
+// community feed card.
 function FeedCard() {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
-    <Plate radius={14} style={styles.feed}>
+    <SketchSurface seed="intro-feed" radius={14} stroke={colors.border} style={styles.feed}>
       <View style={styles.feedHead}>
         <Avatar avatar="flag.fill" size={40} seed="intro-feed-av" />
         <View style={styles.feedName}>
@@ -463,7 +743,7 @@ function FeedCard() {
         <ThemedText style={styles.feedGross}>69</ThemedText>
       </View>
 
-      <Rule />
+      <SketchDivider seed="intro-feed-rule" />
 
       <View style={styles.feedStats}>
         <MiniStat label="GIR" value="72%" />
@@ -474,7 +754,7 @@ function FeedCard() {
           <ThemedText style={styles.likeCount}>12</ThemedText>
         </View>
       </View>
-    </Plate>
+    </SketchSurface>
   );
 }
 
@@ -490,19 +770,6 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PageDots({ totalPages, currentPage }: { totalPages: number; currentPage: number }) {
-  const colors = useColors();
-  const fonts = useFontSet();
-  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  return (
-    <View style={styles.dotsContainer} pointerEvents="none">
-      {Array.from({ length: totalPages }).map((_, i) => (
-        <View key={i} style={[styles.dot, currentPage === i && styles.dotActive]} />
-      ))}
-    </View>
-  );
-}
-
 const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     flex: { flex: 1 },
@@ -512,14 +779,15 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       paddingTop: spacing.xxl,
       paddingBottom: spacing.xl,
     },
-    headerBlock: {
+    spreadHeader: {
       gap: spacing.sm,
+      zIndex: 2,
     },
     pageTitle: {
       fontFamily: fonts.serifBold,
-      fontSize: 33,
-      lineHeight: 39,
-      letterSpacing: -0.4,
+      fontSize: 38,
+      lineHeight: 44,
+      letterSpacing: -0.6,
       color: colors.textPrimary,
     },
     kicker: {
@@ -527,20 +795,41 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       letterSpacing: 2,
       color: colors.textMuted,
     },
-    visual: {
-      flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    footer: {
+    spreadFooter: {
+      marginTop: 'auto',
       gap: spacing.lg,
+      zIndex: 2,
+    },
+    spreadFooterRight: {
+      alignItems: 'flex-end',
     },
     body: {
       fontSize: 17,
       lineHeight: 27,
     },
+    bodyNarrow: {
+      maxWidth: '64%',
+    },
+    // Bleeding visuals — vertical anchors are computed per-screen in the
+    // spread components (see FOOTER_CLEARANCE).
+    driveBleed: {
+      position: 'absolute',
+      right: -spacing.xl,
+      zIndex: 1,
+    },
+    approachBleed: {
+      position: 'absolute',
+      zIndex: 1,
+    },
+    // Keeps the swipe cue centered inside footers that align copy to one side.
+    cueReveal: {
+      alignSelf: 'stretch',
+    },
     ctaWrap: {
       minHeight: 52,
+    },
+    ctaPressed: {
+      transform: [{ scale: 0.97 }],
     },
     cta: {
       paddingVertical: spacing.md,
@@ -553,9 +842,6 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       fontFamily: fonts.serif,
       fontSize: 17,
       lineHeight: 23,
-      color: colors.textPrimary,
-    },
-    ctaLabelPrimary: {
       color: colors.accentOn,
     },
     pressed: {
@@ -573,11 +859,11 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     },
     coverWordmark: {
       fontFamily: fonts.serifBold,
-      fontSize: 44,
-      lineHeight: 50,
+      fontSize: 48,
+      lineHeight: 54,
       color: colors.textPrimary,
       textAlign: 'center',
-      marginTop: spacing.xs,
+      marginTop: spacing.md,
       letterSpacing: -0.5,
     },
     coverDivider: {
@@ -594,30 +880,29 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     coverBody: {
       textAlign: 'center',
     },
-    // Insight report card
-    report: {
-      width: '100%',
-      padding: spacing.lg,
-      gap: spacing.sm,
+    footer: {
+      gap: spacing.lg,
     },
-    reportHead: {
-      flexDirection: 'row',
-      alignItems: 'baseline',
-      justifyContent: 'space-between',
+    // Your game — open typographic plate
+    gamePlate: {
+      flex: 1,
+      justifyContent: 'center',
+      gap: spacing.md,
+      zIndex: 2,
     },
-    handicap: {
+    gameIndex: {
       fontFamily: fonts.serifBold,
-      fontSize: 38,
-      lineHeight: 42,
+      fontSize: 76,
+      lineHeight: 82,
+      letterSpacing: -1,
       color: colors.accent,
     },
-    reportLabel: {
-      marginTop: spacing.xs,
+    gameTrendLabel: {
+      marginBottom: spacing.sm,
     },
     statRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      marginTop: spacing.xs,
     },
     miniStat: {
       gap: 2,
@@ -628,7 +913,25 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       lineHeight: 27,
       color: colors.textPrimary,
     },
-    // Community feed card
+    // Partners — feed deck
+    deckWrap: {
+      flex: 1,
+      justifyContent: 'center',
+    },
+    deck: {
+      width: '100%',
+    },
+    deckGhost: {
+      position: 'absolute',
+      top: -10,
+      left: 14,
+      right: -10,
+      bottom: 12,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceAlt,
+    },
     feed: {
       width: '100%',
       padding: spacing.lg,
@@ -704,25 +1007,5 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     skipLabel: {
       fontSize: 14,
       color: colors.textMuted,
-    },
-    dotsContainer: {
-      position: 'absolute',
-      right: 10,
-      top: 0,
-      bottom: 0,
-      justifyContent: 'center',
-      gap: 8,
-    },
-    dot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: colors.borderStrong,
-    },
-    dotActive: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: colors.accent,
     },
   });

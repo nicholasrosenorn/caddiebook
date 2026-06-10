@@ -1,8 +1,10 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
 import { Avatar } from '@/components/avatar';
+import { PressableScale } from '@/components/pressable-scale';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
@@ -10,6 +12,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import { acceptFriendRequest, declineFriendRequest, listNotifications } from '@/lib/api/client';
+import { listItemIn } from '@/lib/motion';
 import type { NotificationItem } from '@/lib/sync/wire';
 
 // Compact relative time: "now", "5m", "3h", "2d", "4w", then a short date for older.
@@ -97,8 +100,8 @@ export default function NotificationsScreen() {
             <ThemedText type="muted">No notifications yet.</ThemedText>
           </View>
         }
-        renderItem={({ item }) => (
-          <View style={styles.row}>
+        renderItem={({ item, index }) => (
+          <Animated.View entering={listItemIn(index)} style={styles.row}>
             <Avatar avatar={item.from.avatar} size={40} seed={`notif-av-${item.id}`} />
             <View style={styles.rowText}>
               <ThemedText style={styles.handle} numberOfLines={1}>
@@ -122,9 +125,7 @@ export default function NotificationsScreen() {
                   {timeAgo(item.createdAt)}
                 </ThemedText>
                 <View style={styles.actions}>
-                  <Pressable
-                    onPress={() => onAccept(item.id, item.requestId)}
-                    style={({ pressed }) => pressed && styles.pressed}>
+                  <PressableScale onPress={() => onAccept(item.id, item.requestId)}>
                     <SketchSurface
                       seed={`req-accept-${item.id}`}
                       fill={colors.accent}
@@ -133,10 +134,8 @@ export default function NotificationsScreen() {
                       style={styles.actionBtn}>
                       <ThemedText style={styles.actionLabel}>Accept</ThemedText>
                     </SketchSurface>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => onDecline(item.id, item.requestId)}
-                    style={({ pressed }) => pressed && styles.pressed}>
+                  </PressableScale>
+                  <PressableScale onPress={() => onDecline(item.id, item.requestId)}>
                     <SketchSurface
                       seed={`req-decline-${item.id}`}
                       fill={colors.surface}
@@ -144,7 +143,7 @@ export default function NotificationsScreen() {
                       style={styles.actionBtn}>
                       <ThemedText style={styles.declineLabel}>Decline</ThemedText>
                     </SketchSurface>
-                  </Pressable>
+                  </PressableScale>
                 </View>
               </View>
             ) : (
@@ -153,13 +152,13 @@ export default function NotificationsScreen() {
                   {timeAgo(item.createdAt)}
                 </ThemedText>
                 <IconSymbol
-                  name={item.kind === 'like' ? 'heart.fill' : 'person.2.fill'}
+                  name={item.kind === 'like' ? 'hand.thumbsup.fill' : 'person.2.fill'}
                   size={16}
                   color={colors.textMuted}
                 />
               </View>
             )}
-          </View>
+          </Animated.View>
         )}
       />
     </Screen>
@@ -223,8 +222,5 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       color: colors.textSecondary,
       fontFamily: fonts.serif,
       fontSize: 15,
-    },
-    pressed: {
-      opacity: 0.6,
     },
   });

@@ -1,14 +1,18 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
-import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BrandMark } from '@/components/brand-mark';
+import { FirstRunTheme } from '@/components/first-run-theme';
 import { Screen } from '@/components/screen';
-import { SketchSurface } from '@/components/sketch';
+import { SketchDivider, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
+import { revealRule, revealUp } from '@/lib/motion';
 import { useSync } from '@/lib/sync/provider';
 
 // Was the auth flow dismissed by the user? Those aren't real errors to surface.
@@ -18,11 +22,14 @@ function isCancellation(e: unknown): boolean {
   return msg.includes('cancel');
 }
 
+// The closing page of the first-run set: pinned to the same Augusta editorial
+// identity as the intro (FirstRunTheme), with the same hero lockup — crest,
+// kicker, serif title, short rule, tagline — revealing in the same stagger.
 export function SignIn() {
   return (
-    <SafeAreaProvider>
+    <FirstRunTheme>
       <SignInContent />
-    </SafeAreaProvider>
+    </FirstRunTheme>
   );
 }
 
@@ -50,24 +57,35 @@ function SignInContent() {
   };
 
   return (
-    <Screen marks>
+    <Screen>
       <View
         style={[
           styles.root,
           { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl },
         ]}>
         <View style={styles.hero}>
-          <View style={styles.crest}>
+          <Animated.View entering={revealUp(0)} style={styles.crest}>
             <BrandMark />
-          </View>
-          <ThemedText type="caption">CADDIE BOOK</ThemedText>
-          <ThemedText style={styles.title}>Your rounds,{'\n'}on every device.</ThemedText>
-          <ThemedText type="muted" style={styles.subtitle}>
-            Sign in to back up every round, keep your stats in sync, and share with friends.
-          </ThemedText>
+          </Animated.View>
+          <Animated.View entering={revealUp(1)}>
+            <ThemedText type="caption" style={styles.kicker}>
+              CADDIE BOOK
+            </ThemedText>
+          </Animated.View>
+          <Animated.View entering={revealUp(2)}>
+            <ThemedText style={styles.title}>Your rounds,{'\n'}on every device.</ThemedText>
+          </Animated.View>
+          <Animated.View entering={revealRule(3)} style={styles.rule}>
+            <SketchDivider seed="signin-rule" />
+          </Animated.View>
+          <Animated.View entering={revealUp(4)}>
+            <ThemedText type="muted" style={styles.subtitle}>
+              Sign in to back up every round, keep your stats in sync, and share with friends.
+            </ThemedText>
+          </Animated.View>
         </View>
 
-        <View style={styles.actions}>
+        <Animated.View entering={revealUp(5)} style={styles.actions}>
           {error ? (
             <ThemedText style={styles.error}>{error}</ThemedText>
           ) : null}
@@ -86,6 +104,11 @@ function SignInContent() {
             disabled={busy !== null}
             accessibilityRole="button"
             accessibilityLabel="Continue with Google"
+            onPressIn={() => {
+              if (process.env.EXPO_OS === 'ios') {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }
+            }}
             onPress={() => run('google', signInGoogle)}
             style={({ pressed }) => pressed && styles.pressed}>
             <SketchSurface seed="signin-google" radius={10} style={styles.googleButton}>
@@ -100,7 +123,7 @@ function SignInContent() {
           {busy === 'apple' ? (
             <ActivityIndicator style={styles.spinner} color={colors.accent} />
           ) : null}
-        </View>
+        </Animated.View>
       </View>
     </Screen>
   );
@@ -116,21 +139,31 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     hero: {
       flex: 1,
       justifyContent: 'center',
-      gap: spacing.sm,
     },
     crest: {
-      marginBottom: spacing.md,
+      marginBottom: spacing.lg,
+      alignSelf: 'flex-start',
+    },
+    kicker: {
+      fontWeight: '500',
+      letterSpacing: 2,
+      color: colors.textMuted,
     },
     title: {
       fontFamily: fonts.serifBold,
       fontSize: 34,
       lineHeight: 40,
+      letterSpacing: -0.4,
       color: colors.textPrimary,
       marginTop: spacing.sm,
     },
+    rule: {
+      width: 72,
+      marginVertical: spacing.md,
+    },
     subtitle: {
       fontSize: 15,
-      marginTop: spacing.xs,
+      lineHeight: 22,
       maxWidth: 320,
     },
     actions: {
@@ -151,11 +184,12 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       color: colors.textPrimary,
     },
     pressed: {
-      opacity: 0.6,
+      transform: [{ scale: 0.97 }],
     },
     error: {
       color: colors.danger,
       fontSize: 14,
+      lineHeight: 20,
       marginBottom: spacing.xs,
     },
     spinner: {

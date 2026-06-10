@@ -3,16 +3,17 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Pressable,
   StyleSheet,
   TextInput,
   View,
 } from 'react-native';
 
+import { Avatar } from '@/components/avatar';
+import { PressableScale } from '@/components/pressable-scale';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { IconSymbol, type IconSymbolName } from '@/components/ui/icon-symbol';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import {
@@ -122,11 +123,7 @@ export default function AddFriendScreen() {
           const relation = overrides[item.id] ?? item.relation;
           return (
             <View style={styles.row}>
-              <IconSymbol
-                name={(item.avatar as IconSymbolName) ?? 'person.crop.circle'}
-                size={32}
-                color={colors.accent}
-              />
+              <Avatar avatar={item.avatar} size={40} seed={`add-av-${item.id}`} />
               <View style={styles.rowText}>
                 <ThemedText style={styles.handle}>@{item.username}</ThemedText>
                 {item.firstName ? (
@@ -172,7 +169,7 @@ function RelationButton({
   }
   const label = relation === 'request_received' ? 'Accept' : 'Add';
   return (
-    <Pressable onPress={onAdd} style={({ pressed }) => pressed && styles.pressed}>
+    <PressableScale onPress={onAdd}>
       <SketchSurface
         seed={`add-action-${label}`}
         fill={colors.accent}
@@ -181,7 +178,7 @@ function RelationButton({
         style={styles.actionBtn}>
         <ThemedText style={styles.actionLabel}>{label}</ThemedText>
       </SketchSurface>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -259,8 +256,5 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       color: colors.textMuted,
       fontFamily: fonts.serif,
       fontSize: 15,
-    },
-    pressed: {
-      opacity: 0.6,
     },
   });

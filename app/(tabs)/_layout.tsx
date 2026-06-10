@@ -92,7 +92,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="(community)"
           options={{
-            title: 'Community',
+            title: 'Clubhouse',
             tabBarIcon: () => icon('community', 'person.2.fill'),
           }}
         />

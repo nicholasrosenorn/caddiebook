@@ -13,7 +13,6 @@ export default function CommunityStackLayout() {
           color: colors.textPrimary,
           fontFamily: fonts.serifBold,
           fontSize: 22,
-          lineHeight: 30,
         },
         headerShadowVisible: false,
       }}>
