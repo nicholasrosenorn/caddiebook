@@ -19,7 +19,6 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Avatar } from '@/components/avatar';
 import { EdgeSwipeOpener } from '@/components/edge-swipe-opener';
 import { HeaderIconButton } from '@/components/header-icon-button';
 import { PressableScale } from '@/components/pressable-scale';
@@ -255,7 +254,6 @@ function FeedCard({
       onPress={() => router.push(`/community/round/${item.ownerId}/${item.id}` as any)}>
       <SketchSurface seed={`feed-${item.ownerId}-${item.id}`} style={styles.card}>
         <View style={styles.owner}>
-          <Avatar avatar={item.owner.avatar} size={40} seed={`feed-av-${item.ownerId}`} />
           <View style={styles.ownerText}>
             <ThemedText style={styles.ownerName} numberOfLines={1}>
               {displayName}

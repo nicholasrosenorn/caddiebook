@@ -6,11 +6,11 @@ import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 import { ApproachTarget } from '@/components/approach-target';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
 import { DropdownSelect, type DropdownOption } from '@/components/dropdown-select';
-import { SketchSurface } from '@/components/sketch';
+import { SketchDivider, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { TrendChart } from '@/components/trend-chart';
 import { CLUB_OPTIONS, sortByDriveLength } from '@/constants/clubs';
-import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import {
   getAllHoles,
@@ -20,6 +20,7 @@ import {
   listRounds,
 } from '@/db/queries';
 import type { Hole, PostRoundReview, Putt, Round, Shot } from '@/db/types';
+import type { HandicapHistory } from '@/lib/handicap';
 import {
   aggregateApproach,
   aggregateDriver,
@@ -37,9 +38,8 @@ import {
   type RoundDerived,
   type RoundsFilter,
 } from '@/lib/lifetime-stats';
-import type { HandicapHistory } from '@/lib/handicap';
-import { useSync } from '@/lib/sync/provider';
 import { formatPct } from '@/lib/stats';
+import { useSync } from '@/lib/sync/provider';
 
 type Data = {
   rounds: Round[]; // completed only, newest first
@@ -371,20 +371,18 @@ function StatsBody({
         </ThemedText>
       ) : null}
 
-      {/* Scoring headline — adapts to the hole-count filter */}
+      {/* Scoring headline — adapts to the hole-count filter. The caption spells
+          out the active scope so these filtered figures read distinctly from
+          the masthead's lifetime ones. */}
       <Section title="Scoring">
-        <ThemedText type="caption" style={styles.sampleLine}>
-        {stats.roundCount} {stats.roundCount === 1 ? 'ROUND' : 'ROUNDS'} ·{' '}
-        {stats.holesTracked} {stats.holesTracked === 1 ? 'HOLE' : 'HOLES'}
-      </ThemedText>
-        <ScoringCard stats={stats} holeFilter={holeFilter} handicapIndex={handicap.current} />
+        <ScoringFigures stats={stats} holeFilter={holeFilter} />
         {stats.bestRound ? (
           <BestRoundCallout best={stats.bestRound} uniform={uniform} />
         ) : null}
-        <View style={styles.perParRow}>
-          <PerParTile label="Par 3 avg" value={stats.perPar.par3} />
-          <PerParTile label="Par 4 avg" value={stats.perPar.par4} />
-          <PerParTile label="Par 5 avg" value={stats.perPar.par5} />
+        <View style={styles.statRow}>
+          <StatTile label="Par 3 avg" value={formatAvg(stats.perPar.par3)} />
+          <StatTile label="Par 4 avg" value={formatAvg(stats.perPar.par4)} />
+          <StatTile label="Par 5 avg" value={formatAvg(stats.perPar.par5)} />
         </View>
       </Section>
 
@@ -540,7 +538,7 @@ function StatsBody({
 
       {/* Review insights */}
       {review.count > 0 || empty ? (
-        <Section title="Mental Game">
+        <Section title="Mental game">
           <MentalGameCard review={review} empty={empty} />
         </Section>
       ) : null}
@@ -550,21 +548,24 @@ function StatsBody({
   );
 }
 
-function ScoringCard({
+function formatAvg(value: number | null): string {
+  return value != null ? value.toFixed(2) : '—';
+}
+
+// The filtered scoring figures (the masthead carries the lifetime ones).
+// Single hole-count → a real scoring average. Mixed → fair per-18 to-par.
+function ScoringFigures({
   stats,
   holeFilter,
-  handicapIndex,
 }: {
   stats: LifetimeStats;
   holeFilter: HoleCountFilter;
-  handicapIndex: number | null;
 }) {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  // Single hole-count → a real scoring average. Mixed → fair per-18 to-par.
   const single = holeFilter !== 'all';
-  const primaryLabel = single ? 'SCORING AVG' : 'TO PAR /18';
+  const primaryLabel = single ? 'Scoring avg' : 'To par /18';
   const primaryValue = single
     ? stats.avgScore != null
       ? stats.avgScore.toFixed(1)
@@ -572,28 +573,13 @@ function ScoringCard({
     : stats.avgToPar18 != null
       ? formatToPar(stats.avgToPar18, 1)
       : '—';
-  const secondaryValue =
-    stats.avgToPar != null ? formatToPar(stats.avgToPar, 1) : '—';
+  const secondaryValue = stats.avgToPar != null ? formatToPar(stats.avgToPar, 1) : '—';
 
   return (
-    <SketchSurface seed="stats-scoring" style={styles.scoringCard}>
-      <View style={styles.scoringCol}>
-        <ThemedText type="caption">{primaryLabel}</ThemedText>
-        <ThemedText style={styles.bigScore}>{primaryValue}</ThemedText>
-      </View>
-      <View style={styles.scoringDivider} />
-      <View style={styles.scoringCol}>
-        <ThemedText type="caption">{single ? 'TO PAR' : 'TO PAR / ROUND'}</ThemedText>
-        <ThemedText style={styles.bigScore}>{secondaryValue}</ThemedText>
-      </View>
-      <View style={styles.scoringDivider} />
-      <View style={styles.scoringCol}>
-        <ThemedText type="caption">HCP INDEX</ThemedText>
-        <ThemedText style={styles.bigScore}>
-          {handicapIndex != null ? formatHandicapIndex(handicapIndex) : '—'}
-        </ThemedText>
-      </View>
-    </SketchSurface>
+    <View style={styles.statRow}>
+      <StatTile label={primaryLabel} value={primaryValue} />
+      <StatTile label={single ? 'To par' : 'To par / round'} value={secondaryValue} />
+    </View>
   );
 }
 
@@ -645,7 +631,7 @@ function TrendCard({
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   if (points.length < 2) return null;
   return (
-    <SketchSurface seed={`trend-${title}`} style={styles.trendCard}>
+    <View style={styles.trendBlock}>
       <View style={styles.trendHeader}>
         <ThemedText style={styles.trendTitle}>{title}</ThemedText>
         <ThemedText type="caption">{caption.toUpperCase()}</ThemedText>
@@ -656,18 +642,7 @@ function TrendCard({
         baselineLabel={baselineLabel}
         formatValue={formatValue}
       />
-    </SketchSurface>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const colors = useColors();
-  const fonts = useFontSet();
-  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  return (
-    <View style={styles.section}>
-      <ThemedText type="subtitle">{title}</ThemedText>
-      <View style={styles.sectionBody}>{children}</View>
+      <SketchDivider seed={`trend-rule-${title}`} />
     </View>
   );
 }
@@ -688,19 +663,15 @@ function StatTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PerParTile({ label, value }: { label: string; value: number | null }) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   return (
-    <SketchSurface seed={`stats-perpar-${label}`} style={styles.perParTile}>
-      <ThemedText type="caption" numberOfLines={1}>
-        {label.toUpperCase()}
-      </ThemedText>
-      <ThemedText style={styles.perParValue} numberOfLines={1}>
-        {value != null ? value.toFixed(2) : '—'}
-      </ThemedText>
-    </SketchSurface>
+    <View style={styles.section}>
+      <ThemedText type="subtitle">{title}</ThemedText>
+      <View style={styles.sectionBody}>{children}</View>
+    </View>
   );
 }
 
@@ -714,17 +685,22 @@ function ScoreDistributionBars({
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  // A single-ink emphasis ramp: the rarest, best scores get the strongest ink;
+  // the everyday ones fade toward the page. (Tints floor at 25% alpha so the
+  // ramp stays legible on the dark theme's track.) Triple+ falls off the ink
+  // entirely into the muted neutral — the same "miss" tone the split bars use —
+  // because a fainter tint would vanish at the tiny widths it usually renders.
   const DIST_ROWS: {
     key: keyof LifetimeStats['distribution'];
     label: string;
     color: string;
   }[] = [
-    { key: 'eagleOrBetter', label: 'Eagle+', color: colors.info },
+    { key: 'eagleOrBetter', label: 'Eagle+', color: colors.accentPressed },
     { key: 'birdie', label: 'Birdie', color: colors.accent },
-    { key: 'par', label: 'Par', color: colors.borderStrong },
-    { key: 'bogey', label: 'Bogey', color: colors.warning },
-    { key: 'doubleBogey', label: 'Double', color: '#F97316' },
-    { key: 'tripleOrWorse', label: 'Triple+', color: colors.danger },
+    { key: 'par', label: 'Par', color: `${colors.accent}B3` },
+    { key: 'bogey', label: 'Bogey', color: `${colors.accent}73` },
+    { key: 'doubleBogey', label: 'Double', color: `${colors.accent}40` },
+    { key: 'tripleOrWorse', label: 'Triple+', color: colors.borderStrong },
   ];
   const max = Math.max(1, ...DIST_ROWS.map((r) => distribution[r.key]));
   return (
@@ -763,8 +739,8 @@ function ScoreDistributionBars({
 type SplitRow = { key: string; label: string; success: number; total: number };
 
 // Shared by "Approach distances" (success = green hit) and "Putting by
-// distance" (success = made). Each bar fills the full track, split green
-// (success) → red (miss); the right label reads `% (success/total)`.
+// distance" (success = made). Each bar fills the full track, split ink
+// (success) → muted neutral (miss); the right label reads `% (success/total)`.
 function SplitDistanceBars({
   rows,
   successLabel,
@@ -804,7 +780,7 @@ function SplitDistanceBars({
               <View
                 style={{
                   flex: missFrac,
-                  backgroundColor: colors.danger,
+                  backgroundColor: colors.borderStrong,
                   minWidth: missed > 0 ? 6 : 0,
                   height: '100%',
                 }}
@@ -836,7 +812,7 @@ function SplitDistanceBars({
           <ThemedText type="caption">{successLabel}</ThemedText>
         </View>
         <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, { backgroundColor: colors.danger }]} />
+          <View style={[styles.legendSwatch, { backgroundColor: colors.borderStrong }]} />
           <ThemedText type="caption">{failLabel}</ThemedText>
         </View>
       </View>
@@ -864,7 +840,7 @@ function MentalGameCard({ review, empty }: { review: ReviewInsights; empty: bool
     <View style={styles.mentalBody}>
       {/* Ratings + trends — standard within-section spacing */}
       <View style={styles.sectionBody}>
-        <ThemedText type="caption" style={styles.sampleLine}>
+        <ThemedText type="caption">
           {review.count} {review.count === 1 ? 'REVIEW' : 'REVIEWS'}
         </ThemedText>
 
@@ -996,36 +972,11 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     alignItems: 'center',
     gap: spacing.sm,
   },
-  sampleLine: {
-    marginTop: -spacing.sm,
-  },
   section: {
     gap: spacing.md,
   },
   sectionBody: {
     gap: spacing.sm,
-  },
-  scoringCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-  },
-  scoringCol: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 4,
-  },
-  scoringDivider: {
-    width: 1,
-    alignSelf: 'stretch',
-    backgroundColor: colors.borderStrong,
-    marginVertical: spacing.xs,
-  },
-  bigScore: {
-    fontFamily: fonts.serifBold,
-    fontSize: 28,
-    color: colors.textPrimary,
-    lineHeight: 32,
   },
   bestCard: {
     flexDirection: 'row',
@@ -1076,25 +1027,6 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     lineHeight: 22,
     color: colors.textPrimary,
   },
-  perParRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  perParTile: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 64,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-    alignItems: 'center',
-    gap: 4,
-  },
-  perParValue: {
-    fontFamily: fonts.serifBold,
-    fontSize: 20,
-    lineHeight: 27,
-    color: colors.textPrimary,
-  },
   statGrid: {
     gap: spacing.sm,
   },
@@ -1117,8 +1049,7 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     lineHeight: 27,
     color: colors.textPrimary,
   },
-  trendCard: {
-    padding: spacing.md,
+  trendBlock: {
     gap: spacing.sm,
   },
   trendHeader: {

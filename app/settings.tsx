@@ -7,8 +7,8 @@ import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { spacing, THEME_ORDER, themes, type Palette, type ThemeId, type FontSet } from '@/constants/theme';
-import { useColors, useTheme, useFontSet } from '@/constants/theme-context';
+import { spacing, THEME_ORDER, themes, type FontSet, type Palette, type ThemeId } from '@/constants/theme';
+import { useColors, useFontSet, useTheme } from '@/constants/theme-context';
 import { setSetting } from '@/db/queries';
 import { listFriends } from '@/lib/api/client';
 import { clearAllRounds, seedSampleRounds } from '@/lib/dev-seed';
@@ -125,7 +125,7 @@ export default function SettingsScreen() {
 
         {session ? (
           <View style={styles.section}>
-            <ThemedText type="caption">COMMUNITY</ThemedText>
+            <ThemedText type="caption">CLUBHOUSE</ThemedText>
             <Pressable
               onPress={() => router.push('/friends')}
               accessibilityRole="button"
@@ -146,14 +146,10 @@ export default function SettingsScreen() {
         ) : null}
 
         <View style={styles.section}>
-          <ThemedText type="caption">APPEARANCE</ThemedText>
-          <ThemedText type="subtitle">Theme</ThemedText>
-          <ThemedText type="muted" style={styles.sectionHint}>
-            Each theme is its own feel — color, type, and texture. Tap one to restyle the whole app.
+          <ThemedText type="caption" style={styles.sectionTitle}>
+            APPEARANCE
           </ThemedText>
-        </View>
-
-        <View style={styles.gallery}>
+          <View style={styles.gallery}>
           {THEME_ORDER.map((id) => (
             <ThemeCard
               key={id}
@@ -162,6 +158,7 @@ export default function SettingsScreen() {
               onSelect={() => setTheme(id)}
             />
           ))}
+        </View>
         </View>
 
         {__DEV__ && (
@@ -299,6 +296,9 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     },
     section: {
       gap: 2,
+    },
+    sectionTitle: {
+      marginBottom: spacing.xs,
     },
     accountCard: {
       flexDirection: 'row',

@@ -1,18 +1,22 @@
 import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
-import { SketchSurface } from '@/components/sketch';
+import { PressableScale } from '@/components/pressable-scale';
+import { SketchDivider, SketchSurface, TopoChip } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import { deleteRound, getHolesForRound, listRounds } from '@/db/queries';
-import type { Round, RoundSummary } from '@/db/types';
+import { deleteRound, getAllHoles, listRounds } from '@/db/queries';
+import type { Hole, Round, RoundSummary } from '@/db/types';
+import { formatToPar } from '@/lib/lifetime-stats';
+import { listItemIn } from '@/lib/motion';
 import { useSync } from '@/lib/sync/provider';
-import { computeRoundSummary, formatPct } from '@/lib/stats';
+import { computeRoundSummary, formatPct, totalPar } from '@/lib/stats';
 
-type RoundWithSummary = Round & { summary: RoundSummary };
+type RoundWithSummary = Round & { summary: RoundSummary; toPar: number | null };
 
 export function MyRoundsView({ header }: { header?: ReactNode }) {
   const colors = useColors();
@@ -23,13 +27,22 @@ export function MyRoundsView({ header }: { header?: ReactNode }) {
   const { session, syncState } = useSync();
 
   const load = useCallback(async () => {
-    const list = await listRounds();
-    const enriched = await Promise.all(
-      list.map(async (r) => {
-        const holes = await getHolesForRound(r.id);
-        return { ...r, summary: computeRoundSummary(holes) };
-      }),
-    );
+    const [list, allHoles] = await Promise.all([listRounds(), getAllHoles()]);
+    const holesByRound = new Map<string, Hole[]>();
+    for (const h of allHoles) {
+      const arr = holesByRound.get(h.roundId);
+      if (arr) arr.push(h);
+      else holesByRound.set(h.roundId, [h]);
+    }
+    const enriched = list.map((r) => {
+      const holes = holesByRound.get(r.id) ?? [];
+      const summary = computeRoundSummary(holes);
+      return {
+        ...r,
+        summary,
+        toPar: summary.holesPlayed > 0 ? summary.totalScore - totalPar(holes) : null,
+      };
+    });
     setRounds(enriched);
   }, []);
 
@@ -87,22 +100,24 @@ export function MyRoundsView({ header }: { header?: ReactNode }) {
       <View style={styles.state}>
         {header}
         <View style={styles.emptyState}>
+          <TopoChip seed="rounds-empty" />
           <ThemedText type="subtitle">No rounds yet</ThemedText>
           <ThemedText type="muted" style={styles.emptyCopy}>
-            Tap the + Play button to log your first round.
+            Every round you log adds a page to the book.
           </ThemedText>
-          <Pressable
+          <PressableScale
             onPress={() => router.push('/round/new')}
-            style={({ pressed }) => [styles.ctaWrap, pressed && styles.pressed]}>
+            accessibilityRole="button"
+            style={styles.emptyCtaWrap}>
             <SketchSurface
-              seed="empty-cta"
+              seed="rounds-empty-cta"
               fill={colors.accent}
               stroke={colors.accent}
-              grain
-              style={styles.cta}>
-              <ThemedText style={styles.ctaLabel}>Start your first round</ThemedText>
+              radius={10}
+              style={styles.emptyCta}>
+              <ThemedText style={styles.emptyCtaLabel}>Start your first round</ThemedText>
             </SketchSurface>
-          </Pressable>
+          </PressableScale>
         </View>
       </View>
     );
@@ -120,54 +135,93 @@ export function MyRoundsView({ header }: { header?: ReactNode }) {
         contentInsetAdjustmentBehavior="never"
         contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + spacing.md }]}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
-        renderItem={({ item }) => (
-          <Pressable
-            onPress={() =>
-              router.push(
-                (item.completedAt
-                  ? `/round/${item.id}/summary`
-                  : `/round/${item.id}`) as any,
-              )
-            }
-            onLongPress={() => confirmDelete(item)}
-            delayLongPress={400}
-            style={({ pressed }) => [styles.cardWrap, pressed && styles.pressed]}>
-            <SketchSurface seed={`round-${item.id}`} style={styles.card}>
-            <View style={styles.cardTop}>
-              <View style={styles.cardTitle}>
-                <ThemedText type="subtitle" numberOfLines={1}>
-                  {item.courseName}
-                </ThemedText>
-                <ThemedText type="muted">{formatDate(item.datePlayed)}</ThemedText>
-              </View>
-              <ThemedText type="muted">
-                {item.summary.holesPlayed}/{item.holeCount}
-              </ThemedText>
-            </View>
-            <View style={styles.cardStats}>
-              <Stat
-                label="Score"
-                value={item.summary.holesPlayed > 0 ? String(item.summary.totalScore) : '—'}
-              />
-              <Stat label="GIR" value={formatPct(item.summary.girPct)} />
-              <Stat label="FIR" value={formatPct(item.summary.firPct)} />
-              <Stat
-                label="Putts"
-                value={item.summary.totalPutts > 0 ? String(item.summary.totalPutts) : '—'}
-              />
-            </View>
-            </SketchSurface>
-          </Pressable>
+        renderItem={({ item, index }) => (
+          <Animated.View entering={listItemIn(index)}>
+            <RoundCard item={item} onDelete={() => confirmDelete(item)} styles={styles} />
+          </Animated.View>
         )}
       />
     </View>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  const colors = useColors();
-  const fonts = useFontSet();
-  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+function RoundCard({
+  item,
+  onDelete,
+  styles,
+}: {
+  item: RoundWithSummary;
+  onDelete: () => void;
+  styles: ReturnType<typeof makeStyles>;
+}) {
+  const played = item.summary.holesPlayed > 0;
+  return (
+    <PressableScale
+      pressedScale={0.98}
+      haptic={false}
+      onPress={() =>
+        router.push(
+          (item.completedAt ? `/round/${item.id}/summary` : `/round/${item.id}`) as any,
+        )
+      }
+      onLongPress={onDelete}
+      delayLongPress={400}>
+      <SketchSurface seed={`round-${item.id}`} style={styles.card}>
+        <View style={styles.cardTop}>
+          <View style={styles.cardTitle}>
+            <ThemedText style={styles.course} numberOfLines={1}>
+              {item.courseName}
+            </ThemedText>
+            <View style={styles.metaRow}>
+              <ThemedText type="muted" style={styles.metaText}>
+                {formatDate(item.datePlayed)}
+              </ThemedText>
+              {item.completedAt == null ? (
+                <ThemedText type="caption" style={styles.inProgress}>
+                  IN PROGRESS
+                </ThemedText>
+              ) : null}
+            </View>
+          </View>
+          <ThemedText type="muted" style={styles.holes}>
+            {item.summary.holesPlayed}/{item.holeCount}
+          </ThemedText>
+        </View>
+
+        <View style={styles.scoreRow}>
+          <ThemedText style={styles.toPar}>
+            {item.toPar != null ? formatToPar(item.toPar) : '—'}
+          </ThemedText>
+          <ThemedText style={styles.gross}>
+            {played ? item.summary.totalScore : '—'}
+          </ThemedText>
+        </View>
+
+        <SketchDivider seed={`round-div-${item.id}`} />
+
+        <View style={styles.cardStats}>
+          <Stat label="GIR" value={formatPct(item.summary.girPct)} styles={styles} />
+          <Stat label="FIR" value={formatPct(item.summary.firPct)} styles={styles} />
+          <Stat
+            label="Putts"
+            value={item.summary.totalPutts > 0 ? String(item.summary.totalPutts) : '—'}
+            styles={styles}
+          />
+        </View>
+      </SketchSurface>
+    </PressableScale>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  styles,
+}: {
+  label: string;
+  value: string;
+  styles: ReturnType<typeof makeStyles>;
+}) {
   return (
     <View style={styles.stat}>
       <ThemedText type="caption">{label.toUpperCase()}</ThemedText>
@@ -186,78 +240,115 @@ function formatDate(iso: string): string {
 
 const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  state: {
-    flex: 1,
-    paddingHorizontal: spacing.md,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: spacing.xxl,
-    gap: spacing.sm,
-  },
-  emptyCopy: {
-    textAlign: 'center',
-  },
-  ctaWrap: {
-    marginTop: spacing.md,
-  },
-  cta: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pressed: {
-    opacity: 0.6,
-  },
-  ctaLabel: {
-    color: colors.accentOn,
-    fontFamily: fonts.serif,
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  list: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  separator: {
-    height: spacing.md,
-  },
-  cardWrap: {
-    minHeight: 100,
-  },
-  card: {
-    padding: spacing.md,
-    gap: spacing.md,
-  },
-  cardTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-  },
-  cardTitle: {
-    flex: 1,
-    gap: 2,
-  },
-  cardStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  stat: {
-    flex: 1,
-    gap: 2,
-  },
-  statValue: {
-    fontFamily: fonts.serifBold,
-    fontSize: 18,
-    lineHeight: 24,
-    color: colors.textPrimary,
-  },
-});
+    flex: {
+      flex: 1,
+    },
+    state: {
+      flex: 1,
+      paddingHorizontal: spacing.md,
+    },
+    emptyState: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingBottom: spacing.xxl,
+      gap: spacing.sm,
+    },
+    emptyCopy: {
+      textAlign: 'center',
+      maxWidth: 280,
+    },
+    emptyCtaWrap: {
+      marginTop: spacing.md,
+      minHeight: 48,
+      alignSelf: 'stretch',
+    },
+    emptyCta: {
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 48,
+    },
+    emptyCtaLabel: {
+      color: colors.accentOn,
+      fontFamily: fonts.serif,
+      fontSize: 16,
+      lineHeight: 22,
+    },
+    list: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.md,
+    },
+    separator: {
+      height: spacing.md,
+    },
+    card: {
+      padding: spacing.md,
+      gap: spacing.sm,
+    },
+    cardTop: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      gap: spacing.sm,
+    },
+    cardTitle: {
+      flex: 1,
+      gap: 2,
+    },
+    course: {
+      fontFamily: fonts.serifBold,
+      fontSize: 17,
+      lineHeight: 23,
+      color: colors.textPrimary,
+    },
+    metaRow: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: spacing.sm,
+    },
+    metaText: {
+      fontSize: 12,
+    },
+    inProgress: {
+      color: colors.accent,
+    },
+    holes: {
+      fontSize: 12,
+      alignSelf: 'flex-start',
+    },
+    scoreRow: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: spacing.sm,
+      paddingVertical: spacing.xs,
+    },
+    toPar: {
+      fontFamily: fonts.serifBold,
+      fontSize: 34,
+      lineHeight: 40,
+      color: colors.accent,
+    },
+    gross: {
+      fontFamily: fonts.serif,
+      fontSize: 18,
+      lineHeight: 24,
+      color: colors.textMuted,
+    },
+    cardStats: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+    },
+    stat: {
+      flex: 1,
+      gap: 2,
+    },
+    statValue: {
+      fontFamily: fonts.serifBold,
+      fontSize: 18,
+      lineHeight: 24,
+      color: colors.textPrimary,
+    },
+  });

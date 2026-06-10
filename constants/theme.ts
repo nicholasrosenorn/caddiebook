@@ -234,7 +234,7 @@ export type ThemeMeta = {
 // identity: color palette + font set + chrome (crisp editorial vs hand-drawn
 // notebook). Ids are stable so a user's saved choice survives a relabel.
 export const themes: Record<ThemeId, ThemeMeta> = {
-  augusta: { id: 'augusta', label: 'Augusta', hint: 'Pine green on near-white', palette: augusta, fonts: baskerville, chrome: 'editorial' },
+  augusta: { id: 'augusta', label: 'Pine', hint: 'Pine green on near-white', palette: augusta, fonts: baskerville, chrome: 'editorial' },
   charcoal: { id: 'charcoal', label: 'Broadsheet', hint: 'Black ink on warm white', palette: charcoal, fonts: newsreader, chrome: 'editorial' },
   links: { id: 'links', label: 'Links', hint: 'Navy on cool sand', palette: links, fonts: spectral, chrome: 'editorial' },
   clay: { id: 'clay', label: 'Clay', hint: 'Terracotta on bone', palette: clay, fonts: newsreader, chrome: 'editorial' },
