@@ -583,6 +583,15 @@ export async function createPutt(input: CreatePuttInput): Promise<string> {
   const db = await getDb();
   const id = uuid();
   await db.withTransactionAsync(async () => {
+    if (input.made) {
+      // A hole can only be holed out once: a new made putt replaces any
+      // existing one (so tapping MADE in another band "moves" it).
+      await db.runAsync(
+        `UPDATE putts SET ${SOFT_DELETE}
+         WHERE round_id = ? AND hole_number = ? AND made = 1 AND deleted_at IS NULL;`,
+        [input.roundId, input.holeNumber],
+      );
+    }
     await db.runAsync(
       `INSERT INTO putts (id, round_id, hole_number, distance_ft, made, updated_at, dirty)
        VALUES (?, ?, ?, ?, ?, datetime('now'), 1);`,

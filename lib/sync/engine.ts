@@ -6,6 +6,7 @@ import {
   getDirtyRows,
   markRowsClean,
   setCursor,
+  setForeignKeysEnabled,
   setLastSyncedAt,
   SYNC_TABLES,
 } from './db';
@@ -130,6 +131,13 @@ export function syncNow(): Promise<void> {
   return inFlight;
 }
 
+// Drain a running sync before destructive local operations (clear-all, wipe):
+// a run that straddles the wipe would re-persist its stale in-memory cursor
+// after the caller resets it, stranding the re-pull.
+export async function waitForIdle(): Promise<void> {
+  if (inFlight) await inFlight.catch(() => {});
+}
+
 async function run(): Promise<void> {
   // An immediate run supersedes any scheduled retry.
   clearRetryTimer();
@@ -185,15 +193,38 @@ async function pullAll(): Promise<number> {
   let since = await getCursor();
   let applied = 0;
   let hasMore = true;
-  while (hasMore) {
-    const res = await pull(since);
-    for (const change of res.changes) {
-      await applyServerRow(change.table, change.row);
-      applied++;
+  // Pages arrive in server_seq order, not FK order: a round edited after its
+  // children were created (every finished round) carries a higher seq than its
+  // holes/shots/putts, so a full replay (fresh sign-in, post-wipe) delivers
+  // children before their parent. With FK enforcement on, that page fails on
+  // every retry and the cursor never advances. Pulled data is server-
+  // authoritative and the server never hard-deletes, so an orphan is transient
+  // — its parent lands later in the same replay. Suspend FKs for the window.
+  await setForeignKeysEnabled(false);
+  try {
+    while (hasMore) {
+      // An external cursor reset (clear-all, sign-out wipe) must win over the
+      // in-memory cursor, or this loop would re-persist the stale value and
+      // permanently skip the reset range.
+      const stored = await getCursor();
+      if (stored < since) since = stored;
+      const res = await pull(since);
+      for (const change of res.changes) {
+        try {
+          await applyServerRow(change.table, change.row);
+        } catch (e) {
+          const id = String(change.row.id ?? change.row.key ?? '?');
+          const msg = e instanceof Error ? e.message : String(e);
+          throw new Error(`Pull apply failed (${change.table} ${id}): ${msg}`);
+        }
+        applied++;
+      }
+      since = res.nextCursor;
+      await setCursor(since);
+      hasMore = res.hasMore;
     }
-    since = res.nextCursor;
-    await setCursor(since);
-    hasMore = res.hasMore;
+  } finally {
+    await setForeignKeysEnabled(true);
   }
   return applied;
 }

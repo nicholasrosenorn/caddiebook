@@ -4,7 +4,7 @@ import Svg, { Circle, G, Line, Path, Polygon } from 'react-native-svg';
 
 import { InfoHint } from '@/components/info-hint';
 import { ThemedText } from '@/components/themed-text';
-import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import { createPutt, deletePutt } from '@/db/queries';
 import type { Hole, Putt } from '@/db/types';
@@ -66,9 +66,6 @@ export function PuttingPage({ roundId, hole, putts, onChange }: Props) {
     <View style={styles.container}>
       <View style={styles.header}>
         <ThemedText type="caption">PUTTING</ThemedText>
-        <ThemedText type="muted" style={styles.totals}>
-          {totals.made}/{totals.total} made this round
-        </ThemedText>
       </View>
 
       <View style={styles.boardWrap}>

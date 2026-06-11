@@ -50,6 +50,7 @@ const MAPPING = {
   'target': 'my-location',
   'location.fill': 'near-me',
   'map.fill': 'map',
+  'tablecells': 'grid-on',
   'aqi.medium': 'grain',
   'mountain.2.fill': 'terrain',
   // Community.

@@ -9,7 +9,7 @@ import { InfoHint } from '@/components/info-hint';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { YardageRuler } from '@/components/yardage-ruler';
+import { YardageChips } from '@/components/yardage-chips';
 import { CLUB_OPTIONS } from '@/constants/clubs';
 import { radius, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
@@ -24,9 +24,10 @@ type Props = {
   hole: Hole;
   shotsForRound: Shot[];
   onChange: () => void | Promise<void>;
+  onComplete?: () => void;
 };
 
-export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) {
+export function ApproachPage({ roundId, hole, shotsForRound, onChange, onComplete }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { width, height } = useWindowDimensions();
@@ -45,8 +46,12 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) 
   );
 
   // Fallback park when the selected club has no stock yardage on file.
-  const rulerDefault =
+  const yardsDefault =
     hole.approachClub != null ? (yardages[hole.approachClub] ?? 125) : 125;
+
+  // The hole is fully logged once pin + club + yards are all set.
+  const hasClub = hole.approachClub != null && hole.approachClub !== '';
+  const hasYards = hole.approachDistanceYds != null;
 
   useEffect(() => {
     const approach = shotsForRound.find(
@@ -56,6 +61,9 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) 
   }, [shotsForRound, hole.holeNumber]);
 
   const handleTap = async (x: number, y: number) => {
+    // Advance only when this tap completes the pin + club + yards trio —
+    // moving an already-placed pin shouldn't yank the page away.
+    const hadPin = position != null;
     setPosition({ xNorm: x, yNorm: y });
     try {
       await upsertShot({
@@ -68,6 +76,7 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) 
       const { onGreen } = approachResult(x, y);
       await updateHole(roundId, hole.holeNumber, { gir: onGreen });
       await onChange();
+      if (!hadPin && hasClub && hasYards) onComplete?.();
     } catch (err) {
       console.error(err);
       Alert.alert('Save failed', 'Could not save approach.');
@@ -80,7 +89,9 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) 
       await updateHole(roundId, hole.holeNumber, {
         approachClub: club,
         // Prefill the approach distance with the club's stock yardage so the
-        // ruler reflects the pick immediately; the player nudges from there.
+        // chips reflect the pick immediately; the player nudges from there.
+        // A club tap never auto-advances — the prefilled yardage still wants
+        // an explicit confirming tap (or a different chip).
         ...(stock != null ? { approachDistanceYds: stock } : {}),
       });
       await onChange();
@@ -93,6 +104,9 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) 
     try {
       await updateHole(roundId, hole.holeNumber, { approachDistanceYds: yards });
       await onChange();
+      // Yards is the deliberate confirming tap: once the pin and club are in,
+      // picking a distance finishes the page.
+      if (yards != null && position != null && hasClub) onComplete?.();
     } catch (err) {
       console.error(err);
     }
@@ -113,9 +127,12 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) 
           approachDistanceYds: null,
           approachClub: null,
         });
-      } else {
-        await updateHole(roundId, hole.holeNumber, { greenBlocked: false });
+        await onChange();
+        // Nothing left to log here — straight on to putting.
+        onComplete?.();
+        return;
       }
+      await updateHole(roundId, hole.holeNumber, { greenBlocked: false });
       await onChange();
     } catch (err) {
       console.error(err);
@@ -205,15 +222,14 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange }: Props) 
           </View>
           <View style={styles.formField}>
             <ThemedText type="caption">YARDS IN</ThemedText>
-            {/* Remount on club change so the ruler picks up the freshly-written
-                value with a clean `touched` state; keyed by club (not value) so
-                nudging within the same club doesn't reset mid-edit. */}
-            <YardageRuler
-              key={`ruler-${hole.approachClub ?? 'none'}`}
+            {/* Remount on club change so the strip re-centers on the freshly
+                written stock yardage; keyed by club (not value) so picking a
+                nearby chip doesn't re-center mid-edit. */}
+            <YardageChips
+              key={`yards-${hole.approachClub ?? 'none'}`}
               value={hole.approachDistanceYds}
               onCommit={onYardsCommit}
-              max={350}
-              defaultValue={rulerDefault}
+              defaultValue={yardsDefault}
             />
           </View>
         </View>

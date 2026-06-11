@@ -20,9 +20,10 @@ type Props = {
   hole: Hole;
   shotsForRound: Shot[];
   onChange: () => void | Promise<void>;
+  onComplete?: () => void;
 };
 
-export function DrivePage({ roundId, hole, shotsForRound, onChange }: Props) {
+export function DrivePage({ roundId, hole, shotsForRound, onChange, onComplete }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -48,7 +49,12 @@ export function DrivePage({ roundId, hole, shotsForRound, onChange }: Props) {
     setPosition(drive ? { xNorm: drive.xNorm, yNorm: drive.yNorm } : null);
   }, [shotsForRound, hole.holeNumber]);
 
+  // Advance only on the transition into "pin + club both set" — adjusting one
+  // of them later shouldn't yank the page away.
+  const hasClub = hole.driveClub != null && hole.driveClub !== '';
+
   const handleTap = async (x: number, y: number) => {
+    const wasComplete = position != null && hasClub;
     setPosition({ xNorm: x, yNorm: y });
     try {
       await upsertShot({
@@ -61,6 +67,7 @@ export function DrivePage({ roundId, hole, shotsForRound, onChange }: Props) {
       const lane = driverLane(x, y);
       await updateHole(roundId, hole.holeNumber, { fir: isFairwayHit(lane) });
       await onChange();
+      if (!wasComplete && hasClub) onComplete?.();
     } catch (err) {
       console.error(err);
       Alert.alert('Save failed', 'Could not save drive.');
@@ -68,9 +75,12 @@ export function DrivePage({ roundId, hole, shotsForRound, onChange }: Props) {
   };
 
   const onClubChange = async (club: string | null) => {
+    const wasComplete = position != null && hasClub;
     try {
       await updateHole(roundId, hole.holeNumber, { driveClub: club });
       await onChange();
+      // Skip the empty string the "Other" chip writes while the player types.
+      if (!wasComplete && club != null && club !== '' && position != null) onComplete?.();
     } catch (err) {
       console.error(err);
     }

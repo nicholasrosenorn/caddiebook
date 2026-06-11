@@ -19,6 +19,7 @@ import { HoleStepper } from '@/components/hole-stepper';
 import { MapPage } from '@/components/map-page';
 import { ParPage } from '@/components/par-page';
 import { PuttingPage } from '@/components/putting-page';
+import { ScorecardOverlay } from '@/components/scorecard-overlay';
 import { ScorePage } from '@/components/score-page';
 import { Screen } from '@/components/screen';
 import { ScrollHint } from '@/components/scroll-hint';
@@ -57,6 +58,7 @@ export default function RoundScreen() {
   const [pageHeight, setPageHeight] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [mapOpen, setMapOpen] = useState(false);
+  const [scorecardOpen, setScorecardOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const didInitialJump = useRef(false);
   const insets = useSafeAreaInsets();
@@ -223,6 +225,7 @@ export default function RoundScreen() {
                     hole={currentHole}
                     shotsForRound={shots}
                     onChange={load}
+                    onComplete={() => scrollToPage(3)}
                   />
                 </View>
               )}
@@ -232,6 +235,7 @@ export default function RoundScreen() {
                   hole={currentHole}
                   shotsForRound={shots}
                   onChange={load}
+                  onComplete={() => scrollToPage(isPar3 ? 3 : 4)}
                 />
               </View>
               <View style={{ height: pageHeight }}>
@@ -243,12 +247,7 @@ export default function RoundScreen() {
                 />
               </View>
               <View style={{ height: pageHeight }}>
-                <HoleStatsPage
-                  roundId={id}
-                  hole={currentHole}
-                  holes={holes}
-                  onChange={load}
-                />
+                <HoleStatsPage roundId={id} hole={currentHole} onChange={load} />
               </View>
             </ScrollView>
 
@@ -296,8 +295,21 @@ export default function RoundScreen() {
       </View>
 
       {mapOpen && (
-        <View style={styles.mapOverlay}>
+        <View style={styles.overlay}>
           <MapPage />
+        </View>
+      )}
+
+      {scorecardOpen && (
+        <View style={styles.overlay}>
+          <ScorecardOverlay
+            round={round}
+            holes={holes}
+            onPressHole={(n) => {
+              setScorecardOpen(false);
+              goToHole(n);
+            }}
+          />
         </View>
       )}
 
@@ -317,19 +329,52 @@ export default function RoundScreen() {
       </Pressable>
 
       <Pressable
-        onPress={() => setMapOpen((v) => !v)}
+        onPress={() => {
+          setScorecardOpen((v) => !v);
+          setMapOpen(false);
+        }}
+        hitSlop={10}
+        accessibilityRole="button"
+        accessibilityLabel={scorecardOpen ? 'Close scorecard' : 'Open scorecard'}
+        style={[styles.scorecardButton, { top: insets.top + 8 }]}>
+        {({ pressed }) => (
+          <>
+            {scorecardOpen ? (
+              <View style={styles.buttonActiveFill} pointerEvents="none" />
+            ) : (
+              <GlassSurface borderRadius={18} />
+            )}
+            {pressed && <View style={styles.buttonPressedOverlay} pointerEvents="none" />}
+            <IconSymbol
+              name="tablecells"
+              size={18}
+              color={scorecardOpen ? colors.accentOn : colors.textPrimary}
+            />
+          </>
+        )}
+      </Pressable>
+
+      <Pressable
+        onPress={() => {
+          setMapOpen((v) => !v);
+          setScorecardOpen(false);
+        }}
         hitSlop={10}
         accessibilityRole="button"
         accessibilityLabel={mapOpen ? 'Close course map' : 'Open course map'}
         style={[styles.mapButton, { top: insets.top + 8 }]}>
         {({ pressed }) => (
           <>
-            <GlassSurface borderRadius={18} />
+            {mapOpen ? (
+              <View style={styles.buttonActiveFill} pointerEvents="none" />
+            ) : (
+              <GlassSurface borderRadius={18} />
+            )}
             {pressed && <View style={styles.buttonPressedOverlay} pointerEvents="none" />}
             <IconSymbol
               name="map.fill"
               size={18}
-              color={mapOpen ? colors.accent : colors.textPrimary}
+              color={mapOpen ? colors.accentOn : colors.textPrimary}
             />
           </>
         )}
@@ -405,7 +450,7 @@ const makeStyles = (colors: Palette) =>
     justifyContent: 'center',
     zIndex: 30,
   },
-  mapButton: {
+  scorecardButton: {
     position: 'absolute',
     left: 56,
     width: 36,
@@ -416,7 +461,18 @@ const makeStyles = (colors: Palette) =>
     justifyContent: 'center',
     zIndex: 30,
   },
-  mapOverlay: {
+  mapButton: {
+    position: 'absolute',
+    right: 56,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 30,
+  },
+  overlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 25,
     backgroundColor: colors.background,
@@ -425,6 +481,13 @@ const makeStyles = (colors: Palette) =>
     ...StyleSheet.absoluteFillObject,
     borderRadius: 18,
     backgroundColor: colors.accentMuted,
+  },
+  // Toggled-on state for the scorecard/map buttons: solid ink-filled circle
+  // (selection convention) so it reads as "press again to exit".
+  buttonActiveFill: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 18,
+    backgroundColor: colors.accent,
   },
   dotsContainer: {
     position: 'absolute',

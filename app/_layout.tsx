@@ -21,6 +21,7 @@ import 'react-native-reanimated';
 import { Intro } from '@/components/intro';
 import { Onboarding } from '@/components/onboarding';
 import { SignIn } from '@/components/sign-in';
+import { Splash } from '@/components/splash';
 import { themes } from '@/constants/theme';
 import {
   ThemeProvider as AppThemeProvider,
@@ -153,6 +154,9 @@ export default function RootLayout() {
   const [ready, setReady] = useState(false);
   // null = not yet known (keep the splash up until the flag is read).
   const [introSeen, setIntroSeen] = useState<boolean | null>(null);
+  // The animated cover splash shows once per cold launch (never resets on
+  // foreground), overlaying the app while the launch sync runs underneath.
+  const [splashDone, setSplashDone] = useState(false);
   const [initialSession, setInitialSession] = useState<Session | null>(null);
   const [fontsLoaded] = useFonts({
     Fraunces_500Medium,
@@ -203,6 +207,8 @@ export default function RootLayout() {
       <AppThemeProvider>
         <SyncProvider initialSession={initialSession}>
           {introSeen ? <Gate /> : <Intro onDone={dismissIntro} />}
+          {/* First run shows the intro only — its cover *is* the splash. */}
+          {introSeen && !splashDone && <Splash onDone={() => setSplashDone(true)} />}
         </SyncProvider>
       </AppThemeProvider>
     </GestureHandlerRootView>

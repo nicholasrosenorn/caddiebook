@@ -12,6 +12,7 @@ import { useColors, useFontSet, useTheme } from '@/constants/theme-context';
 import { setSetting } from '@/db/queries';
 import { listFriends } from '@/lib/api/client';
 import { clearAllRounds, seedSampleRounds } from '@/lib/dev-seed';
+import { resetSyncCursor } from '@/lib/sync/db';
 import { useSync } from '@/lib/sync/provider';
 
 // Human-friendly "last synced" label.
@@ -210,6 +211,25 @@ export default function SettingsScreen() {
                 </SketchSurface>
               </Pressable>
             </View>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Re-pull all data from the server"
+              disabled={devBusy || syncing}
+              onPress={() =>
+                runDev(async () => {
+                  await resetSyncCursor();
+                  await syncNow();
+                })
+              }
+              style={({ pressed }) => pressed && styles.cardPressed}>
+              <SketchSurface seed="dev-repull" radius={12} style={styles.devRow}>
+                <ThemedText style={styles.cardLabel}>Re-pull all</ThemedText>
+                <ThemedText type="muted" style={styles.cardHint}>
+                  Replays the full server history (idempotent; keeps local edits)
+                </ThemedText>
+              </SketchSurface>
+            </Pressable>
 
             <Pressable
               accessibilityRole="button"

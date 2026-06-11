@@ -170,6 +170,22 @@ export async function getCursor(): Promise<number> {
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
+// Force the next pull to replay the full history from seq 0. Safe recovery for
+// a device whose cursor skipped a range: applyServerRow upserts are idempotent
+// and LWW keeps newer un-pushed local edits.
+export async function resetSyncCursor(): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(`DELETE FROM app_settings WHERE key = ?;`, [CURSOR_KEY]);
+}
+
+// Toggle SQLite FK enforcement on the shared connection. The pull replay needs
+// it off (see pullAll); everything else runs with it on (set in initDb). The
+// pragma is a no-op inside a transaction, so callers toggle outside one.
+export async function setForeignKeysEnabled(on: boolean): Promise<void> {
+  const db = await getDb();
+  await db.execAsync(`PRAGMA foreign_keys = ${on ? 'ON' : 'OFF'};`);
+}
+
 export async function setCursor(value: number): Promise<void> {
   await setSetting(CURSOR_KEY, String(value));
 }

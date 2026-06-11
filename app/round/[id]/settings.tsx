@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Screen } from '@/components/screen';
@@ -10,6 +10,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import {
+  deleteRound,
   getRound,
   setRoundExcludeFromSharing,
   setRoundIncludeInHandicap,
@@ -68,6 +69,23 @@ export default function RoundSettingsScreen() {
     if (rating === round.courseRating && slope === round.slopeRating) return;
     await setRoundRatingSlope(round.id, rating, slope);
     await load();
+  };
+
+  const onDelete = () => {
+    Alert.alert('Delete round?', `${round.courseName} will be permanently deleted.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await deleteRound(round.id);
+          // The round screen beneath is stale too — pop the whole round stack
+          // back to wherever the user opened it from.
+          if (router.canGoBack()) router.dismissAll();
+          else router.replace('/' as any);
+        },
+      },
+    ]);
   };
 
   const shared = !round.excludeFromSharing;
@@ -157,6 +175,15 @@ export default function RoundSettingsScreen() {
             <Toggle on={shared} seed="settings-share-switch" colors={colors} styles={styles} />
           </Pressable>
         </SketchSurface>
+
+        <Pressable
+          onPress={onDelete}
+          accessibilityRole="button"
+          accessibilityLabel="Delete round"
+          style={({ pressed }) => [styles.deleteRow, pressed && styles.pressed]}>
+          <IconSymbol name="trash" size={18} color={colors.danger} />
+          <ThemedText style={styles.deleteLabel}>Delete round</ThemedText>
+        </Pressable>
       </ScrollView>
 
       <Pressable
@@ -278,6 +305,23 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       color: colors.textPrimary,
       minHeight: 48,
       justifyContent: 'center',
+    },
+    pressed: {
+      opacity: 0.6,
+    },
+    deleteRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.sm,
+      paddingVertical: spacing.md,
+      marginTop: spacing.md,
+    },
+    deleteLabel: {
+      fontFamily: fonts.serif,
+      fontSize: 16,
+      lineHeight: 22,
+      color: colors.danger,
     },
     closeButton: {
       position: 'absolute',

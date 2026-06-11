@@ -11,18 +11,17 @@ import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import { updateHole } from '@/db/queries';
 import type { Hole } from '@/db/types';
-import { computeRoundSummary, deriveGir, formatPct, resolveGir, resolveUpAndDown } from '@/lib/stats';
+import { deriveGir, resolveGir, resolveUpAndDown } from '@/lib/stats';
 
 type HoleField = keyof Omit<Hole, 'id' | 'roundId' | 'holeNumber'>;
 
 type Props = {
   roundId: string;
   hole: Hole;
-  holes: Hole[];
   onChange: () => void | Promise<void>;
 };
 
-export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
+export function HoleStatsPage({ roundId, hole, onChange }: Props) {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
@@ -36,7 +35,6 @@ export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
     }
   };
 
-  const summary = computeRoundSummary(holes);
   const showFir = hole.par == null || hole.par >= 4;
   const blocked = hole.greenBlocked === true;
   const derivedGir = deriveGir(hole.par, hole.score, hole.putts);
@@ -61,20 +59,6 @@ export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
           {hole.par != null ? ` · Par ${hole.par}` : ''}
         </ThemedText>
       </View>
-
-      <SketchSurface seed="stats-summary" style={styles.summary}>
-        <SummaryStat
-          label="Score"
-          value={summary.holesPlayed > 0 ? String(summary.totalScore) : '—'}
-        />
-        <SummaryStat
-          label="Putts"
-          value={summary.totalPutts > 0 ? String(summary.totalPutts) : '—'}
-        />
-        <SummaryStat label="GIR" value={formatPct(summary.girPct)} />
-        <SummaryStat label="FIR" value={formatPct(summary.firPct)} />
-        <SummaryStat label="U&D" value={formatPct(summary.udPct)} />
-      </SketchSurface>
 
       <ScoreGrid
         par={hole.par}
@@ -147,18 +131,6 @@ export function HoleStatsPage({ roundId, hole, holes, onChange }: Props) {
   );
 }
 
-function SummaryStat({ label, value }: { label: string; value: string }) {
-  const colors = useColors();
-  const fonts = useFontSet();
-  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  return (
-    <View style={styles.summaryStat}>
-      <ThemedText type="caption">{label.toUpperCase()}</ThemedText>
-      <ThemedText style={styles.summaryValue}>{value}</ThemedText>
-    </View>
-  );
-}
-
 const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   scroll: {
@@ -175,22 +147,6 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     alignItems: 'center',
     gap: 2,
     paddingBottom: spacing.sm,
-  },
-  summary: {
-    flexDirection: 'row',
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  summaryStat: {
-    flex: 1,
-    alignItems: 'flex-start',
-    gap: 2,
-  },
-  summaryValue: {
-    fontFamily: fonts.serifBold,
-    fontSize: 18,
-    lineHeight: 24,
-    color: colors.textPrimary,
   },
   girStatus: {
     gap: spacing.sm,

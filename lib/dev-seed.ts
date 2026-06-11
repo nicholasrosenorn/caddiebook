@@ -1,4 +1,5 @@
 import { getDb } from '@/db/client';
+import { cancelRetry, cancelScheduledSync, syncNow, waitForIdle } from '@/lib/sync/engine';
 import { uuid } from '@/lib/uuid';
 
 // Dev-only sample-data generator for testing the Stats tab on a simulator.
@@ -389,6 +390,11 @@ export async function seedSampleRounds(count = 70): Promise<void> {
 }
 
 export async function clearAllRounds(): Promise<void> {
+  // Drain sync first: a run straddling the wipe would re-persist its stale
+  // in-memory cursor after the reset below, stranding the re-pull mid-history.
+  cancelScheduledSync();
+  cancelRetry();
+  await waitForIdle();
   const db = await getDb();
   // Dev reset: a real hard wipe, not a user soft-delete. FK cascade
   // (foreign_keys = ON in initDb) removes holes/shots/putts/reviews.
@@ -398,4 +404,7 @@ export async function clearAllRounds(): Promise<void> {
   await db.runAsync(
     `DELETE FROM app_settings WHERE key IN ('sync_cursor', 'sync_last_synced_at');`,
   );
+  // Start the clean re-pull immediately rather than waiting for the next
+  // local mutation or foreground.
+  void syncNow();
 }
