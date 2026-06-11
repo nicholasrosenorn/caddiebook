@@ -1,6 +1,6 @@
 import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
-import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { router } from 'expo-router';
+import { useCallback, useMemo, type ReactNode } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
@@ -9,11 +9,10 @@ import { SketchDivider, SketchSurface, TopoChip } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import { deleteRound, getAllHoles, listRounds } from '@/db/queries';
-import type { Hole, Round, RoundSummary } from '@/db/types';
+import type { Round, RoundSummary } from '@/lib/data/models';
+import { useDeleteRound, useRounds } from '@/lib/data/rounds';
 import { formatToPar } from '@/lib/lifetime-stats';
 import { listItemIn } from '@/lib/motion';
-import { useSync } from '@/lib/sync/provider';
 import { computeRoundSummary, formatPct, totalPar } from '@/lib/stats';
 
 type RoundWithSummary = Round & { summary: RoundSummary; toPar: number | null };
@@ -22,37 +21,21 @@ export function MyRoundsView({ header }: { header?: ReactNode }) {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  const [rounds, setRounds] = useState<RoundWithSummary[] | null>(null);
   const tabBarHeight = useBottomTabBarHeight();
-  const { session, syncState } = useSync();
+  const { data, isPending } = useRounds();
+  const deleteRound = useDeleteRound();
 
-  const load = useCallback(async () => {
-    const [list, allHoles] = await Promise.all([listRounds(), getAllHoles()]);
-    const holesByRound = new Map<string, Hole[]>();
-    for (const h of allHoles) {
-      const arr = holesByRound.get(h.roundId);
-      if (arr) arr.push(h);
-      else holesByRound.set(h.roundId, [h]);
-    }
-    const enriched = list.map((r) => {
-      const holes = holesByRound.get(r.id) ?? [];
-      const summary = computeRoundSummary(holes);
+  const rounds = useMemo<RoundWithSummary[] | null>(() => {
+    if (!data) return null;
+    return data.map((r) => {
+      const summary = computeRoundSummary(r.holes);
       return {
         ...r,
         summary,
-        toPar: summary.holesPlayed > 0 ? summary.totalScore - totalPar(holes) : null,
+        toPar: summary.holesPlayed > 0 ? summary.totalScore - totalPar(r.holes) : null,
       };
     });
-    setRounds(enriched);
-  }, []);
-
-  // Re-run on focus, and again when a background sync applies remote changes.
-  useFocusEffect(
-    useCallback(() => {
-      load();
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- dataRevision is an intentional re-run trigger
-    }, [load, syncState.dataRevision]),
-  );
+  }, [data]);
 
   const confirmDelete = useCallback(
     (round: RoundWithSummary) => {
@@ -64,38 +47,33 @@ export function MyRoundsView({ header }: { header?: ReactNode }) {
           {
             text: 'Delete',
             style: 'destructive',
-            onPress: async () => {
-              // deleteRound tombstones the round; the mutation-event auto-sync
-              // (lib/sync/provider) pushes it so it also leaves the Community feed.
-              await deleteRound(round.id);
-              await load();
-            },
+            // Optimistic: the row leaves the cached list immediately; the
+            // queued DELETE also removes it from the Community feed.
+            onPress: () => void deleteRound(round.id),
           },
         ],
       );
     },
-    [load],
+    [deleteRound],
   );
 
-  // Spinner while the first local read is in flight, or while a signed-in
-  // session is still pulling rounds down (e.g. just after logging back in) and
-  // we don't yet have anything to show.
-  const syncing = syncState.status === 'syncing';
-  if (rounds === null || (rounds.length === 0 && session && syncing)) {
+  // Spinner only on the very first fetch (no cached list yet — e.g. just after
+  // signing in on a new device).
+  if (rounds === null && isPending) {
     return (
       <View style={styles.state}>
         {header}
         <View style={styles.emptyState}>
           <ActivityIndicator size="large" color={colors.accent} />
           <ThemedText type="muted" style={styles.emptyCopy}>
-            Syncing your rounds…
+            Loading your rounds…
           </ThemedText>
         </View>
       </View>
     );
   }
 
-  if (rounds.length === 0) {
+  if (rounds === null || rounds.length === 0) {
     return (
       <View style={styles.state}>
         {header}

@@ -13,7 +13,7 @@ import { ThemedText } from '@/components/themed-text';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import { revealRule, revealUp } from '@/lib/motion';
-import { useSync } from '@/lib/sync/provider';
+import { useAuth } from '@/lib/auth/provider';
 
 // Was the auth flow dismissed by the user? Those aren't real errors to surface.
 function isCancellation(e: unknown): boolean {
@@ -38,7 +38,7 @@ function SignInContent() {
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const insets = useSafeAreaInsets();
-  const { signInApple, signInGoogle } = useSync();
+  const { signInApple, signInGoogle } = useAuth();
   const [busy, setBusy] = useState<'apple' | 'google' | null>(null);
   const [error, setError] = useState<string | null>(null);
 

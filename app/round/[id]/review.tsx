@@ -16,9 +16,8 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import { getReview, setRoundCompletedAt, upsertReview } from '@/db/queries';
-import { syncNow } from '@/lib/sync/engine';
-import type { CommonMiss, MostCostly, RangeFocus } from '@/db/types';
+import type { CommonMiss, MostCostly, RangeFocus } from '@/lib/data/models';
+import { useRoundFull, useUpdateRound, useUpsertReview } from '@/lib/data/rounds';
 import {
   COMMON_MISS_OPTIONS,
   MOST_COSTLY_OPTIONS,
@@ -46,23 +45,23 @@ export default function ReviewScreen() {
   const [hadExistingReview, setHadExistingReview] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  const { data: detail } = useRoundFull(id);
+  const upsertReview = useUpsertReview();
+  const updateRound = useUpdateRound();
+
+  // Hydrate an existing review once from the cached round detail.
+  const hydrated = useRef(false);
+  const existing = detail?.review ?? null;
   useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
-    (async () => {
-      const existing = await getReview(id);
-      if (cancelled || !existing) return;
-      setMostCostly(existing.mostCostly);
-      setDecisionMakingRating(existing.decisionMakingRating);
-      setCommonMiss(existing.commonMiss);
-      setRangeFocus(existing.rangeFocus);
-      setOverallRating(existing.overallRating);
-      setHadExistingReview(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+    if (hydrated.current || !existing) return;
+    hydrated.current = true;
+    setMostCostly(existing.mostCostly);
+    setDecisionMakingRating(existing.decisionMakingRating);
+    setCommonMiss(existing.commonMiss);
+    setRangeFocus(existing.rangeFocus);
+    setOverallRating(existing.overallRating);
+    setHadExistingReview(true);
+  }, [existing]);
 
   const scrollToPage = useCallback(
     (page: number) => {
@@ -100,8 +99,7 @@ export default function ReviewScreen() {
     }
     setSubmitting(true);
     try {
-      await upsertReview({
-        roundId: id,
+      await upsertReview(id, {
         mostCostly,
         decisionMakingRating,
         commonMiss,
@@ -109,10 +107,10 @@ export default function ReviewScreen() {
         overallRating,
       });
       if (!hadExistingReview) {
-        await setRoundCompletedAt(id, new Date().toISOString());
+        // Completing the round also queues the server command that notifies
+        // friends (once delivered).
+        await updateRound(id, { completedAt: new Date().toISOString() });
       }
-      // Finishing a round is a natural "push my work up now" moment.
-      void syncNow();
       router.replace(`/round/${id}/summary` as any);
     } finally {
       setSubmitting(false);

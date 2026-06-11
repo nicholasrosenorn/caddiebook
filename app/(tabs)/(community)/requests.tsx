@@ -13,7 +13,7 @@ import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import { acceptFriendRequest, declineFriendRequest, listNotifications } from '@/lib/api/client';
 import { listItemIn } from '@/lib/motion';
-import type { NotificationItem } from '@/lib/sync/wire';
+import type { NotificationItem } from '@/lib/api/types';
 
 // Compact relative time: "now", "5m", "3h", "2d", "4w", then a short date for older.
 function timeAgo(iso: string): string {

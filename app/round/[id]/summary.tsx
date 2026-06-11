@@ -1,5 +1,5 @@
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -13,17 +13,9 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import {
-  getAllHoles,
-  getGoals,
-  getHolesForRound,
-  getPuttsForRound,
-  getReview,
-  getRound,
-  getShotsForRound,
-  listRounds,
-} from '@/db/queries';
-import type { Hole, PostRoundReview, PreRoundGoals, Putt, Round, Shot } from '@/db/types';
+import type { Hole, PostRoundReview, PreRoundGoals, Putt } from '@/lib/data/models';
+import { useRoundFull } from '@/lib/data/rounds';
+import { useStatsBundle } from '@/lib/data/stats';
 import { GOAL_CATEGORIES } from '@/lib/goals';
 import { formatHandicapIndex, handicapHistoryFor } from '@/lib/lifetime-stats';
 import {
@@ -56,58 +48,34 @@ export default function SummaryScreen() {
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const [round, setRound] = useState<Round | null>(null);
-  const [holes, setHoles] = useState<Hole[]>([]);
-  const [shots, setShots] = useState<Shot[]>([]);
-  const [putts, setPutts] = useState<Putt[]>([]);
-  const [review, setReview] = useState<PostRoundReview | null>(null);
-  const [goals, setGoals] = useState<PreRoundGoals | null>(null);
+  const { data: detail } = useRoundFull(id);
+  const { data: statsData } = useStatsBundle();
+
+  const round = detail?.round ?? null;
+  const holes = useMemo(() => detail?.holes ?? [], [detail]);
+  const shots = detail?.shots ?? [];
+  const putts = detail?.putts ?? [];
+  const review = detail?.review ?? null;
+  const goals = detail?.goals ?? null;
+
   // New Handicap Index after this round + how it moved from the index carried in.
-  const [hcp, setHcp] = useState<{ newHcp: number; delta: number | null } | null>(null);
-
-  const load = useCallback(async () => {
-    if (!id) return;
-    const [r, hs, ss, ps, rv, gl, allRounds, allHoles] = await Promise.all([
-      getRound(id),
-      getHolesForRound(id),
-      getShotsForRound(id),
-      getPuttsForRound(id),
-      getReview(id),
-      getGoals(id),
-      listRounds(),
-      getAllHoles(),
-    ]);
-    setRound(r);
-    setHoles(hs);
-    setShots(ss);
-    setPutts(ps);
-    setReview(rv);
-    setGoals(gl);
-
-    const completed = allRounds.filter((cr) => cr.completedAt != null);
+  const hcp = useMemo(() => {
+    if (!statsData || !id) return null;
+    const completed = statsData.rounds.filter((cr) => cr.completedAt != null);
     const holesByRound = new Map<string, Hole[]>();
-    for (const h of allHoles) {
+    for (const h of statsData.holes) {
       const arr = holesByRound.get(h.roundId);
       if (arr) arr.push(h);
       else holesByRound.set(h.roundId, [h]);
     }
     const history = handicapHistoryFor(completed, holesByRound);
     const i = history.points.findIndex((p) => p.roundId === id);
-    if (i === -1) {
-      setHcp(null);
-    } else {
-      const newHcp = history.points[i].index;
-      const before = i > 0 ? history.points[i - 1].index : null;
-      const delta = before == null ? null : Math.round((newHcp - before) * 10) / 10;
-      setHcp({ newHcp, delta });
-    }
-  }, [id]);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
+    if (i === -1) return null;
+    const newHcp = history.points[i].index;
+    const before = i > 0 ? history.points[i - 1].index : null;
+    const delta = before == null ? null : Math.round((newHcp - before) * 10) / 10;
+    return { newHcp, delta };
+  }, [statsData, id]);
 
   if (!id || !round) return <Screen />;
 

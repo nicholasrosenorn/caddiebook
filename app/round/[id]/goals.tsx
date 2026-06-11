@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -8,8 +8,7 @@ import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import { getGoals, getRound, upsertGoals } from '@/db/queries';
-import type { Round } from '@/db/types';
+import { useRoundFull, useUpsertGoals } from '@/lib/data/rounds';
 import { GOAL_CATEGORIES, type GoalCategory, type GoalCategoryKey } from '@/lib/goals';
 
 type GoalState = Record<GoalCategoryKey, string | null>;
@@ -23,28 +22,25 @@ export default function GoalsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
 
-  const [round, setRound] = useState<Round | null>(null);
   const [goals, setGoals] = useState<GoalState>(EMPTY_GOALS);
   const [submitting, setSubmitting] = useState(false);
 
+  const { data: detail } = useRoundFull(id);
+  const round = detail?.round ?? null;
+  const upsertGoals = useUpsertGoals();
+
+  // Hydrate previously saved goals once from the cached round detail.
+  const hydrated = useRef(false);
+  const existing = detail?.goals ?? null;
   useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
-    (async () => {
-      const [r, existing] = await Promise.all([getRound(id), getGoals(id)]);
-      if (cancelled) return;
-      setRound(r);
-      if (!existing) return;
-      setGoals({
-        execution: existing.execution,
-        strategic: existing.strategic,
-        mental: existing.mental,
-      });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+    if (hydrated.current || !existing) return;
+    hydrated.current = true;
+    setGoals({
+      execution: existing.execution,
+      strategic: existing.strategic,
+      mental: existing.mental,
+    });
+  }, [existing]);
 
   const setGoalText = (key: GoalCategoryKey, text: string) =>
     setGoals((g) => ({ ...g, [key]: text }));
@@ -53,8 +49,7 @@ export default function GoalsScreen() {
     if (!id || submitting) return;
     setSubmitting(true);
     try {
-      await upsertGoals({
-        roundId: id,
+      await upsertGoals(id, {
         execution: normalize(goals.execution),
         strategic: normalize(goals.strategic),
         mental: normalize(goals.mental),

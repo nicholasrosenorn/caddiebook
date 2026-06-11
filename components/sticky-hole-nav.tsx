@@ -8,7 +8,7 @@ import { SketchDivider, SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import type { Hole } from '@/db/types';
+import type { Hole } from '@/lib/data/models';
 
 type Props = {
   holeNumber: number;

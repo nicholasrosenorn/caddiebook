@@ -33,15 +33,15 @@ import { wireHoleToHole } from '@/lib/community/map';
 import { formatToPar } from '@/lib/lifetime-stats';
 import { listItemIn } from '@/lib/motion';
 import { computeRoundSummary, formatPct, totalPar } from '@/lib/stats';
-import { useSync } from '@/lib/sync/provider';
-import type { FeedRound } from '@/lib/sync/wire';
+import { useAuth } from '@/lib/auth/provider';
+import type { FeedRound } from '@/lib/api/types';
 
 export default function CommunityScreen() {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const tabBarHeight = useBottomTabBarHeight();
-  const { session } = useSync();
+  const { session } = useAuth();
 
   const [rounds, setRounds] = useState<FeedRound[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);

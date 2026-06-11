@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, DevSettings, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
@@ -9,33 +9,25 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, THEME_ORDER, themes, type FontSet, type Palette, type ThemeId } from '@/constants/theme';
 import { useColors, useFontSet, useTheme } from '@/constants/theme-context';
-import { setSetting } from '@/db/queries';
 import { listFriends } from '@/lib/api/client';
+import { useAuth } from '@/lib/auth/provider';
 import { clearAllRounds, seedSampleRounds } from '@/lib/dev-seed';
-import { resetSyncCursor } from '@/lib/sync/db';
-import { useSync } from '@/lib/sync/provider';
-
-// Human-friendly "last synced" label.
-function formatSyncedAt(iso: string | null): string {
-  if (!iso) return 'Not synced yet';
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return 'Not synced yet';
-  const mins = Math.floor((Date.now() - then) / 60000);
-  if (mins < 1) return 'Synced just now';
-  if (mins < 60) return `Synced ${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `Synced ${hrs}h ago`;
-  return `Synced ${new Date(iso).toLocaleDateString()}`;
-}
+import { drainNow, subscribeOutbox } from '@/lib/data/outbox';
+import { queryClient } from '@/lib/data/query-client';
+import { setPref } from '@/lib/local/prefs';
 
 export default function SettingsScreen() {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const { themeId, setTheme } = useTheme();
-  const { session, syncState, syncNow, signOut } = useSync();
+  const { session, signOut } = useAuth();
   const [devBusy, setDevBusy] = useState(false);
+  const [pendingWrites, setPendingWrites] = useState(0);
   const [friendCount, setFriendCount] = useState<number | null>(null);
+
+  // Live count of queued (not yet delivered) writes, for the dev section.
+  useEffect(() => subscribeOutbox(setPendingWrites), []);
 
   // Live friend count for the Community row; refetched on focus so removals
   // made on the Friends screen are reflected when we return here.
@@ -58,17 +50,13 @@ export default function SettingsScreen() {
   const confirmSignOut = useCallback(() => {
     Alert.alert(
       'Sign out?',
-      'Your rounds stay safe on the server. Local data on this device is cleared and re-downloaded next time you sign in.',
+      'Your rounds stay safe on the server. Any unsent changes are uploaded first when possible.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Sign out', style: 'destructive', onPress: () => void signOut() },
       ],
     );
   }, [signOut]);
-
-  const syncing = syncState.status === 'syncing';
-  const syncFailed = syncState.status === 'error';
-  const syncLabel = syncing ? 'Syncing…' : syncFailed ? 'Retry' : 'Sync now';
 
   const runDev = useCallback(async (fn: () => Promise<void>) => {
     setDevBusy(true);
@@ -168,17 +156,18 @@ export default function SettingsScreen() {
 
             <Pressable
               style={styles.devBtn}
-              disabled={syncing}
               accessibilityRole="button"
-              accessibilityLabel="Sync now"
-              onPress={() => void syncNow()}>
+              accessibilityLabel="Deliver queued writes"
+              onPress={() => drainNow()}>
               <SketchSurface
                 seed="sync-now"
                 fill={colors.accent}
                 stroke={colors.accent}
                 radius={8}
                 style={styles.devSurface}>
-                <ThemedText style={styles.devSeedLabel}>{syncLabel}</ThemedText>
+                <ThemedText style={styles.devSeedLabel}>
+                  {pendingWrites > 0 ? `Deliver queued (${pendingWrites})` : 'Queue empty'}
+                </ThemedText>
               </SketchSurface>
             </Pressable>
 
@@ -214,19 +203,14 @@ export default function SettingsScreen() {
 
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Re-pull all data from the server"
-              disabled={devBusy || syncing}
-              onPress={() =>
-                runDev(async () => {
-                  await resetSyncCursor();
-                  await syncNow();
-                })
-              }
+              accessibilityLabel="Refetch all data from the server"
+              disabled={devBusy}
+              onPress={() => runDev(async () => queryClient.invalidateQueries())}
               style={({ pressed }) => pressed && styles.cardPressed}>
               <SketchSurface seed="dev-repull" radius={12} style={styles.devRow}>
-                <ThemedText style={styles.cardLabel}>Re-pull all</ThemedText>
+                <ThemedText style={styles.cardLabel}>Refetch all</ThemedText>
                 <ThemedText type="muted" style={styles.cardHint}>
-                  Replays the full server history (idempotent; keeps local edits)
+                  Marks every cached query stale and refetches server truth
                 </ThemedText>
               </SketchSurface>
             </Pressable>
@@ -237,7 +221,7 @@ export default function SettingsScreen() {
               onPress={async () => {
                 // Clear the one-time flag, then reload so the root layout
                 // re-reads it and shows the intro again.
-                await setSetting('intro_seen', '0');
+                await setPref('intro_seen', '0');
                 DevSettings.reload();
               }}
               style={({ pressed }) => pressed && styles.cardPressed}>

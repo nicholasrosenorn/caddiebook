@@ -6,24 +6,23 @@ import { ScoreGrid } from '@/components/score-grid';
 import { ThemedText } from '@/components/themed-text';
 import { spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
-import { updateHole } from '@/db/queries';
-import type { Hole } from '@/db/types';
+import type { Hole } from '@/lib/data/models';
+import { useUpdateHole } from '@/lib/data/rounds';
 
 type Props = {
   roundId: string;
   hole: Hole;
-  onChange: () => void | Promise<void>;
   onPicked?: () => void;
 };
 
-export function ScorePage({ roundId, hole, onChange, onPicked }: Props) {
+export function ScorePage({ roundId, hole, onPicked }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const updateHole = useUpdateHole();
 
   const handlePick = async (score: number | null) => {
     try {
       await updateHole(roundId, hole.holeNumber, { score });
-      await onChange();
       // Only auto-advance when a score is actually set (tap-again clears to null).
       if (score != null) onPicked?.();
     } catch (err) {

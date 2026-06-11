@@ -1,4 +1,4 @@
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -27,15 +27,7 @@ import { StickyHoleNav } from '@/components/sticky-hole-nav';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
-import {
-  getHolesForRound,
-  getPuttsForRound,
-  getReview,
-  getRound,
-  getShotsForRound,
-  setRoundCompletedAt,
-} from '@/db/queries';
-import type { Hole, Putt, Round, Shot } from '@/db/types';
+import { useRoundFull, useUpdateRound } from '@/lib/data/rounds';
 
 const NAV_HEIGHT = 96;
 
@@ -47,10 +39,6 @@ export default function RoundScreen() {
     hole?: string;
     page?: string;
   }>();
-  const [round, setRound] = useState<Round | null>(null);
-  const [holes, setHoles] = useState<Hole[]>([]);
-  const [shots, setShots] = useState<Shot[]>([]);
-  const [putts, setPutts] = useState<Putt[]>([]);
   const [holeNumber, setHoleNumber] = useState(() => {
     const n = parseInt(hole ?? '', 10);
     return Number.isFinite(n) && n >= 1 ? n : 1;
@@ -63,25 +51,15 @@ export default function RoundScreen() {
   const didInitialJump = useRef(false);
   const insets = useSafeAreaInsets();
 
-  const load = useCallback(async () => {
-    if (!id) return;
-    const [r, hs, ss, ps] = await Promise.all([
-      getRound(id),
-      getHolesForRound(id),
-      getShotsForRound(id),
-      getPuttsForRound(id),
-    ]);
-    setRound(r);
-    setHoles(hs);
-    setShots(ss);
-    setPutts(ps);
-  }, [id]);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
+  // One cached server read replaces the old four parallel SQLite queries. Page
+  // mutations patch this cache optimistically, so every tap re-renders the
+  // round on the same frame — no reload threading needed.
+  const { data: detail } = useRoundFull(id);
+  const updateRound = useUpdateRound();
+  const round = detail?.round ?? null;
+  const holes = useMemo(() => detail?.holes ?? [], [detail]);
+  const shots = detail?.shots ?? [];
+  const putts = detail?.putts ?? [];
 
   const currentHole = useMemo(
     () => holes.find((h) => h.holeNumber === holeNumber) ?? null,
@@ -142,7 +120,7 @@ export default function RoundScreen() {
 
   const completeRound = useCallback(async () => {
     if (!id) return;
-    const review = await getReview(id);
+    const review = detail?.review ?? null;
     const reviewComplete =
       review != null &&
       review.mostCostly != null &&
@@ -152,13 +130,13 @@ export default function RoundScreen() {
       review.overallRating != null;
     if (reviewComplete) {
       if (!round?.completedAt) {
-        await setRoundCompletedAt(id, new Date().toISOString());
+        await updateRound(id, { completedAt: new Date().toISOString() });
       }
       router.replace(`/round/${id}/summary` as any);
     } else {
       router.replace(`/round/${id}/review` as any);
     }
-  }, [id, round]);
+  }, [id, round, detail, updateRound]);
 
   const onClose = () => {
     // Already-completed rounds (opened via "Edit round") just close.
@@ -203,20 +181,10 @@ export default function RoundScreen() {
               onScroll={onScroll}
               scrollEventThrottle={16}>
               <View style={{ height: pageHeight }}>
-                <ParPage
-                  roundId={id}
-                  hole={currentHole}
-                  onChange={load}
-                  onPicked={() => scrollToPage(1)}
-                />
+                <ParPage roundId={id} hole={currentHole} onPicked={() => scrollToPage(1)} />
               </View>
               <View style={{ height: pageHeight }}>
-                <ScorePage
-                  roundId={id}
-                  hole={currentHole}
-                  onChange={load}
-                  onPicked={() => scrollToPage(2)}
-                />
+                <ScorePage roundId={id} hole={currentHole} onPicked={() => scrollToPage(2)} />
               </View>
               {!isPar3 && (
                 <View style={{ height: pageHeight }}>
@@ -224,7 +192,6 @@ export default function RoundScreen() {
                     roundId={id}
                     hole={currentHole}
                     shotsForRound={shots}
-                    onChange={load}
                     onComplete={() => scrollToPage(3)}
                   />
                 </View>
@@ -234,20 +201,14 @@ export default function RoundScreen() {
                   roundId={id}
                   hole={currentHole}
                   shotsForRound={shots}
-                  onChange={load}
                   onComplete={() => scrollToPage(isPar3 ? 3 : 4)}
                 />
               </View>
               <View style={{ height: pageHeight }}>
-                <PuttingPage
-                  roundId={id}
-                  hole={currentHole}
-                  putts={putts}
-                  onChange={load}
-                />
+                <PuttingPage roundId={id} hole={currentHole} putts={putts} />
               </View>
               <View style={{ height: pageHeight }}>
-                <HoleStatsPage roundId={id} hole={currentHole} onChange={load} />
+                <HoleStatsPage roundId={id} hole={currentHole} />
               </View>
             </ScrollView>
 

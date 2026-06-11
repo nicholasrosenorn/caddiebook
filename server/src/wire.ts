@@ -204,3 +204,76 @@ export type RoundLikersResponse = { likers: PublicProfile[] };
 // (free-form; only stored for diagnostics).
 export type RegisterPushTokenRequest = { token: string; platform?: string };
 export type UnregisterPushTokenRequest = { token: string };
+
+// --- /data ------------------------------------------------------------------
+//
+// The request/response CRUD layer that replaced the SQLite sync pipe. Rows
+// travel snake_case (same as the community wire) so the client reuses its
+// row→model mappers. Writes are idempotent upserts/deletes keyed by
+// client-generated UUIDs; the server stamps updated_at.
+
+export type WireRound = {
+  id: string;
+  course_name: string | null;
+  date_played: string | null;
+  hole_count: number | null;
+  completed_at: string | null;
+  tee_name: string | null;
+  course_rating: number | null;
+  slope_rating: number | null;
+  include_in_handicap: number | null;
+  exclude_from_sharing: number | null;
+  created_at: string | null;
+};
+
+export type WireCourse = { id: string; name: string | null; created_at: string | null };
+export type WireTee = {
+  id: string;
+  course_id: string | null;
+  name: string | null;
+  course_rating: number | null;
+  slope_rating: number | null;
+  par: number | null;
+  created_at: string | null;
+};
+export type WireJournalEntry = {
+  id: string;
+  tag: string | null;
+  body: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+// GET /data/rounds — the rounds tab in one request.
+export type DataRoundsResponse = { rounds: (WireRound & { holes: WireHole[] })[] };
+
+// GET /data/rounds/:id/full — everything the round flow renders, one payload.
+export type RoundFullResponse = {
+  round: WireRound;
+  holes: WireHole[];
+  shots: WireShot[];
+  putts: WirePutt[];
+  review: WireReview | null;
+  goals: WireGoals | null;
+};
+
+// GET /data/stats — the lifetime-stats corpus (live rows, flat arrays).
+export type StatsBundleResponse = {
+  rounds: WireRound[];
+  holes: WireHole[];
+  shots: WireShot[];
+  putts: WirePutt[];
+  reviews: WireReview[];
+};
+
+export type CoursesResponse = { courses: (WireCourse & { tees: WireTee[] })[] };
+export type JournalResponse = { entries: WireJournalEntry[] };
+export type SettingsResponse = { settings: Record<string, string> };
+
+// PUT /data/rounds/:id — round upsert, optionally carrying its holes so round
+// creation is a single (offline-replayable) command.
+export type RoundUpsertRequest = Partial<WireRound> & { holes?: WireRow[] };
+// PUT/DELETE …/shots/:shotType — the shot row plus an optional hole patch
+// (fir/gir/…) applied in the same transaction.
+export type ShotUpsertRequest = WireRow & { hole?: WireRow };
+export type ShotDeleteRequest = { hole?: WireRow };

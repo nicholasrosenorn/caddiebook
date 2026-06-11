@@ -20,7 +20,7 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import { getSetting, setSetting } from '@/db/queries';
+import { useSetSetting, useSettingsMap } from '@/lib/data/settings';
 
 const TEMPOS = [126, 144, 156, 184] as const;
 const TEMPO_KEY = 'tempo_bpm';
@@ -54,6 +54,8 @@ export default function TempoScreen() {
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [bpm, setBpm] = useState<number>(144);
   const [running, setRunning] = useState(false);
+  const settings = useSettingsMap();
+  const setSetting = useSetSetting();
 
   const low = useAudioPlayer(require('@/assets/audio/tempo-low.wav'));
   const mid = useAudioPlayer(require('@/assets/audio/tempo-mid.wav'));
@@ -142,20 +144,23 @@ export default function TempoScreen() {
     [progress, scheduleNext],
   );
 
-  // Load the saved tempo on focus; stop the trainer when leaving the screen.
+  // Hydrate the saved tempo from the cached settings; stop the trainer when
+  // leaving the screen.
+  const savedTempo = settings.data?.[TEMPO_KEY];
+  useEffect(() => {
+    const n = Number(savedTempo);
+    if ((TEMPOS as readonly number[]).includes(n)) setBpm(n);
+  }, [savedTempo]);
+
   useFocusEffect(
     useCallback(() => {
-      getSetting(TEMPO_KEY).then((v) => {
-        const n = Number(v);
-        if ((TEMPOS as readonly number[]).includes(n)) setBpm(n);
-      });
       return () => stop();
     }, [stop]),
   );
 
   const onSelect = (v: number) => {
     setBpm(v);
-    setSetting(TEMPO_KEY, String(v));
+    void setSetting(TEMPO_KEY, String(v));
     if (running) start(v);
   };
 

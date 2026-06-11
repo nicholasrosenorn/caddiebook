@@ -1,4 +1,4 @@
-import type { JournalTag } from '@/db/types';
+import type { JournalTag } from '@/lib/data/models';
 
 export type JournalTagMeta = {
   key: JournalTag;

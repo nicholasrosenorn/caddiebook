@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import { getSetting, setSetting } from '@/db/queries';
+import { getPref, setPref } from '@/lib/local/prefs';
 import {
   DEFAULT_THEME_ID,
   defaultFonts,
@@ -33,17 +33,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [themeId, setThemeId] = useState<ThemeId>(DEFAULT_THEME_ID);
 
   // Hydrate the persisted choice once on mount; ignore unknown/stale ids.
+  // Theme is a device preference (and needed before sign-in), so it lives in
+  // AsyncStorage rather than the account settings.
   useEffect(() => {
-    getSetting(THEME_SETTING_KEY).then((stored) => {
+    getPref(THEME_SETTING_KEY).then((stored) => {
       if (stored && stored in themes) setThemeId(stored as ThemeId);
     });
   }, []);
 
   const setTheme = useCallback((id: ThemeId) => {
     setThemeId(id);
-    setSetting(THEME_SETTING_KEY, id).catch((err) =>
-      console.error('Failed to persist theme', err),
-    );
+    setPref(THEME_SETTING_KEY, id).catch((err) => console.error('Failed to persist theme', err));
   }, []);
 
   const value = useMemo<ThemeContextValue>(() => {

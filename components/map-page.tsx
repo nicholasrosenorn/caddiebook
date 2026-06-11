@@ -9,7 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import { getAllHoles, getAllShots, listRounds } from '@/db/queries';
+import { useStatsBundle } from '@/lib/data/stats';
 import { bearingDeg, destinationPoint, haversineYards, type LatLng } from '@/lib/geo';
 import { APPROACH_RINGS } from '@/lib/shots';
 
@@ -68,7 +68,7 @@ export function MapPage() {
   // crosshair axes for reading long/short and left/right misses.
   const [zoomedIn, setZoomedIn] = useState(false);
   const [dispersionOn, setDispersionOn] = useState(false);
-  const [history, setHistory] = useState<ApproachSample[]>([]);
+  const { data: statsData } = useStatsBundle();
 
   const requestLocation = useCallback(async () => {
     setPermission('pending');
@@ -104,41 +104,27 @@ export function MapPage() {
 
   // Historical approach shots from completed rounds, joined to their hole's
   // approach distance — the corpus the zoom-mode dispersion overlay windows.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [rounds, holes, shots] = await Promise.all([
-          listRounds(),
-          getAllHoles(),
-          getAllShots(),
-        ]);
-        const completed = new Set(
-          rounds.filter((r) => r.completedAt != null).map((r) => r.id),
-        );
-        const holeByKey = new Map(holes.map((h) => [`${h.roundId}:${h.holeNumber}`, h]));
-        const samples: ApproachSample[] = [];
-        for (const shot of shots) {
-          if (shot.shotType !== 'approach') continue;
-          if (!completed.has(shot.roundId)) continue;
-          const hole = holeByKey.get(`${shot.roundId}:${shot.holeNumber}`);
-          if (!hole || hole.approachDistanceYds == null || hole.greenBlocked) continue;
-          samples.push({
-            key: shot.id,
-            xNorm: shot.xNorm,
-            yNorm: shot.yNorm,
-            distanceYds: hole.approachDistanceYds,
-          });
-        }
-        if (!cancelled) setHistory(samples);
-      } catch (err) {
-        console.error(err);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Derived from the shared cached stats bundle (one server read app-wide).
+  const history = useMemo<ApproachSample[]>(() => {
+    if (!statsData) return [];
+    const { rounds, holes, shots } = statsData;
+    const completed = new Set(rounds.filter((r) => r.completedAt != null).map((r) => r.id));
+    const holeByKey = new Map(holes.map((h) => [`${h.roundId}:${h.holeNumber}`, h]));
+    const samples: ApproachSample[] = [];
+    for (const shot of shots) {
+      if (shot.shotType !== 'approach') continue;
+      if (!completed.has(shot.roundId)) continue;
+      const hole = holeByKey.get(`${shot.roundId}:${shot.holeNumber}`);
+      if (!hole || hole.approachDistanceYds == null || hole.greenBlocked) continue;
+      samples.push({
+        key: shot.id,
+        xNorm: shot.xNorm,
+        yNorm: shot.yNorm,
+        distanceYds: hole.approachDistanceYds,
+      });
+    }
+    return samples;
+  }, [statsData]);
 
   // Frame the full shot: rotate so the player looks "up" the line (blue dot
   // below, pin above), center on the midpoint, and zoom to fit the shot

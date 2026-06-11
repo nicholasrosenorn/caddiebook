@@ -1,6 +1,6 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -23,16 +23,10 @@ import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS } from '@/constants/clubs';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import {
-  createRound,
-  createTee,
-  findOrCreateCourse,
-  getBag,
-  getCourses,
-  getTeesForCourse,
-  setBag,
-} from '@/db/queries';
-import type { Course, Tee } from '@/db/types';
+import type { Tee } from '@/lib/data/models';
+import { useCourses, useCreateTee, useEnsureCourse } from '@/lib/data/courses';
+import { useCreateRound } from '@/lib/data/rounds';
+import { useBag, useSetBag } from '@/lib/data/settings';
 
 const HOLE_OPTIONS = [
   { value: '9', label: '9' },
@@ -49,12 +43,7 @@ export default function NewRoundScreen() {
   const [holeCount, setHoleCount] = useState<9 | 18>(18);
   const [submitting, setSubmitting] = useState(false);
   const [androidPickerOpen, setAndroidPickerOpen] = useState(false);
-  // Brand-new bag is pre-filled with every club; the player trims it.
-  const [bag, setBagState] = useState<string[]>([...CLUB_OPTIONS]);
 
-  // Saved courses/tees for rating-slope autofill.
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [tees, setTees] = useState<Tee[]>([]);
   const [teeName, setTeeName] = useState('');
   const [rating, setRating] = useState('');
   const [slope, setSlope] = useState('');
@@ -62,12 +51,19 @@ export default function NewRoundScreen() {
   // Whether this round is visible in friends' Community feed (default on).
   const [share, setShare] = useState(true);
 
-  useEffect(() => {
-    getBag().then((stored) => {
-      if (stored.length > 0) setBagState(stored);
-    });
-    getCourses().then(setCourses);
-  }, []);
+  // Saved courses/tees (for rating-slope autofill) + the player's bag, from the
+  // cached server queries. Brand-new bag shows every club; the player trims it.
+  const { data: coursesData } = useCourses();
+  const courses = useMemo(() => coursesData ?? [], [coursesData]);
+  const { bag: storedBag } = useBag();
+  const bag = useMemo(
+    () => (storedBag.length > 0 ? storedBag : [...CLUB_OPTIONS]),
+    [storedBag],
+  );
+  const setBag = useSetBag();
+  const ensureCourse = useEnsureCourse();
+  const createTee = useCreateTee();
+  const createRound = useCreateRound();
 
   // The saved course matching the typed name (case-insensitive), if any.
   const selectedCourse = useMemo(() => {
@@ -97,23 +93,10 @@ export default function NewRoundScreen() {
     [includeInHandicap, share, bag.length],
   );
 
-  // Load the matched course's tees so they can be tapped to autofill.
-  useEffect(() => {
-    if (!selectedCourse) {
-      setTees([]);
-      return;
-    }
-    let active = true;
-    getTeesForCourse(selectedCourse.id).then((t) => {
-      if (active) setTees(t);
-    });
-    return () => {
-      active = false;
-    };
-  }, [selectedCourse]);
+  // The matched course's tees (embedded in the courses query), tappable to autofill.
+  const tees = useMemo<Tee[]>(() => selectedCourse?.tees ?? [], [selectedCourse]);
 
   const onBagChange = (next: string[]) => {
-    setBagState(next);
     setBag(next).catch((err) => console.error(err));
   };
 
@@ -136,7 +119,7 @@ export default function NewRoundScreen() {
       const trimmedTee = includeInHandicap ? teeName.trim() : '';
 
       // Persist the course + tee so next time this autofills.
-      const courseId = await findOrCreateCourse(courseName);
+      const courseId = await ensureCourse(courseName);
       if (hasRatingSlope) {
         const known = tees.some(
           (t) => t.courseRating === ratingNum && t.slopeRating === slopeNum,

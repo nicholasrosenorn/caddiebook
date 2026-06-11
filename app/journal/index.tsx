@@ -1,4 +1,4 @@
-import { router, Stack, useFocusEffect } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,8 +11,8 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import { deleteJournalEntry, listJournalEntries } from '@/db/queries';
-import type { JournalEntry, JournalTag } from '@/db/types';
+import type { JournalEntry, JournalTag } from '@/lib/data/models';
+import { useDeleteJournalEntry, useJournal } from '@/lib/data/journal';
 import { JOURNAL_TAGS, journalPreviewTitle, journalTagLabel } from '@/lib/journal';
 
 type TagFilter = JournalTag | 'all';
@@ -28,19 +28,12 @@ export default function JournalScreen() {
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const insets = useSafeAreaInsets();
 
-  const [entries, setEntries] = useState<JournalEntry[] | null>(null);
   const [tag, setTag] = useState<TagFilter>('all');
   const [query, setQuery] = useState('');
 
-  const load = useCallback(async () => {
-    setEntries(await listJournalEntries());
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
+  const { data } = useJournal();
+  const entries = data ?? null;
+  const deleteEntry = useDeleteJournalEntry();
 
   const confirmDelete = useCallback(
     (entry: JournalEntry) => {
@@ -49,14 +42,12 @@ export default function JournalScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: async () => {
-            await deleteJournalEntry(entry.id);
-            await load();
-          },
+          // Optimistic: the entry leaves the cached list immediately.
+          onPress: () => void deleteEntry(entry.id),
         },
       ]);
     },
-    [load],
+    [deleteEntry],
   );
 
   const filtered = useMemo(() => {
@@ -180,8 +171,9 @@ export default function JournalScreen() {
 }
 
 function formatDate(iso: string): string {
-  // Stored as UTC "YYYY-MM-DD HH:MM:SS" by SQLite datetime('now').
-  const d = new Date(iso.replace(' ', 'T') + 'Z');
+  // New entries carry full ISO timestamps; legacy rows used SQLite's
+  // UTC "YYYY-MM-DD HH:MM:SS" form.
+  const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }

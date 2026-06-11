@@ -13,7 +13,7 @@ import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import { getFriendRound, likeRound, unlikeRound } from '@/lib/api/client';
 import { wireHoleToHole, wireShotToShot } from '@/lib/community/map';
-import type { FriendRoundDetail } from '@/lib/sync/wire';
+import type { FriendRoundDetail } from '@/lib/api/types';
 import { computeRoundSummary, formatPct, totalPar } from '@/lib/stats';
 
 export default function FriendRoundScreen() {

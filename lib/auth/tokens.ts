@@ -1,6 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 
-import type { AuthUser } from '../sync/wire';
+import type { AuthUser } from '@/lib/api/types';
 
 // Session tokens live in the device keychain/keystore via expo-secure-store.
 const ACCESS_KEY = 'auth_access_token';

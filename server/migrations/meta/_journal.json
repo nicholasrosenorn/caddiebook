@@ -43,6 +43,13 @@
       "when": 1780951195228,
       "tag": "0005_remarkable_tusk",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781178239837,
+      "tag": "0006_hard_delete",
+      "breakpoints": true
     }
   ]
 }

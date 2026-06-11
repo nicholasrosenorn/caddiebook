@@ -2,14 +2,14 @@
 // camelCase models, so feed/detail screens can reuse the same components and
 // stat helpers (computeRoundSummary, etc.) the user's own rounds use.
 
-import type { Hole, PostRoundReview, PreRoundGoals, Putt, Shot, ShotType } from '@/db/types';
+import type { Hole, PostRoundReview, PreRoundGoals, Putt, Shot, ShotType } from '@/lib/data/models';
 import type {
   WireGoals,
   WireHole,
   WirePutt,
   WireReview,
   WireShot,
-} from '@/lib/sync/wire';
+} from '@/lib/api/types';
 
 const toBool = (v: number | null): boolean | null => (v == null ? null : v === 1);
 

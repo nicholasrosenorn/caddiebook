@@ -1,4 +1,3 @@
-import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   PanResponder,
@@ -18,7 +17,12 @@ import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS, sortByDriveLength } from '@/constants/clubs';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import { getBag, getClubYardages, setBag, setClubYardage } from '@/db/queries';
+import {
+  useBag,
+  useClubYardages,
+  useSetBag,
+  useSetClubYardage,
+} from '@/lib/data/settings';
 
 const DEFAULT_YDS = 100;
 const BAND_HEIGHT = 76;
@@ -37,40 +41,33 @@ export default function YardagesScreen() {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  const [bag, setBagState] = useState<string[]>([...CLUB_OPTIONS]);
-  const [clubs, setClubs] = useState<string[]>([]);
-  const [yardages, setYardages] = useState<Record<string, number>>({});
+  // The cached settings query is the source of truth: the setters patch the
+  // cache synchronously (optimistic) so the UI updates on the same frame.
+  const { bag: storedBag } = useBag();
+  const { yardages } = useClubYardages();
+  const setBag = useSetBag();
+  const setClubYardage = useSetClubYardage();
 
-  const load = useCallback(async () => {
-    const [storedBag, yds] = await Promise.all([getBag(), getClubYardages()]);
-    // Empty/unset bag means "all clubs" everywhere else, so show that here too.
-    const effective = storedBag.length > 0 ? storedBag : [...CLUB_OPTIONS];
-    setBagState(effective);
-    setClubs(clubsFromBag(effective));
-    setYardages(yds);
-  }, []);
+  // Empty/unset bag means "all clubs" everywhere else, so show that here too.
+  const bag = useMemo(
+    () => (storedBag.length > 0 ? storedBag : [...CLUB_OPTIONS]),
+    [storedBag],
+  );
+  const clubs = useMemo(() => clubsFromBag(bag), [bag]);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
+  const onBagChange = useCallback(
+    async (next: string[]) => {
+      await setBag(next);
+    },
+    [setBag],
   );
 
-  const onBagChange = useCallback(async (next: string[]) => {
-    setBagState(next);
-    setClubs(clubsFromBag(next));
-    await setBag(next);
-  }, []);
-
-  const onCommit = useCallback(async (club: string, next: number | null) => {
-    setYardages((prev) => {
-      const out = { ...prev };
-      if (next == null) delete out[club];
-      else out[club] = next;
-      return out;
-    });
-    await setClubYardage(club, next);
-  }, []);
+  const onCommit = useCallback(
+    async (club: string, next: number | null) => {
+      await setClubYardage(club, next);
+    },
+    [setClubYardage],
+  );
 
   const fanItems = useMemo(
     () =>

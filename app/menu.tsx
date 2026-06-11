@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
@@ -15,8 +15,7 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import { getGoals } from '@/db/queries';
-import type { PreRoundGoals } from '@/db/types';
+import { useRoundFull } from '@/lib/data/rounds';
 import { GOAL_CATEGORIES } from '@/lib/goals';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -49,18 +48,8 @@ export default function MenuScreen() {
   // When opened from inside a round, the hamburger passes the active round id so
   // the menu can surface that round's goals.
   const { roundId } = useLocalSearchParams<{ roundId?: string }>();
-  const [goals, setGoals] = useState<PreRoundGoals | null>(null);
-
-  useEffect(() => {
-    if (!roundId) return;
-    let cancelled = false;
-    getGoals(roundId).then((g) => {
-      if (!cancelled) setGoals(g);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [roundId]);
+  const { data: roundDetail } = useRoundFull(roundId);
+  const goals = roundDetail?.goals ?? null;
 
   // 0 = closed (panel off-screen left, backdrop clear), 1 = fully open.
   const progress = useSharedValue(0);

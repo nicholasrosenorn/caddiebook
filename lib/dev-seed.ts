@@ -1,11 +1,18 @@
-import { getDb } from '@/db/client';
-import { cancelRetry, cancelScheduledSync, syncNow, waitForIdle } from '@/lib/sync/engine';
+import { authedRequest, pushChanges } from '@/lib/api/client';
+import { queryClient } from '@/lib/data/query-client';
+import type { DataRoundsResponse } from '@/lib/data/types';
+import type { WireChange, WireRow } from '@/lib/api/types';
 import { uuid } from '@/lib/uuid';
 
 // Dev-only sample-data generator for testing the Stats tab on a simulator.
 // Seeds realistic, completed rounds whose skill improves over time so the
 // over-time trends actually have a story to tell. Never shipped (gated by
 // __DEV__ at the call site).
+//
+// Writes go straight to the server: the ~5k generated rows batch through the
+// legacy /sync/push (one request) rather than the per-command outbox, then
+// every query refetches. (When /sync/push is removed, this tool needs a bulk
+// /data path.)
 
 // Each course carries a tee with an 18-hole Course/Slope Rating so the handicap
 // section has realistic inputs. 9-hole rounds snapshot roughly half the rating.
@@ -231,180 +238,153 @@ function isoDate(d: Date): string {
 }
 
 export async function seedSampleRounds(count = 70): Promise<void> {
-  const db = await getDb();
+  const changes: WireChange[] = [];
+  const now = new Date().toISOString();
+  const stamp = (row: WireRow): WireRow => ({ ...row, updated_at: now, deleted_at: null });
+
+  // Seed the saved courses + tees so the New Round picker is populated.
+  for (const c of COURSES) {
+    const courseId = uuid();
+    changes.push({ table: 'courses', row: stamp({ id: courseId, name: c.name, created_at: now }) });
+    changes.push({
+      table: 'tees',
+      row: stamp({
+        id: uuid(),
+        course_id: courseId,
+        name: c.tee,
+        course_rating: c.rating,
+        slope_rating: c.slope,
+        par: 72,
+        created_at: now,
+      }),
+    });
+  }
 
   // Dates ascending, ending today; ~weekly cadence.
   const today = new Date();
   let cursor = new Date(today.getTime() - count * 7 * 86400000 - 7 * 86400000);
 
-  await db.withTransactionAsync(async () => {
-    // Seed the saved courses + tees so the New Round picker is populated.
-    for (const c of COURSES) {
-      await db.runAsync(
-        `INSERT INTO courses (id, name, updated_at, dirty)
-         SELECT ?, ?, datetime('now'), 1
-         WHERE NOT EXISTS (SELECT 1 FROM courses WHERE name = ? COLLATE NOCASE);`,
-        [uuid(), c.name, c.name],
-      );
-      const row = await db.getFirstAsync<{ id: string }>(
-        `SELECT id FROM courses WHERE name = ? COLLATE NOCASE;`,
-        [c.name],
-      );
-      if (row) {
-        await db.runAsync(
-          `INSERT INTO tees (id, course_id, name, course_rating, slope_rating, par, updated_at, dirty)
-           SELECT ?, ?, ?, ?, ?, ?, datetime('now'), 1
-           WHERE NOT EXISTS (SELECT 1 FROM tees WHERE course_id = ? AND name = ?);`,
-          [uuid(), row.id, c.tee, c.rating, c.slope, 72, row.id, c.tee],
-        );
+  for (let i = 0; i < count; i++) {
+    cursor = new Date(cursor.getTime() + randInt(3, 11) * 86400000);
+    if (cursor > today) cursor = today;
+    const date = isoDate(cursor);
+
+    // Skill 0→1 over the season, plus a per-round form swing.
+    const baseSkill = 0.15 + 0.7 * (i / Math.max(1, count - 1));
+    const skill = clamp(baseSkill + gauss(0, 0.12), 0, 1);
+
+    const holeCount = chance(0.78) ? 18 : 9;
+    const pars = holeCount === 18 ? PARS_18 : FRONT_NINE;
+
+    const roundId = uuid();
+    const course = pick(COURSES);
+    // 9-hole rounds snapshot roughly half the 18-hole rating.
+    const rating = holeCount === 18 ? course.rating : Math.round((course.rating / 2) * 10) / 10;
+    // Seeded rounds are flagged exclude_from_sharing = 1 so completing them
+    // doesn't fan out a "friend finished a round" push per round to every
+    // friend — see dispatchRoundShareNotifications.
+    changes.push({
+      table: 'rounds',
+      row: stamp({
+        id: roundId,
+        course_name: course.name,
+        date_played: date,
+        hole_count: holeCount,
+        completed_at: `${date}T20:30:00.000Z`,
+        created_at: `${date} 12:00:00`,
+        tee_name: course.tee,
+        course_rating: rating,
+        slope_rating: course.slope,
+        exclude_from_sharing: 1,
+      }),
+    });
+
+    for (let h = 0; h < pars.length; h++) {
+      const hole = buildHole(h + 1, pars[h], skill);
+      changes.push({
+        table: 'holes',
+        row: stamp({
+          id: uuid(),
+          round_id: roundId,
+          hole_number: hole.holeNumber,
+          par: hole.par,
+          fir: hole.fir,
+          approach_distance_yds: hole.approachDistance,
+          approach_club: hole.approachClub,
+          drive_club: hole.driveClub,
+          score: hole.score,
+          putts: hole.putts,
+          chip_shots: hole.chipShots,
+          sand_shots: hole.sandShots,
+          penalties: hole.penalties,
+        }),
+      });
+
+      if (hole.drive) {
+        changes.push({
+          table: 'shots',
+          row: stamp({
+            id: uuid(),
+            round_id: roundId,
+            hole_number: hole.holeNumber,
+            shot_type: 'driver',
+            x_norm: hole.drive.x,
+            y_norm: hole.drive.y,
+          }),
+        });
+      }
+      changes.push({
+        table: 'shots',
+        row: stamp({
+          id: uuid(),
+          round_id: roundId,
+          hole_number: hole.holeNumber,
+          shot_type: 'approach',
+          x_norm: hole.approach.x,
+          y_norm: hole.approach.y,
+        }),
+      });
+
+      for (const p of hole.puttRows) {
+        changes.push({
+          table: 'putts',
+          row: stamp({
+            id: uuid(),
+            round_id: roundId,
+            hole_number: hole.holeNumber,
+            distance_ft: p.distanceFt,
+            made: p.made,
+            created_at: `${date} 13:00:00`,
+          }),
+        });
       }
     }
 
-    const holeStmt = await db.prepareAsync(
-      `INSERT INTO holes (id, round_id, hole_number, par, fir, gir, up_and_down,
-        approach_distance_yds, approach_club, drive_club, score, putts, chip_shots, sand_shots,
-        penalties, notes, updated_at, dirty)
-       VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, NULL, datetime('now'), 1);`,
-    );
-    const shotStmt = await db.prepareAsync(
-      `INSERT INTO shots (id, round_id, hole_number, shot_type, x_norm, y_norm, updated_at, dirty)
-       VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 1);`,
-    );
-    const puttStmt = await db.prepareAsync(
-      `INSERT INTO putts (id, round_id, hole_number, distance_ft, made, created_at, updated_at, dirty)
-       VALUES (?, ?, ?, ?, ?, ?, datetime('now'), 1);`,
-    );
+    // Post-round review — ratings improve with skill.
+    changes.push({
+      table: 'post_round_reviews',
+      row: stamp({
+        id: uuid(),
+        round_id: roundId,
+        most_costly: pick(MOST_COSTLY),
+        decision_making_rating: Math.round(clamp(4 + 5 * skill + gauss(0, 1), 1, 10)),
+        common_miss: pick(COMMON_MISS),
+        range_focus: pick(RANGE_FOCUS),
+        overall_rating: Math.round(clamp(3 + 6 * skill + gauss(0, 1), 1, 10)),
+        created_at: `${date} 20:45:00`,
+      }),
+    });
+  }
 
-    try {
-      for (let i = 0; i < count; i++) {
-        cursor = new Date(cursor.getTime() + randInt(3, 11) * 86400000);
-        if (cursor > today) cursor = today;
-        const date = isoDate(cursor);
-
-        // Skill 0→1 over the season, plus a per-round form swing.
-        const baseSkill = 0.15 + 0.7 * (i / Math.max(1, count - 1));
-        const skill = clamp(baseSkill + gauss(0, 0.12), 0, 1);
-
-        const holeCount = chance(0.78) ? 18 : 9;
-        const pars = holeCount === 18 ? PARS_18 : FRONT_NINE;
-
-        const roundId = uuid();
-        const course = pick(COURSES);
-        // 9-hole rounds snapshot roughly half the 18-hole rating.
-        const rating =
-          holeCount === 18 ? course.rating : Math.round((course.rating / 2) * 10) / 10;
-        // Seeded rounds are flagged exclude_from_sharing = 1 so that syncing them
-        // (they're written dirty = 1) doesn't fan out a "friend finished a round"
-        // push per round to every friend — see dispatchRoundShareNotifications.
-        await db.runAsync(
-          `INSERT INTO rounds
-             (id, course_name, date_played, hole_count, completed_at, created_at,
-              tee_name, course_rating, slope_rating, exclude_from_sharing, updated_at, dirty)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, datetime('now'), 1);`,
-          [
-            roundId,
-            course.name,
-            date,
-            holeCount,
-            `${date}T20:30:00.000Z`,
-            `${date} 12:00:00`,
-            course.tee,
-            rating,
-            course.slope,
-          ],
-        );
-
-        for (let h = 0; h < pars.length; h++) {
-          const hole = buildHole(h + 1, pars[h], skill);
-          await holeStmt.executeAsync([
-            uuid(),
-            roundId,
-            hole.holeNumber,
-            hole.par,
-            hole.fir,
-            hole.approachDistance,
-            hole.approachClub,
-            hole.driveClub,
-            hole.score,
-            hole.putts,
-            hole.chipShots,
-            hole.sandShots,
-            hole.penalties,
-          ]);
-
-          if (hole.drive) {
-            await shotStmt.executeAsync([
-              uuid(),
-              roundId,
-              hole.holeNumber,
-              'driver',
-              hole.drive.x,
-              hole.drive.y,
-            ]);
-          }
-          await shotStmt.executeAsync([
-            uuid(),
-            roundId,
-            hole.holeNumber,
-            'approach',
-            hole.approach.x,
-            hole.approach.y,
-          ]);
-
-          for (const p of hole.puttRows) {
-            await puttStmt.executeAsync([
-              uuid(),
-              roundId,
-              hole.holeNumber,
-              p.distanceFt,
-              p.made,
-              `${date} 13:00:00`,
-            ]);
-          }
-        }
-
-        // Post-round review — ratings improve with skill.
-        await db.runAsync(
-          `INSERT INTO post_round_reviews
-            (id, round_id, most_costly, decision_making_rating, common_miss,
-             range_focus, overall_rating, created_at, updated_at, dirty)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), 1);`,
-          [
-            uuid(),
-            roundId,
-            pick(MOST_COSTLY),
-            Math.round(clamp(4 + 5 * skill + gauss(0, 1), 1, 10)),
-            pick(COMMON_MISS),
-            pick(RANGE_FOCUS),
-            Math.round(clamp(3 + 6 * skill + gauss(0, 1), 1, 10)),
-            `${date} 20:45:00`,
-          ],
-        );
-      }
-    } finally {
-      await holeStmt.finalizeAsync();
-      await shotStmt.finalizeAsync();
-      await puttStmt.finalizeAsync();
-    }
-  });
+  await pushChanges(changes);
+  await queryClient.invalidateQueries();
 }
 
 export async function clearAllRounds(): Promise<void> {
-  // Drain sync first: a run straddling the wipe would re-persist its stale
-  // in-memory cursor after the reset below, stranding the re-pull mid-history.
-  cancelScheduledSync();
-  cancelRetry();
-  await waitForIdle();
-  const db = await getDb();
-  // Dev reset: a real hard wipe, not a user soft-delete. FK cascade
-  // (foreign_keys = ON in initDb) removes holes/shots/putts/reviews.
-  await db.runAsync(`DELETE FROM rounds;`);
-  // Drop the local sync cursor too (keys arrive in Phase 2; this is a harmless
-  // no-op until then) so a reseed forces a clean re-pull from the server.
-  await db.runAsync(
-    `DELETE FROM app_settings WHERE key IN ('sync_cursor', 'sync_last_synced_at');`,
-  );
-  // Start the clean re-pull immediately rather than waiting for the next
-  // local mutation or foreground.
-  void syncNow();
+  // Dev reset: hard-delete every round (children cascade server-side).
+  const { rounds } = await authedRequest<DataRoundsResponse>('/data/rounds', 'GET');
+  for (const round of rounds) {
+    await authedRequest(`/data/rounds/${round.id}`, 'DELETE');
+  }
+  await queryClient.invalidateQueries();
 }

@@ -1,5 +1,4 @@
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
 import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 
@@ -12,14 +11,8 @@ import { TrendChart } from '@/components/trend-chart';
 import { CLUB_OPTIONS, sortByDriveLength } from '@/constants/clubs';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import {
-  getAllHoles,
-  getAllPutts,
-  getAllReviews,
-  getAllShots,
-  listRounds,
-} from '@/db/queries';
-import type { Hole, PostRoundReview, Putt, Round, Shot } from '@/db/types';
+import type { Hole, PostRoundReview, Putt, Round, Shot } from '@/lib/data/models';
+import { useStatsBundle } from '@/lib/data/stats';
 import type { HandicapHistory } from '@/lib/handicap';
 import {
   aggregateApproach,
@@ -39,7 +32,6 @@ import {
   type RoundsFilter,
 } from '@/lib/lifetime-stats';
 import { formatPct } from '@/lib/stats';
-import { useSync } from '@/lib/sync/provider';
 
 type Data = {
   rounds: Round[]; // completed only, newest first
@@ -115,45 +107,27 @@ export function ProgressView({ header }: { header?: ReactNode }) {
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const tabBarHeight = useBottomTabBarHeight();
-  const [data, setData] = useState<Data | null>(null);
   const [holeFilter, setHoleFilter] = useState<HoleCountFilter>(18);
   const [roundsFilter, setRoundsFilter] = useState<RoundsFilter>(20);
   const [clubFilter, setClubFilter] = useState<ClubFilter>('all');
   const [driveClubFilter, setDriveClubFilter] = useState<ClubFilter>('all');
-  const { syncState } = useSync();
+  const bundle = useStatsBundle();
 
-  const load = useCallback(async () => {
-    try {
-      const [rounds, holes, shots, putts, reviews] = await Promise.all([
-        listRounds(),
-        getAllHoles(),
-        getAllShots(),
-        getAllPutts(),
-        getAllReviews(),
-      ]);
-      const reviewsByRound = new Map<string, PostRoundReview>();
-      for (const rv of reviews) reviewsByRound.set(rv.roundId, rv);
-      setData({
-        rounds: rounds.filter((r) => r.completedAt != null),
-        holesByRound: groupBy(holes, (h) => h.roundId),
-        shotsByRound: groupBy(shots, (s) => s.roundId),
-        puttsByRound: groupBy(putts, (p) => p.roundId),
-        reviewsByRound,
-      });
-    } catch (err) {
-      // Don't let a read failure become an uncaught rejection — leave the
-      // loading state up rather than crashing the focused screen.
-      console.error('Failed to load progress data', err);
-    }
-  }, []);
-
-  // Re-run on focus, and again when a background sync applies remote changes.
-  useFocusEffect(
-    useCallback(() => {
-      load();
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- dataRevision is an intentional re-run trigger
-    }, [load, syncState.dataRevision]),
-  );
+  // One cached server read (refetched on focus/foreground) replaces the old
+  // five whole-table SQLite queries; the groupings stay client-side.
+  const data = useMemo<Data | null>(() => {
+    if (!bundle.data) return null;
+    const { rounds, holes, shots, putts, reviews } = bundle.data;
+    const reviewsByRound = new Map<string, PostRoundReview>();
+    for (const rv of reviews) reviewsByRound.set(rv.roundId, rv);
+    return {
+      rounds: rounds.filter((r) => r.completedAt != null),
+      holesByRound: groupBy(holes, (h) => h.roundId),
+      shotsByRound: groupBy(shots, (s) => s.roundId),
+      puttsByRound: groupBy(putts, (p) => p.roundId),
+      reviewsByRound,
+    };
+  }, [bundle.data]);
 
   // Rounds matching the hole-count + recency filters; shared by every section.
   const filteredRounds = useMemo(() => {

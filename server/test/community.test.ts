@@ -80,9 +80,11 @@ describe('community', () => {
     const b = await makeUser('bob');
     const bHandle = (await db.select().from(users).where(eq(users.id, b)).limit(1))[0]!.username!;
 
-    // A searches for B and sees relation 'none'.
+    // A searches for B and sees relation 'none'. Search the full handle: the
+    // reused dev database accumulates `bob_*` users across runs and search caps
+    // at 10 results, so a short-prefix query can miss this run's bob.
     const search = (await (
-      await authed(a, `/community/users/search?q=${bHandle.slice(0, 4)}`)
+      await authed(a, `/community/users/search?q=${bHandle}`)
     ).json()) as UserSearchResponse;
     const found = search.users.find((u) => u.id === b);
     expect(found?.relation).toBe('none');

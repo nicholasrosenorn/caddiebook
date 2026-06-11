@@ -1,5 +1,5 @@
 import type { ScoreIndicator } from '@/components/sketch';
-import type { Hole, RoundSummary } from '@/db/types';
+import type { Hole, RoundSummary } from '@/lib/data/models';
 
 // Maps a raw score against par to the par-relative glyph vocabulary
 // (circle = under par, square = over) used by the score grid and scorecard.

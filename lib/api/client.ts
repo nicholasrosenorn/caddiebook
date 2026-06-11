@@ -18,7 +18,6 @@ import type {
   NotificationsResponse,
   ProfileUpdate,
   PublicProfile,
-  PullResponse,
   PushResponse,
   RefreshResponse,
   RequestCountResponse,
@@ -26,7 +25,7 @@ import type {
   SendRequestResponse,
   UserSearchResult,
   WireChange,
-} from '../sync/wire';
+} from './types';
 
 // Thrown when the session is unrecoverable (no token, or refresh rejected).
 // The provider catches this to force a sign-out. Network failures throw a plain
@@ -41,7 +40,18 @@ export class UsernameTakenError extends Error {}
 export class UserNotFoundError extends Error {}
 export class AlreadyFriendsError extends Error {}
 
-type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+// Thrown by authedRequest for a non-ok response, carrying the status so callers
+// (the outbox) can distinguish a permanent 4xx from a transient 5xx/429.
+export class ApiStatusError extends Error {
+  constructor(
+    readonly status: number,
+    path: string,
+  ) {
+    super(`request to ${path} failed: ${status}`);
+  }
+}
+
+type Method = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
 async function rawRequest(
   path: string,
@@ -87,9 +97,9 @@ async function authedRaw(path: string, method: Method, body?: unknown): Promise<
   return res;
 }
 
-async function authedRequest<T>(path: string, method: Method, body?: unknown): Promise<T> {
+export async function authedRequest<T>(path: string, method: Method, body?: unknown): Promise<T> {
   const res = await authedRaw(path, method, body);
-  if (!res.ok) throw new Error(`request to ${path} failed: ${res.status}`);
+  if (!res.ok) throw new ApiStatusError(res.status, path);
   return (await res.json()) as T;
 }
 
@@ -132,15 +142,13 @@ export async function updateProfile(patch: ProfileUpdate): Promise<AuthUser> {
   return (await res.json()) as AuthUser;
 }
 
-// --- Sync (authenticated) --------------------------------------------------
+// --- Legacy sync (authenticated) ---------------------------------------------
+//
+// Only the one-time upgrade flush (lib/migration/legacy-flush.ts) and the dev
+// seeder still batch through /sync/push; it goes away with them.
 
 export function pushChanges(changes: WireChange[]): Promise<PushResponse> {
   return authedRequest<PushResponse>('/sync/push', 'POST', { changes });
-}
-
-export function pull(since: number, limit?: number): Promise<PullResponse> {
-  const q = limit ? `?since=${since}&limit=${limit}` : `?since=${since}`;
-  return authedRequest<PullResponse>(`/sync/pull${q}`, 'GET');
 }
 
 // --- Community (authenticated) ---------------------------------------------

@@ -1,4 +1,4 @@
-import type { Shot } from '@/db/types';
+import type { Shot } from '@/lib/data/models';
 
 export type DriverLane = 'LF' | 'CF' | 'RF';
 

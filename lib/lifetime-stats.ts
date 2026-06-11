@@ -7,7 +7,7 @@ import type {
   RangeFocus,
   Round,
   Shot,
-} from '@/db/types';
+} from '@/lib/data/models';
 import {
   COMMON_MISS_OPTIONS,
   MOST_COSTLY_OPTIONS,

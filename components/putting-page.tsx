@@ -6,8 +6,8 @@ import { InfoHint } from '@/components/info-hint';
 import { ThemedText } from '@/components/themed-text';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import { createPutt, deletePutt } from '@/db/queries';
-import type { Hole, Putt } from '@/db/types';
+import type { Hole, Putt } from '@/lib/data/models';
+import { useCreatePutt, useDeletePutt } from '@/lib/data/rounds';
 import { roughCirclePath, roughRectPath, stippleInRect } from '@/lib/sketch';
 
 const GLYPH_SIZE = 18;
@@ -29,25 +29,23 @@ type Props = {
   roundId: string;
   hole: Hole;
   putts: Putt[];
-  onChange: () => void | Promise<void>;
 };
 
-export function PuttingPage({ roundId, hole, putts, onChange }: Props) {
+export function PuttingPage({ roundId, hole, putts }: Props) {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const { width: screenWidth } = useWindowDimensions();
   const boardWidth = Math.min(340, screenWidth - 32);
 
-  const totals = useMemo(
-    () => ({ made: putts.filter((p) => p.made).length, total: putts.length }),
-    [putts],
-  );
+  const createPutt = useCreatePutt();
+  const deletePutt = useDeletePutt();
 
+  // Optimistic: the glyph (and the hole's putt count) appear on the same frame
+  // as the tap; the command queues for the server.
   const addPutt = async (distance: number, made: boolean) => {
     try {
       await createPutt({ roundId, holeNumber: hole.holeNumber, distanceFt: distance, made });
-      await onChange();
     } catch (err) {
       console.error(err);
     }
@@ -55,8 +53,7 @@ export function PuttingPage({ roundId, hole, putts, onChange }: Props) {
 
   const removePutt = async (puttId: string) => {
     try {
-      await deletePutt(puttId);
-      await onChange();
+      await deletePutt(roundId, puttId);
     } catch (err) {
       console.error(err);
     }

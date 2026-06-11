@@ -9,8 +9,8 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import { updateHole } from '@/db/queries';
-import type { Hole } from '@/db/types';
+import type { Hole } from '@/lib/data/models';
+import { useUpdateHole } from '@/lib/data/rounds';
 import { deriveGir, resolveGir, resolveUpAndDown } from '@/lib/stats';
 
 type HoleField = keyof Omit<Hole, 'id' | 'roundId' | 'holeNumber'>;
@@ -18,18 +18,17 @@ type HoleField = keyof Omit<Hole, 'id' | 'roundId' | 'holeNumber'>;
 type Props = {
   roundId: string;
   hole: Hole;
-  onChange: () => void | Promise<void>;
 };
 
-export function HoleStatsPage({ roundId, hole, onChange }: Props) {
+export function HoleStatsPage({ roundId, hole }: Props) {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  const updateHole = useUpdateHole();
 
   const update = async <K extends HoleField>(field: K, value: Hole[K]) => {
     try {
       await updateHole(roundId, hole.holeNumber, { [field]: value });
-      await onChange();
     } catch (err) {
       console.error(err);
     }

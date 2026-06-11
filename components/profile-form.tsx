@@ -19,7 +19,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import { UsernameTakenError } from '@/lib/api/client';
-import { useSync } from '@/lib/sync/provider';
+import { useAuth } from '@/lib/auth/provider';
 
 export const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
@@ -52,7 +52,7 @@ export function ProfileForm({
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  const { updateProfile } = useSync();
+  const { updateProfile } = useAuth();
 
   const [firstName, setFirstName] = useState(initial.firstName);
   const [lastName, setLastName] = useState(initial.lastName);

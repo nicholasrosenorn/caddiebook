@@ -8,7 +8,7 @@ import { IconSymbol, type IconSymbolName } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import { getRoundLikers } from '@/lib/api/client';
-import type { PublicProfile } from '@/lib/sync/wire';
+import type { PublicProfile } from '@/lib/api/types';
 
 export default function RoundLikesScreen() {
   const colors = useColors();

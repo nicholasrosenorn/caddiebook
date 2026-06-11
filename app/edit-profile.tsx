@@ -3,10 +3,10 @@ import { router } from 'expo-router';
 import { DEFAULT_AVATAR } from '@/components/avatar';
 import { ProfileForm } from '@/components/profile-form';
 import { Screen } from '@/components/screen';
-import { useSync } from '@/lib/sync/provider';
+import { useAuth } from '@/lib/auth/provider';
 
 export default function EditProfileScreen() {
-  const { session } = useSync();
+  const { session } = useAuth();
   const user = session?.user;
 
   return (

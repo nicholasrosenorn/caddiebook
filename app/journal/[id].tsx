@@ -9,13 +9,13 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
+import type { JournalTag } from '@/lib/data/models';
 import {
-  createJournalEntry,
-  deleteJournalEntry,
-  getJournalEntry,
-  updateJournalEntry,
-} from '@/db/queries';
-import type { JournalTag } from '@/db/types';
+  useCreateJournalEntry,
+  useDeleteJournalEntry,
+  useJournal,
+  useUpdateJournalEntry,
+} from '@/lib/data/journal';
 import { JOURNAL_TAGS, journalTagPlaceholder } from '@/lib/journal';
 
 export default function JournalEntryScreen() {
@@ -32,6 +32,11 @@ export default function JournalEntryScreen() {
   const [entryId, setEntryId] = useState<string | null>(isNew ? null : (id ?? null));
   const [loaded, setLoaded] = useState(isNew);
 
+  const { data: entries } = useJournal();
+  const createEntry = useCreateJournalEntry();
+  const updateEntry = useUpdateJournalEntry();
+  const deleteEntry = useDeleteJournalEntry();
+
   // Refs mirror the latest state so the unmount save sees current values.
   const tagRef = useRef(tag);
   const bodyRef = useRef(body);
@@ -40,41 +45,38 @@ export default function JournalEntryScreen() {
   bodyRef.current = body;
   entryIdRef.current = entryId;
 
+  // Hydrate an existing entry from the cached journal list.
   useEffect(() => {
-    if (isNew || !id) return;
-    let cancelled = false;
-    getJournalEntry(id).then((e) => {
-      if (cancelled || !e) return;
-      setTag(e.tag);
-      setBody(e.body ?? '');
-      setLoaded(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [id, isNew]);
+    if (isNew || !id || loaded) return;
+    const entry = entries?.find((e) => e.id === id);
+    if (!entry) return;
+    setTag(entry.tag);
+    setBody(entry.body ?? '');
+    setLoaded(true);
+  }, [id, isNew, loaded, entries]);
 
   // Persist on unmount (covers leaving via the header back button).
   useEffect(() => {
     return () => {
       const trimmed = bodyRef.current.trim();
       if (entryIdRef.current) {
-        updateJournalEntry(entryIdRef.current, { tag: tagRef.current, body: trimmed });
+        void updateEntry(entryIdRef.current, { tag: tagRef.current, body: trimmed });
       } else if (trimmed.length > 0) {
-        createJournalEntry({ tag: tagRef.current, body: trimmed });
+        void createEntry({ tag: tagRef.current, body: trimmed });
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on unmount
   }, []);
 
   // Write-through save used after tag change and on body blur. Returns the id.
   const persist = async (nextTag: JournalTag, nextBody: string): Promise<string | null> => {
     const trimmed = nextBody.trim();
     if (entryId) {
-      await updateJournalEntry(entryId, { tag: nextTag, body: trimmed });
+      await updateEntry(entryId, { tag: nextTag, body: trimmed });
       return entryId;
     }
     if (trimmed.length === 0) return null;
-    const newId = await createJournalEntry({ tag: nextTag, body: trimmed });
+    const newId = await createEntry({ tag: nextTag, body: trimmed });
     // Update the ref synchronously so the unmount-save (which may run before the
     // next render) sees the new id and updates rather than creating a duplicate.
     entryIdRef.current = newId;
@@ -110,7 +112,7 @@ export default function JournalEntryScreen() {
           // Prevent the unmount effect from re-creating the row.
           setBody('');
           setEntryId(null);
-          await deleteJournalEntry(entryId);
+          await deleteEntry(entryId);
           router.back();
         },
       },

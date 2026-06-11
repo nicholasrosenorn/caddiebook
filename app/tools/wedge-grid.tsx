@@ -1,4 +1,3 @@
-import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
@@ -11,14 +10,13 @@ import { CLUB_OPTIONS, isWedge } from '@/constants/clubs';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import {
-  getBag,
-  getClubYardages,
-  getWedgePartials,
-  setBag,
-  setClubYardage,
-  setWedgePartial,
-  type WedgePartials,
-} from '@/db/queries';
+  useBag,
+  useClubYardages,
+  useSetBag,
+  useSetClubYardage,
+  useSetWedgePartial,
+  useWedgePartials,
+} from '@/lib/data/settings';
 
 type RowKey = 'full' | 'tq' | 'half' | 'quarter';
 
@@ -54,38 +52,31 @@ export default function WedgeGridScreen() {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  const [bag, setBagState] = useState<string[]>([...CLUB_OPTIONS]);
-  const [wedges, setWedges] = useState<string[]>([]);
-  const [yardages, setYardages] = useState<Record<string, number>>({});
-  const [partials, setPartials] = useState<Record<string, WedgePartials>>({});
   const [selected, setSelected] = useState<Selection | null>(null);
 
-  const load = useCallback(async () => {
-    const [storedBag, yds, parts] = await Promise.all([
-      getBag(),
-      getClubYardages(),
-      getWedgePartials(),
-    ]);
-    const effective = storedBag.length > 0 ? storedBag : [...CLUB_OPTIONS];
-    setBagState(effective);
-    setWedges(wedgesFromBag(effective));
-    setYardages(yds);
-    setPartials(parts);
-  }, []);
+  // The cached settings query is the source of truth; setters patch the cache
+  // synchronously (optimistic) and queue the server write.
+  const { bag: storedBag } = useBag();
+  const { yardages } = useClubYardages();
+  const { partials } = useWedgePartials();
+  const setBag = useSetBag();
+  const setClubYardage = useSetClubYardage();
+  const setWedgePartial = useSetWedgePartial();
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
+  const bag = useMemo(
+    () => (storedBag.length > 0 ? storedBag : [...CLUB_OPTIONS]),
+    [storedBag],
   );
+  const wedges = useMemo(() => wedgesFromBag(bag), [bag]);
 
-  const onBagChange = useCallback(async (next: string[]) => {
-    setBagState(next);
-    setWedges(wedgesFromBag(next));
-    // Drop the open editor if its wedge is no longer in the bag.
-    setSelected((sel) => (sel && !next.includes(sel.club) ? null : sel));
-    await setBag(next);
-  }, []);
+  const onBagChange = useCallback(
+    async (next: string[]) => {
+      // Drop the open editor if its wedge is no longer in the bag.
+      setSelected((sel) => (sel && !next.includes(sel.club) ? null : sel));
+      await setBag(next);
+    },
+    [setBag],
+  );
 
   const valueFor = useCallback(
     (club: string, row: RowKey): number | null => {
@@ -101,23 +92,13 @@ export default function WedgeGridScreen() {
     [],
   );
 
-  const onCommit = useCallback(async (sel: Selection, next: number | null) => {
-    if (sel.row === 'full') {
-      setYardages((prev) => {
-        const out = { ...prev };
-        if (next == null) delete out[sel.club];
-        else out[sel.club] = next;
-        return out;
-      });
-      await setClubYardage(sel.club, next);
-    } else {
-      setPartials((prev) => {
-        const cur = prev[sel.club] ?? { tq: null, half: null, quarter: null };
-        return { ...prev, [sel.club]: { ...cur, [sel.row]: next } };
-      });
-      await setWedgePartial(sel.club, sel.row, next);
-    }
-  }, []);
+  const onCommit = useCallback(
+    async (sel: Selection, next: number | null) => {
+      if (sel.row === 'full') await setClubYardage(sel.club, next);
+      else await setWedgePartial(sel.club, sel.row, next);
+    },
+    [setClubYardage, setWedgePartial],
+  );
 
 
   return (

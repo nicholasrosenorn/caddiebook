@@ -1,16 +1,19 @@
 # Caddie Book
 
-A local-first golf CaddieBook for iOS & Android. The product **focus is stat tracking with a visual and spatial design language** — wherever possible, data entry is tap-first on shaped, position-aware surfaces (target maps, par-relative score grids, putt grids) rather than text inputs.
+A golf CaddieBook for iOS & Android. The product **focus is stat tracking with a visual and spatial design language** — wherever possible, data entry is tap-first on shaped, position-aware surfaces (target maps, par-relative score grids, putt grids) rather than text inputs.
+
+**The server is the single source of truth.** All data lives in Postgres behind the `/server` API (deployed on a VPS behind a Cloudflare Tunnel); the client renders from a persisted TanStack Query cache and writes through an ordered offline outbox. There is **no local SQLite database and no bidirectional sync engine** — both were removed in favor of this model.
 
 ## Stack
 
 - **Expo SDK 54** (managed), TypeScript, React Native 0.81
 - **Expo Router** with file-based routing and typed routes
-- **expo-sqlite** for on-device persistence (no backend yet)
+- **TanStack Query v5** (`@tanstack/react-query` + AsyncStorage persister) for all reads; a small persisted **write outbox** (`lib/data/outbox.ts`) for all data writes
+- **Backend** in `/server`: Hono + Drizzle + Postgres (Node 22, docker-compose; tests via vitest)
 - No UI library — custom theme + RN primitives
 - **`react-native-svg`** powers the hand-drawn visual language (targets, score glyphs, paper grain, card/button frames)
 - **Fraunces** serif (`@expo-google-fonts/fraunces`, loaded in `app/_layout.tsx`) is the display/label face
-- Native deps: `@react-native-community/datetimepicker`, `expo-crypto`, `react-native-safe-area-context`, `react-native-gesture-handler`
+- Native deps: `@react-native-community/datetimepicker`, `expo-crypto`, `react-native-safe-area-context`, `react-native-gesture-handler`, `@react-native-async-storage/async-storage`, `expo-network` (`expo-sqlite` remains only for the one-time legacy flush — see Migration)
 
 Expo SDK 54 docs are authoritative — when in doubt see https://docs.expo.dev/versions/v54.0.0/.
 
@@ -37,11 +40,11 @@ The round screen's nav header is hidden (`headerShown: false`); a floating X (cl
 
 | Page | File | Purpose |
 | --- | --- | --- |
-| Par | `components/par-page.tsx` | Three big tap buttons (Par 3 / 4 / 5). Auto-advances to next page on selection. |
-| Score | `components/score-page.tsx` | Centered dedicated score entry: the shared 3×3 `ScoreGrid` (par-relative circle/square glyphs) writing `hole.score`. Auto-advances on selection (not on tap-again deselect). Mirrors the Par page's layout. |
-| Drive | `components/drive-page.tsx` | Tall fairway "oval" with **LF / CF / RF** lanes. Tap to place the drive. CF zone is the inner 40% (0.3–0.7 x-normalized). Tap → `upsertShot('driver')` + write-through `hole.fir = isFairwayHit(lane)`. Below: a **club chip row** (`ClubChips`, fed from the bag sorted longest→shortest via `sortByDriveLength`) writing `hole.drive_club`. |
-| Approach | `components/approach-page.tsx` | Concentric ring target (3 / 5 / 10 / 20 / 30 ft) with a pin at center. Tap places shot; computes `onGreen` + `proximityFt`. Tap → `upsertShot('approach')` + write-through `hole.gir`. Below the target: an inline **club chip row** (`ClubChips`, fed from the player's bag via `getBag()`, falling back to all clubs) + a tap-first **yardage ruler** (`YardageRuler`, snaps to 5 yds, parks at 125). |
-| Putting | `components/putting-page.tsx` | A drawn beige-green **putt board** (fringe + stipple, same palette as the targets): five horizontal distance lanes `25+ / 15–25 / 10–15 / 3–10 / <3 ft` ordered far→near with the cup + flag at the bottom. Each lane is split into a **MADE** and a **MISS** tap column; tapping a column appends a putt glyph there (filled disc = made, open ring = miss) with a live count. Tap a glyph to remove it. Distance + made/miss is all that's stored — no putt coordinates. Each tap inserts/deletes a `putts` row and auto-syncs `hole.putts` count. |
+| Par | `components/par-page.tsx` | Three big tap buttons (Par 3 / 4 / 5) → `useUpdateHole`. Auto-advances to next page on selection. |
+| Score | `components/score-page.tsx` | Centered dedicated score entry: the shared 3×3 `ScoreGrid` (par-relative circle/square glyphs) writing `hole.score` via `useUpdateHole`. Auto-advances on selection (not on tap-again deselect). Mirrors the Par page's layout. |
+| Drive | `components/drive-page.tsx` | Tall fairway "oval" with **LF / CF / RF** lanes. Tap to place the drive. CF zone is the inner 40% (0.3–0.7 x-normalized). Tap → `useUpsertShot({ shotType: 'driver', holePatch: { fir } })` — one command carrying the shot **and** the derived `fir`, applied atomically server-side. Below: a **club chip row** (`ClubChips`, fed from the bag sorted longest→shortest via `sortByDriveLength`) writing `hole.driveClub`. |
+| Approach | `components/approach-page.tsx` | Concentric ring target (3 / 5 / 10 / 20 / 30 ft) with a pin at center. Tap places shot; computes `onGreen` + `proximityFt`. Tap → `useUpsertShot({ shotType: 'approach', holePatch: { gir } })`. Below the target: an inline **club chip row** (`ClubChips`, fed from the player's bag via `useBag()`, falling back to all clubs) + tap-first **yardage chips** (snaps to 5 yds, parks at 125). |
+| Putting | `components/putting-page.tsx` | A drawn beige-green **putt board** (fringe + stipple, same palette as the targets): five horizontal distance lanes `25+ / 15–25 / 10–15 / 3–10 / <3 ft` ordered far→near with the cup + flag at the bottom. Each lane is split into a **MADE** and a **MISS** tap column; tapping a column appends a putt glyph there (filled disc = made, open ring = miss) with a live count. Tap a glyph to remove it. Distance + made/miss is all that's stored — no putt coordinates. Each tap is `useCreatePutt`/`useDeletePutt`; the hole's putt count recomputes in the optimistic cache update and again in the server transaction. |
 | Stats | `components/hole-stats-page.tsx` | Tap-first form, **autofilled from the earlier pages** (score from Score, putts from Putting, FIR from Drive, GIR from Approach) and still editable here: score grid (3×3, par-relative indicators — single/double circle for birdie/eagle, "Par" label, single/double/triple square for bogey/double/triple), count rows for Putts/Chip Shots/Greenside Sand/Penalties, ✓/✗ toggles for FIR/GIR/U&D, notes. Round-wide summary bar at top. |
 
 ### Visual + spatial design principles
@@ -68,15 +71,29 @@ Every hand-drawn shape is **deterministic** (seeded by a string so it looks sket
 
 ## Architecture
 
+### The data layer (`lib/data/`)
+
+The server's `/data` REST API is the only store. The client pieces:
+
+- **`lib/data/query-client.ts`** — the app-wide `QueryClient`: persisted to AsyncStorage (`buster` = signed-in user id, so an account switch never rehydrates another account's cache), `focusManager` wired to AppState (foreground = refetch = how a second device stays current), `onlineManager` wired to `expo-network`. Queries with pending outbox commands are **excluded** from focus/reconnect refetches so a server response can't clobber optimistic taps.
+- **`lib/data/keys.ts`** — query key factory; every key is `['u', userId, …]`.
+- **`lib/data/api.ts` + `lib/data/types.ts`** — typed `/data` fetchers and the snake_case wire ↔ camelCase domain mappers. Domain types live in `lib/data/models.ts`.
+- **`lib/data/outbox.ts`** — the write path. Every data mutation is an idempotent `PUT`/`DELETE` keyed by a client UUID: the hook applies it to the query cache **optimistically** (same-frame UI), then enqueues the command in a persisted FIFO (`outbox:v1:<userId>` in AsyncStorage). A single drain loop replays strictly in order (head-of-line blocking is the correctness model) with 5s→60s backoff; when the queue empties, every touched query is invalidated so server truth reconciles the cache. A dead zone mid-round therefore never loses a tap, and there is **no merge logic, no pull cursor, no dirty flags**.
+- **Feature hooks** — `lib/data/rounds.ts` (`useRounds`, `useRoundFull`, `useCreateRound`, `useUpdateHole`, `useUpsertShot`, `useCreatePutt`, …), `lib/data/stats.ts` (`useStatsBundle` — the whole lifetime-stats corpus in one request), `lib/data/courses.ts`, `lib/data/journal.ts`, `lib/data/settings.ts` (bag / club yardages / wedge partials / generic keys over one settings query).
+- **`lib/local/prefs.ts`** — device-local AsyncStorage prefs (`theme`, `intro_seen`): needed before sign-in, never account data.
+- **`lib/auth/provider.tsx`** — `AuthProvider`/`useAuth()`: session, Apple/Google sign-in, sign-out (bounded outbox drain → push-token unregister → server logout → clear outbox + query cache + persister), profile updates, and it mounts `PersistQueryClientProvider`. `useUserId()` feeds the key factory.
+
+Client-generated UUIDs are kept end-to-end (the server keys rows by `(user_id, id)`), which is what makes every outbox command replay-safe and lets a round be **started** offline — `useCreateRound` mints the round + hole ids, seeds the cache, and enqueues one `PUT` carrying the embedded holes.
+
 ### Controller pattern
 
 `app/round/[id]/index.tsx` is the thin **controller**. It owns:
-- The 4 pieces of round state: `round`, `holes`, `shots`, `putts` (refetched via `load()` on every focus and after every mutation).
+- One query: `useRoundFull(id)` → `{ round, holes, shots, putts, review, goals }` (replaces the old four parallel reads). Page mutations patch this cache optimistically, so every tap re-renders the round on the same frame — there is no reload threading.
 - The page-paging machinery: `pageHeight` (measured via `onLayout`), `pagingEnabled` `ScrollView`, `snapToOffsets`, `scrollRef`.
 - The current `holeNumber`, `currentPage` (for the right-side dot indicator).
 - Navigation callbacks (`onPrevHole`, `onNextHole`, `onFinish`).
 
-The five page components are dumb children — they receive `{ roundId, hole, shotsForRound | putts, onChange }` and mutate the DB directly via queries, then call `onChange` (= `load`) to reload.
+The page components are dumb children — they receive `{ roundId, hole, shotsForRound | putts }` and call their own mutation hooks from `lib/data/rounds.ts`.
 
 ### Layout (round screen)
 
@@ -102,29 +119,42 @@ The **stats page is the only one that scrolls internally** (its content is talle
 
 ## Data model
 
-### Tables (`db/schema.ts`)
+### Tables (Postgres, `server/src/db/schema.ts`)
+
+Every user-data table is keyed `(user_id, id)` with client-generated UUID ids; all data columns are nullable (the server is a tolerant store). `updated_at` is **server-stamped** on every `/data` write.
 
 | Table | Key columns | Notes |
 | --- | --- | --- |
-| `rounds` | `id`, `course_name`, `date_played`, `hole_count`, `created_at` | One row per round. |
-| `holes` | `id`, `round_id` FK, `hole_number`, `par`, `score`, `putts`, `fir`, `gir`, `up_and_down`, `approach_distance_yds`, `approach_club`, `drive_club`, `chip_shots`, `sand_shots`, `penalties`, `green_blocked`, `notes` | Pre-created on round insert (1 row per hole). `fir/gir/up_and_down/green_blocked` are nullable booleans (0/1, NULL = unset → use derived). `green_blocked` = "couldn't reach the green" (punched out, etc.): excluded from GIR, approach-execution stats, **and U&D** (no realistic chance to get up & down) — see `resolveGir`/`resolveUpAndDown` in `lib/stats.ts`. Surfaced in the Drive dispersion sections as "drives that left no shot at the green". Clubs (`approach_club`, `drive_club`) live on the hole, not the shot — so club-filtered shot stats join shots back to holes via `(round_id, hole_number)`. |
-| `shots` | `id`, `round_id` FK, `hole_number`, `shot_type` (`'driver'` \| `'approach'`), `x_norm`, `y_norm`, `intended_x_norm`, `intended_y_norm`, `notes` | One drive + one approach per hole (replaced via `upsertShot`). |
-| `putts` | `id`, `round_id` FK, `hole_number`, `distance_ft`, `made`, `created_at` | Many per hole. `distance_ft` is the bucket upper bound: `3, 10, 15, 25, 50` (the `50` bucket is the open-ended `25+ ft`). The bucket set lives in `components/putting-page.tsx` (`BANDS`) and `app/round/[id]/summary.tsx` (`PUTT_BUCKETS`) — keep them in sync. |
-| `post_round_reviews` | `id`, `round_id` FK, `tactical/technical/mental`, `went_well`, `didnt_go_well`, `will_work_on` | Schema in place; no UI yet. |
-| `app_settings` | `key` PK, `value` | Global key/value store (not per-round). Currently holds the player's **bag** under key `bag` (JSON array of club names). `getBag()`/`setBag()` in `db/queries.ts`; empty/unset = treat as all clubs. |
+| `rounds` | `id`, `course_name`, `date_played`, `hole_count`, `completed_at`, `tee_name`, `course_rating`, `slope_rating`, `include_in_handicap`, `exclude_from_sharing`, `created_at` | One row per round. `completed_at` landing non-null triggers the "friend finished a round" push (idempotent via the `round_share_notifications` ledger). |
+| `holes` | `id`, `round_id`, `hole_number`, `par`, `score`, `putts`, `fir`, `gir`, `up_and_down`, `approach_distance_yds`, `approach_club`, `drive_club`, `chip_shots`, `sand_shots`, `penalties`, `green_blocked`, `notes` | Created with the round (embedded in the round `PUT`). Unique on `(user_id, round_id, hole_number)` — hole writes upsert against that slot. `fir/gir/up_and_down/green_blocked` are nullable 0/1 (NULL = unset → use derived; see `resolveGir`/`resolveUpAndDown` in `lib/stats.ts`). `green_blocked` = "couldn't reach the green": excluded from GIR, approach-execution stats, **and** U&D. Clubs live on the hole, not the shot. |
+| `shots` | `id`, `round_id`, `hole_number`, `shot_type` (`'driver'` \| `'approach'`), `x_norm`, `y_norm`, `intended_x_norm`, `intended_y_norm`, `notes` | One drive + one approach per hole — unique on `(user_id, round_id, hole_number, shot_type)`; the shot `PUT` upserts the slot and can carry a `hole` patch (fir/gir) applied in the same transaction. |
+| `putts` | `id`, `round_id`, `hole_number`, `distance_ft`, `made`, `created_at` | Many per hole. `distance_ft` is the bucket upper bound: `3, 10, 15, 25, 50` (the `50` bucket is the open-ended `25+ ft`). The bucket set lives in `components/putting-page.tsx` (`BANDS`) and `app/round/[id]/summary.tsx` (`PUTT_BUCKETS`) — keep them in sync. The putt `PUT`/`DELETE` transactionally recounts `holes.putts`, and a new made putt replaces any other made putt on the hole. |
+| `post_round_reviews`, `pre_round_goals` | `id`, `round_id`, … | One per round — unique on `(user_id, round_id)`; the round-scoped `PUT` upserts. |
+| `courses`, `tees` | `id` / `id`, `course_id`, rating/slope/par | Saved-course autofill for the new-round modal; find-or-create resolves client-side over the cached list. |
+| `journal_entries` | `id`, `tag`, `body`, `created_at` | Standalone notes. |
+| `app_settings` | `(user_id, key)`, `value` | Account-level key/value: `bag`, `club_yardages`, `wedge_partials`, tempo, etc. Device prefs (`theme`, `intro_seen`) are **not** here — they're in `lib/local/prefs.ts`. |
 
-### Migration strategy
+Server-owned (non-data) tables: `users`, `refresh_tokens`, `friendships`, `friend_requests`, `round_likes`, `push_tokens`, `round_share_notifications`.
 
-A versioned migration runner in `db/client.ts:initDb` gates on `PRAGMA user_version`: each entry in the `MIGRATIONS` array whose `version` exceeds the DB's current `user_version` runs once, in order, inside a transaction that also stamps the new version.
-- **Migration 1 (`migrateV1`)** is the cumulative idempotent baseline — `CREATE TABLE IF NOT EXISTS …` for new tables plus `ensureColumn(db, table, column, ddlFragment)` (which `PRAGMA table_info` then `ALTER TABLE … ADD COLUMN` only if missing) and the sync-column backfill. It's safe to re-run on a fully-migrated install, so existing devices (which sat at `user_version = 0` under the old ad-hoc path) just get stamped to 1.
-- **New schema changes** append a `{ version: N, up }` entry to `MIGRATIONS` and bump `SCHEMA_VERSION` in `db/schema.ts` to match. A new migration may assume version N-1 is applied, so it can use plain forward-only DDL (no `ensureColumn` guard needed). `ensureColumn` remains available if you want idempotency.
+### The /data API (`server/src/data/`)
 
-When you add a column: update **all four** of `db/schema.ts` (CREATE TABLE + bump `SCHEMA_VERSION`), `db/types.ts`, `db/queries.ts` (`HoleRow` type, `rowToHole`, `FIELD_TO_COLUMN`, **and the column lists in every SELECT statement**), and add a new `MIGRATIONS` entry in `db/client.ts`. Missing the SELECT list is the easiest bug to introduce — the UI will silently appear inert because writes succeed but reads return `undefined`.
+Request/response CRUD, all idempotent (the outbox replays commands freely):
 
-### Auto-sync invariants
+- Reads: `GET /data/rounds` (list + embedded holes), `GET /data/rounds/:id/full` (everything the round flow renders), `GET /data/stats` (the lifetime-stats corpus, flat arrays), `GET /data/courses`, `GET /data/journal`, `GET /data/settings`.
+- Writes: `PUT /data/rounds/:id` (optionally with embedded `holes[]` — round creation is one command), `DELETE /data/rounds/:id` (**hard delete**, cascades to children + likes), `PUT /data/rounds/:rid/holes/:n`, `PUT|DELETE …/holes/:n/shots/:shotType` (with optional `hole` patch), `PUT|DELETE /data/putts/:id`, `PUT …/review`, `PUT …/goals`, `PUT|DELETE /data/journal/:id`, `PUT /data/settings/:key`, `PUT /data/courses/:id`, `PUT /data/tees/:id`.
+- Column allowlists come from `server/src/sync/tables.ts` (`TABLE_SPECS`); rate bucket `data` = 600/min/user (sized for an offline 18-hole round replaying on reconnect).
 
-- **`putts` table ↔ `holes.putts`**: every `createPutt` / `deletePutt` runs inside a transaction that recomputes and writes `holes.putts = COUNT(putts WHERE round_id=? AND hole_number=?)`. The Stats page's Putts row stays accurate without explicit syncing.
-- **`shots` ↔ `holes.fir / gir`**: every shot upsert also calls `updateHole` with the derived value (`isFairwayHit(lane)` for drives, `onGreen` for approaches). Manual override on the Stats page beats the shot value (writes directly to the column).
+Schema changes are drizzle migrations in `server/migrations/` (`npx drizzle-kit generate`, applied on container start). When you add a hole/round column: server schema + migration + `TABLE_SPECS` allowlist + the `SELECT` column lists in `server/src/data/service.ts`, then client `lib/data/models.ts`, the wire type + mapper in `lib/data/types.ts`, and (for holes) `HOLE_FIELD_TO_COLUMN` in `lib/data/rounds.ts`.
+
+### Invariants (now server transactions + mirrored optimistic updates)
+
+- **`putts` ↔ `holes.putts`**: the putt `PUT`/`DELETE` recounts inside one transaction; `useCreatePutt`/`useDeletePutt` mirror the recount (and the made-putt replacement) in the cache so the UI is right immediately.
+- **`shots` ↔ `holes.fir / gir`**: the shot command carries the derived value as a `hole` patch, applied atomically. Manual override on the Stats page still wins (plain hole write).
+- The server tests (`server/test/data.test.ts`) are the contract for these; the drain-complete invalidation converges any optimistic drift.
+
+### Legacy migration (one release only)
+
+`lib/migration/legacy-flush.ts` handles upgrades from the old local-first builds: at cold start it copies `theme`/`intro_seen` out of the old SQLite `app_settings` into prefs, and once signed in it pushes any `dirty = 1` rows through the retained `POST /sync/push`, then deletes `caddy-book.db`. `expo-sqlite` and the server's `/sync/*` routes exist only for this path — remove both (plus this module) once existing installs have upgraded.
 
 ## Theme
 
@@ -142,25 +172,26 @@ Typography: **Fraunces** serif for display/labels/numerals (`fontFamily.serif` /
 | Route | Notes |
 | --- | --- |
 | `/` (default tab) | Rounds list. Header has a + button → modal. Tapping a round opens `/round/[id]` if in-progress, or `/round/[id]/summary` if completed; long-press to delete. |
-| `/(tabs)/stats` | **Built.** Lifetime stats across **completed** rounds. Two **dropdown** filters (`components/dropdown-select.tsx`): hole count (All / 18 / 9, **defaults to 18**) and recency (last 20 / 40 / 60 / All). A muted sample-size caption (`N rounds · N holes`) replaces the old corpus card. Sections: scoring (adapts to filter — real scoring avg when a single hole count is selected, fair per-18 to-par when mixed), per-par averages, GIR/FIR/U&D + putting trio, over-time trend sparklines (scoring, GIR%, putts), score distribution, aggregate driver & approach dispersion (small muted pins), approach-distance histogram (bars split by green-hit/missed via GIR), putting make% by distance, trouble/short-game (**per-round** penalties/chips/sand), and post-round review insights. Logic in `lib/lifetime-stats.ts`; batch reads via `getAll*` in `db/queries.ts`; sparkline in `components/trend-chart.tsx`. |
-| `/round/new` | Modal: course name, date, 9/18, **your bag** (`BagPicker` multi-select; persists globally via `setBag`, pre-filled with all clubs first time). On submit: `createRound` → `router.replace('/round/[id]')`. |
+| `/(tabs)/stats` | **Built.** Lifetime stats across **completed** rounds. Two **dropdown** filters (`components/dropdown-select.tsx`): hole count (All / 18 / 9, **defaults to 18**) and recency (last 20 / 40 / 60 / All). A muted sample-size caption (`N rounds · N holes`) replaces the old corpus card. Sections: scoring (adapts to filter — real scoring avg when a single hole count is selected, fair per-18 to-par when mixed), per-par averages, GIR/FIR/U&D + putting trio, over-time trend sparklines (scoring, GIR%, putts), score distribution, aggregate driver & approach dispersion (small muted pins), approach-distance histogram (bars split by green-hit/missed via GIR), putting make% by distance, trouble/short-game (**per-round** penalties/chips/sand), and post-round review insights. Logic in `lib/lifetime-stats.ts`; one cached server read via `useStatsBundle()` (`lib/data/stats.ts`); sparkline in `components/trend-chart.tsx`. |
+| `/round/new` | Modal: course name, date, 9/18, **your bag** (`BagPicker` multi-select; persists to the account settings via `useSetBag`, pre-filled with all clubs first time). On submit: `useCreateRound` (mints round + hole UUIDs, seeds the cache, queues one PUT — works offline) → `router.replace('/round/[id]')`. |
 | `/round/[id]` | The whole round flow (5 vertically-paged sub-pages). Hidden nav header. "Finish" → `/round/[id]/review`. |
-| `/round/[id]/review` | **Built.** 5-question post-round review (most costly / decision rating / common miss / range focus / overall rating), one vertically-paged question each. On submit: `upsertReview` + `setRoundCompletedAt` (first time only) → `/round/[id]/summary`. |
+| `/round/[id]/review` | **Built.** 5-question post-round review (most costly / decision rating / common miss / range focus / overall rating), one vertically-paged question each. On submit: `useUpsertReview` + `useUpdateRound({ completedAt })` (first time only) → `/round/[id]/summary`. |
 | `/round/[id]/summary` | **Built.** Read-only round summary: score/to-par card, GIR/FIR/U&D + putting/penalty tiles, scoring-by-par, score distribution bars, drive & approach dispersion targets, putting-by-distance bars, post-round review answers, "Edit round" CTA. |
 
 ## Conventions
 
 - **TypeScript strict.** No `any` in new code unless escaping a typed-routes friction (cast on `router.push/replace` paths only).
-- **Auto-save on every interaction.** No "Save" buttons inside the round flow. Tap toggles / numeric commits / `onBlur` for text — each writes immediately and calls `onChange` to refresh state.
+- **Auto-save on every interaction.** No "Save" buttons inside the round flow. Tap toggles / numeric commits / `onBlur` for text — each calls a mutation hook that patches the query cache optimistically and enqueues the command. Never `await` the network before updating the UI.
+- **All data writes go through the outbox** (a mutation hook in `lib/data/*` that does `setQueryData` + `enqueue`). Direct `authedRequest` calls are reserved for profile, community/social actions, and push tokens — request/response features where the server's answer *is* the result.
 - **Page wrappers always `height: pageHeight`.** The outer `ScrollView` uses `pagingEnabled`; do not put naturally-sized content directly inside it without a fixed-height wrapper or it will be paginated as multiple virtual pages.
 - **Targets stay tap-first.** When adding a new shot type (chip target, putt-stroke arc, etc.), reuse the `DriverTarget` / `ApproachTarget` pattern: a centered visual + `Pressable` capturing `nativeEvent.locationX/Y` normalized to the layout, decorative children set to `pointerEvents="none"`.
-- **Lint and types must pass.** `npx tsc --noEmit && npx expo lint` before shipping.
+- **Lint and types must pass.** `npx tsc --noEmit && npx expo lint` before shipping; `npm run typecheck && npm test` in `/server` for backend changes (tests need the docker-compose Postgres on `localhost:5433`).
 
 ## Common edits — where to look
 
 | Task | File(s) |
 | --- | --- |
-| Add a new stat field on a hole | `db/schema.ts` (CREATE TABLE + bump `SCHEMA_VERSION`) + `db/client.ts` (new `MIGRATIONS` entry) + `db/types.ts` + `db/queries.ts` (HoleRow, rowToHole, FIELD_TO_COLUMN, **all SELECT lists**) + new component or update `hole-stats-page.tsx` |
+| Add a new stat field on a hole | `server/src/db/schema.ts` + a drizzle migration + `TABLE_SPECS` (`server/src/sync/tables.ts`) + SELECT lists in `server/src/data/service.ts`; client: `lib/data/models.ts`, `lib/data/types.ts` (wire type + mapper), `HOLE_FIELD_TO_COLUMN` in `lib/data/rounds.ts`, then `hole-stats-page.tsx` or a new component |
 | Add a new page in the round flow | New `components/<name>-page.tsx`, add to `app/round/[id]/index.tsx` (controller render + adjust `totalPages`) |
 | Change CF lane width | `lib/shots.ts` (`CF_LEFT_EDGE` / `CF_RIGHT_EDGE`) — used by both the math and the visual lanes in `driver-target.tsx` |
 | Change ring proximity thresholds | `lib/shots.ts` (`APPROACH_RINGS`) — shared by `approach-target.tsx` visuals and `approachResult` math |
@@ -171,8 +202,12 @@ Typography: **Fraunces** serif for display/labels/numerals (`fontFamily.serif` /
 | Change the paper grain / registration marks | `Paper` in `components/sketch.tsx` (mounted in `components/screen.tsx`) |
 | Tune the post-round summary | `app/round/[id]/summary.tsx`; review question flow → `app/round/[id]/review.tsx` + `lib/review.ts` |
 
-## What's not built yet
+## Pending cleanup (next release, after existing installs upgrade)
 
-- **VPS deploy (Phase 4, user action).** The backend (`/server`) is feature-complete: refresh-token **rotation + reuse detection** (a `refresh_tokens` family store in `server/src/db/schema.ts`; rotate/revoke in `server/src/auth/routes.ts`; `/auth/logout` revokes server-side) and **in-memory rate limiting** (`server/src/middleware/rate-limit.ts` — per-IP on `/auth/*`, per-user on `/sync/*`) are **built** (Phase 4). The client persists rotated refresh tokens and calls `/auth/logout` on sign-out (`lib/api/client.ts`, `lib/auth/providers.ts`). Still pending: actually standing the server up on the VPS — `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build` behind a Cloudflare Tunnel (see `server/docker-compose.prod.yml` + `.env.example`), then pointing `app.json extra.apiUrl` at the HTTPS tunnel URL. Client sync hardening (retry/backoff, error surfacing) and the versioned migration runner were built in Phase 3.
+The server **is deployed** on the VPS (docker compose + Cloudflare Tunnel; deploy with `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build` in `/server`). Auth (refresh-token rotation + reuse detection), the community/social API, push notifications, and the `/data` CRUD layer are all live.
 
-(The per-round summary, post-round review, and the lifetime Stats tab — including cross-round dispersion and over-time trends — are now **built**; see the routing table.)
+Once existing installs have run the legacy flush:
+- Remove `server/src/sync/` (routes/push/pull) and its tests; relocate `tables.ts` into `server/src/data/`.
+- Drizzle migration to drop the `deleted_at` columns + the `server_seq` sequence/triggers; strip the `deleted_at IS NULL` filters from `server/src/community/routes.ts` and `server/src/data/service.ts`.
+- Remove `lib/migration/legacy-flush.ts`, `pushChanges` in `lib/api/client.ts`, the sync wire types in `lib/api/types.ts`, and the `expo-sqlite` dependency.
+- `lib/dev-seed.ts` batches through `/sync/push` — give it a bulk `/data` path (or drop it) when the sync routes go.

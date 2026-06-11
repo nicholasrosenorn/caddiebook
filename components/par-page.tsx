@@ -6,26 +6,25 @@ import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import { updateHole } from '@/db/queries';
-import type { Hole } from '@/db/types';
+import type { Hole } from '@/lib/data/models';
+import { useUpdateHole } from '@/lib/data/rounds';
 
 const PAR_OPTIONS = [3, 4, 5] as const;
 
 type Props = {
   roundId: string;
   hole: Hole;
-  onChange: () => void | Promise<void>;
   onPicked?: () => void;
 };
 
-export function ParPage({ roundId, hole, onChange, onPicked }: Props) {
+export function ParPage({ roundId, hole, onPicked }: Props) {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  const updateHole = useUpdateHole();
   const handlePick = async (par: number) => {
     try {
       await updateHole(roundId, hole.holeNumber, { par });
-      await onChange();
       onPicked?.();
     } catch (err) {
       console.error(err);

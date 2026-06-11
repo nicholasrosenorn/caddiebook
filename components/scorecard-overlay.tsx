@@ -7,7 +7,7 @@ import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import type { Hole, Round } from '@/db/types';
+import type { Hole, Round } from '@/lib/data/models';
 import { computeRoundSummary, formatPct, totalPar } from '@/lib/stats';
 
 type Props = {

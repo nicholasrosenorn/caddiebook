@@ -22,7 +22,7 @@ import {
   sendFriendRequest,
   UserNotFoundError,
 } from '@/lib/api/client';
-import type { Relation, UserSearchResult } from '@/lib/sync/wire';
+import type { Relation, UserSearchResult } from '@/lib/api/types';
 
 export default function AddFriendScreen() {
   const colors = useColors();

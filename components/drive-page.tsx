@@ -1,6 +1,5 @@
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useMemo } from 'react';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { ClubChips } from '@/components/club-chips';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
@@ -9,45 +8,40 @@ import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS, sortByDriveLength } from '@/constants/clubs';
 import { radius, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
-import { getBag, updateHole, upsertShot } from '@/db/queries';
-import type { Hole, Shot } from '@/db/types';
+import type { Hole, Shot } from '@/lib/data/models';
+import { useUpdateHole, useUpsertShot } from '@/lib/data/rounds';
+import { useBag } from '@/lib/data/settings';
 import { driverLane, isFairwayHit } from '@/lib/shots';
-
-type Position = { xNorm: number; yNorm: number };
 
 type Props = {
   roundId: string;
   hole: Hole;
   shotsForRound: Shot[];
-  onChange: () => void | Promise<void>;
   onComplete?: () => void;
 };
 
-export function DrivePage({ roundId, hole, shotsForRound, onChange, onComplete }: Props) {
+export function DrivePage({ roundId, hole, shotsForRound, onComplete }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const targetWidth = Math.min(300, screenWidth - 60);
   const targetHeight = Math.min(500, screenHeight * 0.56);
 
-  const [position, setPosition] = useState<Position | null>(null);
-  const [bag, setBag] = useState<readonly string[]>(() => sortByDriveLength(CLUB_OPTIONS));
+  const upsertShot = useUpsertShot();
+  const updateHole = useUpdateHole();
 
-  // Reload on focus so bag edits made elsewhere are reflected on return.
-  useFocusEffect(
-    useCallback(() => {
-      getBag().then((clubs) =>
-        setBag(sortByDriveLength(clubs.length > 0 ? clubs : CLUB_OPTIONS)),
-      );
-    }, []),
+  const { bag: storedBag } = useBag();
+  const bag = useMemo(
+    () => sortByDriveLength(storedBag.length > 0 ? storedBag : CLUB_OPTIONS),
+    [storedBag],
   );
 
-  useEffect(() => {
-    const drive = shotsForRound.find(
-      (s) => s.holeNumber === hole.holeNumber && s.shotType === 'driver',
-    );
-    setPosition(drive ? { xNorm: drive.xNorm, yNorm: drive.yNorm } : null);
-  }, [shotsForRound, hole.holeNumber]);
+  // The drive pin comes straight from the cached shots — the optimistic upsert
+  // updates it on the same frame as the tap.
+  const drive = shotsForRound.find(
+    (s) => s.holeNumber === hole.holeNumber && s.shotType === 'driver',
+  );
+  const position = drive ? { xNorm: drive.xNorm, yNorm: drive.yNorm } : null;
 
   // Advance only on the transition into "pin + club both set" — adjusting one
   // of them later shouldn't yank the page away.
@@ -55,22 +49,19 @@ export function DrivePage({ roundId, hole, shotsForRound, onChange, onComplete }
 
   const handleTap = async (x: number, y: number) => {
     const wasComplete = position != null && hasClub;
-    setPosition({ xNorm: x, yNorm: y });
     try {
+      // One command: the shot plus the derived fir flag, atomic server-side.
       await upsertShot({
         roundId,
         holeNumber: hole.holeNumber,
         shotType: 'driver',
         xNorm: x,
         yNorm: y,
+        holePatch: { fir: isFairwayHit(driverLane(x, y)) },
       });
-      const lane = driverLane(x, y);
-      await updateHole(roundId, hole.holeNumber, { fir: isFairwayHit(lane) });
-      await onChange();
       if (!wasComplete && hasClub) onComplete?.();
     } catch (err) {
       console.error(err);
-      Alert.alert('Save failed', 'Could not save drive.');
     }
   };
 
@@ -78,7 +69,6 @@ export function DrivePage({ roundId, hole, shotsForRound, onChange, onComplete }
     const wasComplete = position != null && hasClub;
     try {
       await updateHole(roundId, hole.holeNumber, { driveClub: club });
-      await onChange();
       // Skip the empty string the "Other" chip writes while the player types.
       if (!wasComplete && club != null && club !== '' && position != null) onComplete?.();
     } catch (err) {

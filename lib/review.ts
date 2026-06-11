@@ -1,4 +1,4 @@
-import type { CommonMiss, MostCostly, RangeFocus } from '@/db/types';
+import type { CommonMiss, MostCostly, RangeFocus } from '@/lib/data/models';
 
 export type Option<T extends string> = { value: T; label: string };
 

@@ -1,5 +1,4 @@
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { EdgeSwipeOpener } from '@/components/edge-swipe-opener';
@@ -11,15 +10,15 @@ import { TextTabs } from '@/components/text-tabs';
 import { ThemedText } from '@/components/themed-text';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import { getAllHoles, listRounds } from '@/db/queries';
-import type { Hole } from '@/db/types';
+import type { Hole } from '@/lib/data/models';
+import { useAuth } from '@/lib/auth/provider';
+import { useStatsBundle } from '@/lib/data/stats';
 import {
   deriveRound,
   formatHandicapIndex,
   handicapHistoryFor,
   type RoundDerived,
 } from '@/lib/lifetime-stats';
-import { useSync } from '@/lib/sync/provider';
 
 type Tab = 'progress' | 'rounds';
 
@@ -36,58 +35,40 @@ type MastheadFigures = {
   avgPer18: number | null;
 };
 
-// The masthead's lifetime figures. Deliberately its own light load (two
-// single-table reads) rather than lifting ProgressView's five-query load up
-// here — and all-local, so the figures work signed out.
+// The masthead's lifetime figures, derived from the shared stats bundle (the
+// same cached query ProgressView reads, so there's exactly one fetch).
 function useMastheadFigures(): MastheadFigures | null {
-  const [figures, setFigures] = useState<MastheadFigures | null>(null);
-  const { syncState } = useSync();
+  const { data } = useStatsBundle();
 
-  const load = useCallback(async () => {
-    try {
-      const [rounds, holes] = await Promise.all([listRounds(), getAllHoles()]);
-      const completed = rounds.filter((r) => r.completedAt != null);
-      const holesByRound = new Map<string, Hole[]>();
-      for (const h of holes) {
-        const arr = holesByRound.get(h.roundId);
-        if (arr) arr.push(h);
-        else holesByRound.set(h.roundId, [h]);
-      }
-      const derived = completed
-        .map((r) => deriveRound(r, holesByRound.get(r.id) ?? []))
-        .filter((d): d is RoundDerived => d != null);
-      const avgPer18 =
-        derived.length > 0
-          ? derived.reduce((s, d) => s + (d.totalScore / d.holesPlayed) * 18, 0) /
-            derived.length
-          : null;
-      setFigures({
-        handicapIndex: handicapHistoryFor(completed, holesByRound).current,
-        roundCount: completed.length,
-        avgPer18,
-      });
-    } catch (err) {
-      // Leave the em-dash placeholders up rather than crashing the screen.
-      console.error('Failed to load masthead figures', err);
+  return useMemo(() => {
+    if (!data) return null;
+    const completed = data.rounds.filter((r) => r.completedAt != null);
+    const holesByRound = new Map<string, Hole[]>();
+    for (const h of data.holes) {
+      const arr = holesByRound.get(h.roundId);
+      if (arr) arr.push(h);
+      else holesByRound.set(h.roundId, [h]);
     }
-  }, []);
-
-  // Re-run on focus, and again when a background sync applies remote changes.
-  useFocusEffect(
-    useCallback(() => {
-      load();
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- dataRevision is an intentional re-run trigger
-    }, [load, syncState.dataRevision]),
-  );
-
-  return figures;
+    const derived = completed
+      .map((r) => deriveRound(r, holesByRound.get(r.id) ?? []))
+      .filter((d): d is RoundDerived => d != null);
+    const avgPer18 =
+      derived.length > 0
+        ? derived.reduce((s, d) => s + (d.totalScore / d.holesPlayed) * 18, 0) / derived.length
+        : null;
+    return {
+      handicapIndex: handicapHistoryFor(completed, holesByRound).current,
+      roundCount: completed.length,
+      avgPer18,
+    };
+  }, [data]);
 }
 
 export default function ProfileScreen() {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  const { session } = useSync();
+  const { session } = useAuth();
   const user = session?.user;
   const [tab, setTab] = useState<Tab>('progress');
   const figures = useMastheadFigures();

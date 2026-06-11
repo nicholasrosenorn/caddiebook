@@ -1,5 +1,5 @@
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,14 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import {
-  deleteRound,
-  getRound,
-  setRoundExcludeFromSharing,
-  setRoundIncludeInHandicap,
-  setRoundRatingSlope,
-} from '@/db/queries';
-import type { Round } from '@/db/types';
+import { useDeleteRound, useRoundFull, useUpdateRound } from '@/lib/data/rounds';
 
 export default function RoundSettingsScreen() {
   const colors = useColors();
@@ -24,21 +17,13 @@ export default function RoundSettingsScreen() {
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const [round, setRound] = useState<Round | null>(null);
   const [ratingText, setRatingText] = useState('');
   const [slopeText, setSlopeText] = useState('');
 
-  const load = useCallback(async () => {
-    if (!id) return;
-    const r = await getRound(id);
-    setRound(r);
-  }, [id]);
-
-  useFocusEffect(
-    useCallback(() => {
-      load();
-    }, [load]),
-  );
+  const { data } = useRoundFull(id);
+  const round = data?.round ?? null;
+  const updateRound = useUpdateRound();
+  const deleteRound = useDeleteRound();
 
   useEffect(() => {
     setRatingText(round?.courseRating != null ? String(round.courseRating) : '');
@@ -52,23 +37,22 @@ export default function RoundSettingsScreen() {
     else router.replace('/' as any);
   };
 
+  // Each write patches the cached round optimistically, so the toggles flip on
+  // the same frame and the command queues for the server.
   const onToggleHandicap = async () => {
-    await setRoundIncludeInHandicap(round.id, !round.includeInHandicap);
-    await load();
+    await updateRound(round.id, { includeInHandicap: !round.includeInHandicap });
   };
 
   const onToggleShare = async () => {
     // The toggle reads as "share with friends", so ON = NOT excluded.
-    await setRoundExcludeFromSharing(round.id, !round.excludeFromSharing);
-    await load();
+    await updateRound(round.id, { excludeFromSharing: !round.excludeFromSharing });
   };
 
   const onCommitRatingSlope = async () => {
     const rating = parseNum(ratingText);
     const slope = parseNum(slopeText);
     if (rating === round.courseRating && slope === round.slopeRating) return;
-    await setRoundRatingSlope(round.id, rating, slope);
-    await load();
+    await updateRound(round.id, { courseRating: rating, slopeRating: slope });
   };
 
   const onDelete = () => {

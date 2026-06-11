@@ -29,10 +29,10 @@ import {
   useFontSet,
   useTheme,
 } from '@/constants/theme-context';
+import { AuthProvider, useAuth } from '@/lib/auth/provider';
 import { loadSession, type Session } from '@/lib/auth/tokens';
-import { SyncProvider, useSync } from '@/lib/sync/provider';
-import { initDb } from '@/db/client';
-import { getSetting, setSetting } from '@/db/queries';
+import { getPref, setPref } from '@/lib/local/prefs';
+import { migrateLegacyPrefs } from '@/lib/migration/legacy-flush';
 
 const INTRO_SEEN_KEY = 'intro_seen';
 
@@ -144,7 +144,7 @@ function Navigation() {
 // in but no profile yet (new or legacy account) → onboarding; otherwise the app.
 // A cached session is trusted offline (no server check).
 function Gate() {
-  const { session } = useSync();
+  const { session } = useAuth();
   if (!session) return <SignIn />;
   if (!session.user.username) return <Onboarding />;
   return <Navigation />;
@@ -170,8 +170,10 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
-    initDb()
-      .then(() => Promise.all([getSetting(INTRO_SEEN_KEY), loadSession()]))
+    // Existing installs carry theme/intro in the old sqlite settings — copy
+    // them into prefs before the first read (one-time, flag-gated).
+    migrateLegacyPrefs()
+      .then(() => Promise.all([getPref(INTRO_SEEN_KEY), loadSession()]))
       .then(([seen, session]) => {
         setIntroSeen(seen === '1');
         setInitialSession(session);
@@ -193,7 +195,7 @@ export default function RootLayout() {
 
   const dismissIntro = () => {
     setIntroSeen(true);
-    setSetting(INTRO_SEEN_KEY, '1').catch((err) =>
+    setPref(INTRO_SEEN_KEY, '1').catch((err) =>
       console.error('Failed to persist intro flag', err),
     );
   };
@@ -205,11 +207,11 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AppThemeProvider>
-        <SyncProvider initialSession={initialSession}>
+        <AuthProvider initialSession={initialSession}>
           {introSeen ? <Gate /> : <Intro onDone={dismissIntro} />}
           {/* First run shows the intro only — its cover *is* the splash. */}
           {introSeen && !splashDone && <Splash onDone={() => setSplashDone(true)} />}
-        </SyncProvider>
+        </AuthProvider>
       </AppThemeProvider>
     </GestureHandlerRootView>
   );

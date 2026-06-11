@@ -6,7 +6,6 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 
 import { authApple, authGoogle, logout } from '../api/client';
 import { googleIosClientId, googleWebClientId } from '../config';
-import { wipeLocalData } from '../sync/db';
 import { clearSession, getRefreshToken, saveSession, type Session } from './tokens';
 
 let googleConfigured = false;
@@ -56,8 +55,8 @@ export async function signInWithGoogle(): Promise<Session> {
   return session;
 }
 
-// Revoke the session server-side, then clear it and wipe local data so a
-// different account can't inherit it.
+// Revoke the session server-side, then clear it. The caller (AuthProvider)
+// clears the query cache + outbox so a different account can't inherit them.
 export async function signOut(): Promise<void> {
   // Best-effort server revocation before we drop the token locally. Don't block
   // sign-out on the network — clearing the device is what matters here.
@@ -70,7 +69,6 @@ export async function signOut(): Promise<void> {
     }
   }
   await clearSession();
-  await wipeLocalData();
   try {
     ensureGoogleConfigured();
     await GoogleSignin.signOut();

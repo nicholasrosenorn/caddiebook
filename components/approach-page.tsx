@@ -1,6 +1,5 @@
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useMemo } from 'react';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { ApproachTarget } from '@/components/approach-target';
 import { ClubChips } from '@/components/club-chips';
@@ -13,37 +12,34 @@ import { YardageChips } from '@/components/yardage-chips';
 import { CLUB_OPTIONS } from '@/constants/clubs';
 import { radius, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
-import { deleteShot, getBag, getClubYardages, updateHole, upsertShot } from '@/db/queries';
-import type { Hole, Shot } from '@/db/types';
+import type { Hole, Shot } from '@/lib/data/models';
+import { useDeleteShot, useUpdateHole, useUpsertShot } from '@/lib/data/rounds';
+import { useBag, useClubYardages } from '@/lib/data/settings';
 import { approachResult } from '@/lib/shots';
-
-type Position = { xNorm: number; yNorm: number };
 
 type Props = {
   roundId: string;
   hole: Hole;
   shotsForRound: Shot[];
-  onChange: () => void | Promise<void>;
   onComplete?: () => void;
 };
 
-export function ApproachPage({ roundId, hole, shotsForRound, onChange, onComplete }: Props) {
+export function ApproachPage({ roundId, hole, shotsForRound, onComplete }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { width, height } = useWindowDimensions();
   const targetSize = Math.min(320, width - 32, height * 0.5);
-  const [position, setPosition] = useState<Position | null>(null);
-  const [bag, setBag] = useState<readonly string[]>(CLUB_OPTIONS);
-  const [yardages, setYardages] = useState<Record<string, number>>({});
 
-  // Reload on focus (not just mount) so stock yardages set on the Stock
-  // Yardages screen are reflected when the player returns to the round.
-  useFocusEffect(
-    useCallback(() => {
-      getBag().then((clubs) => setBag(clubs.length > 0 ? clubs : CLUB_OPTIONS));
-      getClubYardages().then(setYardages);
-    }, []),
+  const upsertShot = useUpsertShot();
+  const deleteShot = useDeleteShot();
+  const updateHole = useUpdateHole();
+
+  const { bag: storedBag } = useBag();
+  const bag = useMemo(
+    () => (storedBag.length > 0 ? storedBag : CLUB_OPTIONS),
+    [storedBag],
   );
+  const { yardages } = useClubYardages();
 
   // Fallback park when the selected club has no stock yardage on file.
   const yardsDefault =
@@ -53,33 +49,30 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange, onComplet
   const hasClub = hole.approachClub != null && hole.approachClub !== '';
   const hasYards = hole.approachDistanceYds != null;
 
-  useEffect(() => {
-    const approach = shotsForRound.find(
-      (s) => s.holeNumber === hole.holeNumber && s.shotType === 'approach',
-    );
-    setPosition(approach ? { xNorm: approach.xNorm, yNorm: approach.yNorm } : null);
-  }, [shotsForRound, hole.holeNumber]);
+  // The pin comes straight from the cached shots — the optimistic upsert
+  // updates it on the same frame as the tap.
+  const approach = shotsForRound.find(
+    (s) => s.holeNumber === hole.holeNumber && s.shotType === 'approach',
+  );
+  const position = approach ? { xNorm: approach.xNorm, yNorm: approach.yNorm } : null;
 
   const handleTap = async (x: number, y: number) => {
     // Advance only when this tap completes the pin + club + yards trio —
     // moving an already-placed pin shouldn't yank the page away.
     const hadPin = position != null;
-    setPosition({ xNorm: x, yNorm: y });
     try {
+      // One command: the shot plus the derived gir flag, atomic server-side.
       await upsertShot({
         roundId,
         holeNumber: hole.holeNumber,
         shotType: 'approach',
         xNorm: x,
         yNorm: y,
+        holePatch: { gir: approachResult(x, y).onGreen },
       });
-      const { onGreen } = approachResult(x, y);
-      await updateHole(roundId, hole.holeNumber, { gir: onGreen });
-      await onChange();
       if (!hadPin && hasClub && hasYards) onComplete?.();
     } catch (err) {
       console.error(err);
-      Alert.alert('Save failed', 'Could not save approach.');
     }
   };
 
@@ -94,7 +87,6 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange, onComplet
         // an explicit confirming tap (or a different chip).
         ...(stock != null ? { approachDistanceYds: stock } : {}),
       });
-      await onChange();
     } catch (err) {
       console.error(err);
     }
@@ -103,7 +95,6 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange, onComplet
   const onYardsCommit = async (yards: number | null) => {
     try {
       await updateHole(roundId, hole.holeNumber, { approachDistanceYds: yards });
-      await onChange();
       // Yards is the deliberate confirming tap: once the pin and club are in,
       // picking a distance finishes the page.
       if (yards != null && position != null && hasClub) onComplete?.();
@@ -118,25 +109,21 @@ export function ApproachPage({ roundId, hole, shotsForRound, onChange, onComplet
     try {
       if (!blocked) {
         // Couldn't reach the green: drop any placed approach + its derived data
-        // so the hole is excluded from GIR and approach-execution stats.
-        await deleteShot(roundId, hole.holeNumber, 'approach');
-        setPosition(null);
-        await updateHole(roundId, hole.holeNumber, {
+        // so the hole is excluded from GIR and approach-execution stats. One
+        // command — the hole patch rides with the shot delete.
+        await deleteShot(roundId, hole.holeNumber, 'approach', {
           greenBlocked: true,
           gir: null,
           approachDistanceYds: null,
           approachClub: null,
         });
-        await onChange();
         // Nothing left to log here — straight on to putting.
         onComplete?.();
         return;
       }
       await updateHole(roundId, hole.holeNumber, { greenBlocked: false });
-      await onChange();
     } catch (err) {
       console.error(err);
-      Alert.alert('Save failed', 'Could not update the hole.');
     }
   };
 
