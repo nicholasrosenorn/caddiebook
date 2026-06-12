@@ -221,7 +221,6 @@ export default function RoundScreen() {
             {isStatsPage ? (
               <StickyHoleNav
                 holeNumber={holeNumber}
-                par={currentHole.par}
                 holeCount={round.holeCount}
                 holes={holes}
                 isFirstHole={isFirstHole}
@@ -235,7 +234,6 @@ export default function RoundScreen() {
               <>
                 <HoleStepper
                   holeNumber={holeNumber}
-                  par={currentHole.par}
                   holeCount={round.holeCount}
                   holes={holes}
                   isFirstHole={isFirstHole}

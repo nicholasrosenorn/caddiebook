@@ -20,6 +20,7 @@ import 'react-native-reanimated';
 
 import { Intro } from '@/components/intro';
 import { Onboarding } from '@/components/onboarding';
+import { Personalize } from '@/components/personalize';
 import { SignIn } from '@/components/sign-in';
 import { Splash } from '@/components/splash';
 import { themes } from '@/constants/theme';
@@ -140,20 +141,49 @@ function Navigation() {
   );
 }
 
-// Choose the gate once the intro is dismissed: not signed in → sign-in; signed
-// in but no profile yet (new or legacy account) → onboarding; otherwise the app.
-// A cached session is trusted offline (no server check).
-function Gate() {
+type IntroStage = 'value' | 'quiz' | 'auth' | 'done';
+
+// Renders the right surface for the current first-run stage and session. A
+// session always wins (→ onboarding if there's no profile yet, else the app);
+// a cached session is trusted offline (no server check). Otherwise we walk the
+// first-run stages: value story → quiz → sign-in. The intro completes into the
+// quiz; "I already have an account" / Skip jump straight to sign-in; the quiz
+// payoff signs in inline (session wins). 'auth' offers a back affordance to
+// wherever the user came from; 'done' is the returning signed-out user.
+function AppRoot({
+  stage,
+  onIntroDone,
+  onIntroSignIn,
+  onQuizSkip,
+  onAuthBack,
+}: {
+  stage: IntroStage;
+  onIntroDone: () => void;
+  onIntroSignIn: () => void;
+  onQuizSkip: () => void;
+  onAuthBack: () => void;
+}) {
   const { session } = useAuth();
-  if (!session) return <SignIn />;
-  if (!session.user.username) return <Onboarding />;
-  return <Navigation />;
+  if (session) {
+    if (!session.user.username) return <Onboarding />;
+    return <Navigation />;
+  }
+  if (stage === 'value') return <Intro onDone={onIntroDone} onSignIn={onIntroSignIn} />;
+  if (stage === 'quiz') return <Personalize onDone={onQuizSkip} />;
+  return <SignIn onBack={stage === 'auth' ? onAuthBack : undefined} />;
 }
 
 export default function RootLayout() {
   const [ready, setReady] = useState(false);
   // null = not yet known (keep the splash up until the flag is read).
   const [introSeen, setIntroSeen] = useState<boolean | null>(null);
+  // First run is a sequence: value story (intro) → personalization quiz →
+  // sign-in. Tracked in memory so the user can step back from sign-in to the
+  // quiz even after intro_seen has been persisted. 'done' = first run complete
+  // (returning user lands straight on sign-in, no back).
+  const [introStage, setIntroStage] = useState<IntroStage>('value');
+  // The stage to return to when backing out of sign-in (intro vs. quiz).
+  const [authReturn, setAuthReturn] = useState<IntroStage>('quiz');
   // The animated cover splash shows once per cold launch (never resets on
   // foreground), overlaying the app while the launch sync runs underneath.
   const [splashDone, setSplashDone] = useState(false);
@@ -176,12 +206,14 @@ export default function RootLayout() {
       .then(() => Promise.all([getPref(INTRO_SEEN_KEY), loadSession()]))
       .then(([seen, session]) => {
         setIntroSeen(seen === '1');
+        if (seen === '1') setIntroStage('done');
         setInitialSession(session);
       })
       .catch((err) => {
         console.error('Failed to initialize app', err);
         // Don't trap the user on the splash if the read fails — skip the intro.
         setIntroSeen(true);
+        setIntroStage('done');
         setInitialSession(null);
       })
       .finally(() => setReady(true));
@@ -200,6 +232,23 @@ export default function RootLayout() {
     );
   };
 
+  // Jump from a first-run stage to sign-in, remembering where to return on back.
+  const goAuth = (from: IntroStage) => {
+    setAuthReturn(from);
+    setIntroStage('auth');
+    dismissIntro();
+  };
+
+  // On explicit sign-out, replay the full first-run (value story → quiz) so the
+  // signed-out experience reintroduces Caddie Book before landing on sign-in.
+  const replayIntro = () => {
+    setIntroStage('value');
+    setIntroSeen(false);
+    setPref(INTRO_SEEN_KEY, '0').catch((err) =>
+      console.error('Failed to reset intro flag', err),
+    );
+  };
+
   if (!ready || !fontsLoaded || introSeen === null) {
     return null;
   }
@@ -207,10 +256,22 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AppThemeProvider>
-        <AuthProvider initialSession={initialSession}>
-          {introSeen ? <Gate /> : <Intro onDone={dismissIntro} />}
-          {/* First run shows the intro only — its cover *is* the splash. */}
-          {introSeen && !splashDone && <Splash onDone={() => setSplashDone(true)} />}
+        <AuthProvider initialSession={initialSession} onSignOut={replayIntro}>
+          <AppRoot
+            stage={introStage}
+            onIntroDone={() => setIntroStage('quiz')}
+            // Jumping to sign-in persists intro_seen (a relaunch skips straight
+            // to sign-in) but remembers the origin stage so back still works.
+            onIntroSignIn={() => goAuth('value')}
+            onQuizSkip={() => goAuth('quiz')}
+            onAuthBack={() => setIntroStage(authReturn)}
+          />
+          {/* Returning users (a cached session, or the intro already seen) get
+              the launch splash; a fresh first-run user sees the intro cover
+              instead — its cover *is* the splash. */}
+          {(introSeen || initialSession !== null) && !splashDone && (
+            <Splash onDone={() => setSplashDone(true)} />
+          )}
         </AuthProvider>
       </AppThemeProvider>
     </GestureHandlerRootView>

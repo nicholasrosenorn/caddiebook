@@ -87,7 +87,25 @@ export default function RoundSettingsScreen() {
         <View style={styles.header}>
           <ThemedText type="caption">ROUND SETTINGS</ThemedText>
           <ThemedText type="title">{round.courseName}</ThemedText>
+          {round.datePlayed ? (
+            <ThemedText type="muted">{formatDate(round.datePlayed)}</ThemedText>
+          ) : null}
         </View>
+
+        <Pressable
+          onPress={() => router.replace(`/round/${round.id}` as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Edit round"
+          style={({ pressed }) => [styles.editCtaWrap, pressed && styles.pressed]}>
+          <SketchSurface
+            seed="settings-edit"
+            fill={colors.surface}
+            stroke={colors.borderStrong}
+            style={styles.editCta}>
+            <IconSymbol name="pencil" size={16} color={colors.accent} />
+            <ThemedText style={styles.editCtaLabel}>Edit round</ThemedText>
+          </SketchSurface>
+        </Pressable>
 
         <SketchSurface seed="settings-hcp-toggle" style={styles.card}>
           <Pressable
@@ -220,6 +238,14 @@ function parseNum(value: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function formatDate(iso: string): string {
+  const parts = iso.split('-').map((s) => parseInt(s, 10));
+  if (parts.length !== 3 || parts.some(Number.isNaN)) return iso;
+  const [y, m, d] = parts;
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
     content: {
@@ -228,6 +254,24 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     },
     header: {
       gap: spacing.xs,
+    },
+    editCtaWrap: {
+      minHeight: 48,
+    },
+    editCta: {
+      flexDirection: 'row',
+      gap: spacing.sm,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 48,
+    },
+    editCtaLabel: {
+      color: colors.accent,
+      fontFamily: fonts.serif,
+      fontSize: 16,
+      lineHeight: 22,
     },
     card: {
       paddingVertical: spacing.md,

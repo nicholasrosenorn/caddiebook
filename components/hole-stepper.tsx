@@ -10,7 +10,6 @@ import type { Hole } from '@/lib/data/models';
 
 type Props = {
   holeNumber: number;
-  par: number | null;
   holeCount: number;
   holes: Hole[];
   isFirstHole: boolean;
@@ -24,7 +23,6 @@ type Props = {
 // Floating top-center pill for jumping between holes while entering data.
 export function HoleStepper({
   holeNumber,
-  par,
   holeCount,
   holes,
   isFirstHole,
@@ -61,10 +59,7 @@ export function HoleStepper({
           holes={holes}
           onJump={onJump}
           onFinish={onFinish}>
-          <ThemedText style={styles.title}>
-            Hole {holeNumber}
-            {par != null ? ` · Par ${par}` : ''}
-          </ThemedText>
+          <ThemedText style={styles.title}>Hole {holeNumber}</ThemedText>
         </HoleJumpPicker>
 
         <Pressable

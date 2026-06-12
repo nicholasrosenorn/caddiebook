@@ -12,7 +12,6 @@ import type { Hole } from '@/lib/data/models';
 
 type Props = {
   holeNumber: number;
-  par: number | null;
   holeCount: number;
   holes: Hole[];
   isFirstHole: boolean;
@@ -25,7 +24,6 @@ type Props = {
 
 export function StickyHoleNav({
   holeNumber,
-  par,
   holeCount,
   holes,
   isFirstHole,
@@ -70,10 +68,7 @@ export function StickyHoleNav({
           onFinish={onFinish}
           placement="above"
           triggerStyle={styles.title}>
-          <ThemedText style={styles.titleText}>
-            Hole {holeNumber}
-            {par != null ? ` · Par ${par}` : ''}
-          </ThemedText>
+          <ThemedText style={styles.titleText}>Hole {holeNumber}</ThemedText>
           {isLastHole ? (
             <ThemedText style={styles.subTitle}>Finish round</ThemedText>
           ) : null}

@@ -238,19 +238,6 @@ export default function SummaryScreen() {
         <Section title="Post-round review">
           {review ? <ReviewAnswers review={review} /> : <NoReview />}
         </Section>
-
-        <Pressable
-          onPress={() => router.push(`/round/${id}` as any)}
-          style={({ pressed }) => [styles.editCtaWrap, pressed && styles.editCtaPressed]}>
-          <SketchSurface
-            seed="summary-edit"
-            fill={colors.accent}
-            stroke={colors.accent}
-            grain
-            style={styles.editCta}>
-            <ThemedText style={styles.editCtaLabel}>Edit round</ThemedText>
-          </SketchSurface>
-        </Pressable>
       </ScrollView>
 
       <Pressable
@@ -793,26 +780,6 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
   },
   reviewAnswerRating: {
     color: colors.accent,
-  },
-  editCtaWrap: {
-    marginTop: spacing.md,
-    minHeight: 52,
-  },
-  editCta: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 52,
-  },
-  editCtaPressed: {
-    opacity: 0.6,
-  },
-  editCtaLabel: {
-    color: colors.accentOn,
-    fontFamily: fonts.serif,
-    fontSize: 17,
-    lineHeight: 23,
   },
   closeButton: {
     position: 'absolute',

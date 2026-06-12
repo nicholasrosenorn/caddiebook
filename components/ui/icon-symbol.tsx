@@ -25,6 +25,7 @@ const MAPPING = {
   'plus': 'add',
   'plus.circle.fill': 'add-circle',
   'info.circle': 'info-outline',
+  'lightbulb.fill': 'lightbulb',
   'figure.golf': 'sports-golf',
   'checkmark': 'check',
   'xmark': 'close',

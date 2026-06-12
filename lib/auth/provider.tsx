@@ -47,9 +47,13 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({
   initialSession,
+  onSignOut,
   children,
 }: {
   initialSession: Session | null;
+  // Explicit sign-out hook — lets the root replay the intro flow. Not fired on
+  // auth-failure sign-outs, which drop straight to sign-in.
+  onSignOut?: () => void;
   children: React.ReactNode;
 }) {
   const [session, setSession] = useState<Session | null>(initialSession);
@@ -148,7 +152,9 @@ export function AuthProvider({
     queryClient.clear();
     await queryPersister.removeClient();
     setSession(null);
-  }, []);
+    // Replay the intro flow so the next experience reintroduces Caddie Book.
+    onSignOut?.();
+  }, [onSignOut]);
 
   // Persist a profile edit: write it server-side, then mirror into session state
   // and the keychain so it survives a relaunch.

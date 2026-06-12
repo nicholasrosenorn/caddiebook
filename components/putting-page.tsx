@@ -11,7 +11,7 @@ import { useCreatePutt, useDeletePutt } from '@/lib/data/rounds';
 import { roughCirclePath, roughRectPath, stippleInRect } from '@/lib/sketch';
 
 const GLYPH_SIZE = 18;
-const LABEL_W = 52;
+const LABEL_W = 64;
 const FRINGE = 8; // width of the darker fringe band around the board
 
 // Distance bands, ordered far → near so the cup sits at the bottom and you read
@@ -166,7 +166,9 @@ export function Board({
           return (
             <View key={band.value} style={[styles.lane, i > 0 && styles.laneDivider]}>
               <View style={styles.labelCol}>
-                <ThemedText style={styles.laneLabel}>{band.label}</ThemedText>
+                <ThemedText style={styles.laneLabel} numberOfLines={1}>
+                  {band.label}
+                </ThemedText>
                 <ThemedText style={styles.laneUnit}>ft</ThemedText>
               </View>
               <PuttZone

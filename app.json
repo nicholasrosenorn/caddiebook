@@ -37,9 +37,6 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
-          "resizeMode": "contain",
-          "enableFullScreenImage_legacy": true,
           "backgroundColor": "#FAF9F5"
         }
       ],
@@ -61,6 +58,17 @@
         "@react-native-google-signin/google-signin",
         {
           "iosUrlScheme": "com.googleusercontent.apps.136536364803-20h5qfr9d2uhjkp6b8e10o5aq6ko8lhr"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "extraPods": [
+              { "name": "GoogleUtilities", "modular_headers": true },
+              { "name": "RecaptchaInterop", "modular_headers": true }
+            ]
+          }
         }
       ]
     ],

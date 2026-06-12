@@ -6,12 +6,14 @@ import { FiguresRow } from '@/components/figures-row';
 import { MyRoundsView } from '@/components/my-rounds-view';
 import { ProgressView } from '@/components/progress-view';
 import { Screen } from '@/components/screen';
+import { SetupCoachmark } from '@/components/setup-coachmark';
 import { TextTabs } from '@/components/text-tabs';
 import { ThemedText } from '@/components/themed-text';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import type { Hole } from '@/lib/data/models';
 import { useAuth } from '@/lib/auth/provider';
+import { useSetupTooltip } from '@/lib/data/settings';
 import { useStatsBundle } from '@/lib/data/stats';
 import {
   deriveRound,
@@ -72,6 +74,7 @@ export default function ProfileScreen() {
   const user = session?.user;
   const [tab, setTab] = useState<Tab>('progress');
   const figures = useMastheadFigures();
+  const tooltip = useSetupTooltip();
 
   const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
 
@@ -128,6 +131,7 @@ export default function ProfileScreen() {
       <View style={[styles.fill, tab !== 'rounds' && styles.hidden]}>
         <MyRoundsView header={tab === 'rounds' ? header : undefined} />
       </View>
+      {tooltip.show ? <SetupCoachmark onDismiss={tooltip.dismiss} /> : null}
       <EdgeSwipeOpener />
     </Screen>
   );

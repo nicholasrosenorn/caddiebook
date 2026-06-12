@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   PanResponder,
   Pressable,
@@ -20,6 +20,7 @@ import { useColors, useFontSet } from '@/constants/theme-context';
 import {
   useBag,
   useClubYardages,
+  useMarkYardagesVisited,
   useSetBag,
   useSetClubYardage,
 } from '@/lib/data/settings';
@@ -47,6 +48,12 @@ export default function YardagesScreen() {
   const { yardages } = useClubYardages();
   const setBag = useSetBag();
   const setClubYardage = useSetClubYardage();
+
+  // Reaching this screen retires the onboarding nudge, even if nothing is set.
+  const markVisited = useMarkYardagesVisited();
+  useEffect(() => {
+    markVisited();
+  }, [markVisited]);
 
   // Empty/unset bag means "all clubs" everywhere else, so show that here too.
   const bag = useMemo(

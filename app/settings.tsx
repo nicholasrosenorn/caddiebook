@@ -14,6 +14,7 @@ import { useAuth } from '@/lib/auth/provider';
 import { clearAllRounds, seedSampleRounds } from '@/lib/dev-seed';
 import { drainNow, subscribeOutbox } from '@/lib/data/outbox';
 import { queryClient } from '@/lib/data/query-client';
+import { useResetSetupNudge } from '@/lib/data/settings';
 import { setPref } from '@/lib/local/prefs';
 
 export default function SettingsScreen() {
@@ -25,6 +26,7 @@ export default function SettingsScreen() {
   const [devBusy, setDevBusy] = useState(false);
   const [pendingWrites, setPendingWrites] = useState(0);
   const [friendCount, setFriendCount] = useState<number | null>(null);
+  const resetSetupNudge = useResetSetupNudge();
 
   // Live count of queued (not yet delivered) writes, for the dev section.
   useEffect(() => subscribeOutbox(setPendingWrites), []);
@@ -229,6 +231,28 @@ export default function SettingsScreen() {
                 <ThemedText style={styles.cardLabel}>Replay intro</ThemedText>
                 <ThemedText type="muted" style={styles.cardHint}>
                   Resets the first-launch flag and reloads
+                </ThemedText>
+              </SketchSurface>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Reset setup nudge"
+              disabled={devBusy}
+              onPress={() =>
+                runDev(async () => {
+                  await resetSetupNudge();
+                  Alert.alert(
+                    'Setup nudge reset',
+                    'Cleared your bag, yardages and the seen flags. The menu dot and first-login tip will show again — visit the yardages tool to clear them.',
+                  );
+                })
+              }
+              style={({ pressed }) => pressed && styles.cardPressed}>
+              <SketchSurface seed="dev-reset-nudge" radius={12} style={styles.devRow}>
+                <ThemedText style={styles.cardLabel}>Reset setup nudge</ThemedText>
+                <ThemedText type="muted" style={styles.cardHint}>
+                  Clears bag, yardages &amp; seen flags so the dot + tooltip return
                 </ThemedText>
               </SketchSurface>
             </Pressable>

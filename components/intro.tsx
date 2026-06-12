@@ -89,15 +89,15 @@ const settleTap = () => {
  * is the final "Start tracking"; progress reads on a hairline rail, not dots.
  * Content reveals once, in a short stagger, the first time a page is focused.
  */
-export function Intro({ onDone }: { onDone: () => void }) {
+export function Intro({ onDone, onSignIn }: { onDone: () => void; onSignIn: () => void }) {
   return (
     <FirstRunTheme>
-      <IntroFlow onDone={onDone} />
+      <IntroFlow onDone={onDone} onSignIn={onSignIn} />
     </FirstRunTheme>
   );
 }
 
-function IntroFlow({ onDone }: { onDone: () => void }) {
+function IntroFlow({ onDone, onSignIn }: { onDone: () => void; onSignIn: () => void }) {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
@@ -106,6 +106,8 @@ function IntroFlow({ onDone }: { onDone: () => void }) {
   const heroSize = Math.min(232, (windowWidth - spacing.lg * 2) * 0.7);
   const [pageHeight, setPageHeight] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
+  // The cover is a gate: paging stays locked until "Get started" is tapped.
+  const [started, setStarted] = useState(false);
   // Reveal-once flags per page; the cover (page 0) choreographs on mount.
   const [revealed, setRevealed] = useState<boolean[]>(() => {
     const initial = new Array<boolean>(TOTAL_PAGES).fill(false);
@@ -161,11 +163,19 @@ function IntroFlow({ onDone }: { onDone: () => void }) {
               <Animated.ScrollView
                 ref={scrollRef}
                 pagingEnabled
+                scrollEnabled={started}
                 decelerationRate="fast"
                 showsVerticalScrollIndicator={false}
                 onScroll={onScroll}
                 scrollEventThrottle={16}>
-                <CoverPage height={pageHeight} heroSize={heroSize} onAdvance={() => scrollToPage(1)} />
+                <CoverPage
+                  height={pageHeight}
+                  heroSize={heroSize}
+                  started={started}
+                  onStart={() => setStarted(true)}
+                  onAdvance={() => scrollToPage(1)}
+                  onSignIn={onSignIn}
+                />
                 <DrivesSpread
                   height={pageHeight}
                   revealed={revealed[1]}
@@ -190,9 +200,9 @@ function IntroFlow({ onDone }: { onDone: () => void }) {
         </View>
       </View>
 
-      {currentPage < TOTAL_PAGES - 1 && (
+      {currentPage > 0 && currentPage < TOTAL_PAGES - 1 && (
         <Pressable
-          onPress={onDone}
+          onPress={onSignIn}
           hitSlop={10}
           accessibilityRole="button"
           accessibilityLabel="Skip intro"
@@ -336,11 +346,17 @@ const cueStyles = StyleSheet.create({
 function CoverPage({
   height,
   heroSize,
+  started,
+  onStart,
   onAdvance,
+  onSignIn,
 }: {
   height: number;
   heroSize: number;
+  started: boolean;
+  onStart: () => void;
   onAdvance: () => void;
+  onSignIn: () => void;
 }) {
   const colors = useColors();
   const fonts = useFontSet();
@@ -356,15 +372,40 @@ function CoverPage({
         </View>
 
         <View style={styles.footer}>
-          <Animated.View entering={revealUp(6)}>
-            <ThemedText type="muted" style={[styles.body, styles.coverBody]}>
-              Built for the improving golfer — turn months of rounds into trends,
-              dispersion maps, and a real handicap.
-            </ThemedText>
-          </Animated.View>
-          <Animated.View entering={revealUp(7)}>
-            <SwipeCue onPress={onAdvance} />
-          </Animated.View>
+          {started ? (
+            // Get started revealed the value-prop line + the swipe affordance,
+            // and unlocked paging through the rest of the story. Distinct keys
+            // from the start buttons force a remount so revealUp actually fires.
+            <>
+              <Animated.View key="cover-body" entering={revealUp(6)}>
+                <ThemedText type="muted" style={[styles.body, styles.coverBody]}>
+                  Built for the improving golfer — turn months of rounds into trends,
+                  dispersion maps, and a real handicap.
+                </ThemedText>
+              </Animated.View>
+              <Animated.View key="cover-cue" entering={revealUp(7)}>
+                <SwipeCue onPress={onAdvance} />
+              </Animated.View>
+            </>
+          ) : (
+            <>
+              <Animated.View key="cover-start" entering={revealUp(6)}>
+                <CtaButton label="Get started" onPress={onStart} variant="soft" />
+              </Animated.View>
+              <Animated.View key="cover-signin" entering={revealUp(7)}>
+                <Pressable
+                  onPress={onSignIn}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel="I already have an account"
+                  style={({ pressed }) => pressed && styles.pressed}>
+                  <ThemedText type="muted" style={styles.coverSignIn}>
+                    I already have an account
+                  </ThemedText>
+                </Pressable>
+              </Animated.View>
+            </>
+          )}
         </View>
       </View>
     </View>
@@ -572,7 +613,7 @@ function PartnersSpread({
     <View style={{ height }}>
       <View style={styles.pageContent}>
         <View style={styles.spreadHeader}>
-          <Folio n={4} label="Playing partners" revealed={revealed} />
+          <Folio n={4} label="The Clubhouse" revealed={revealed} />
           <Reveal revealed={revealed} order={1}>
             <ThemedText style={styles.pageTitle}>Share the{'\n'}good ones.</ThemedText>
           </Reveal>
@@ -601,12 +642,23 @@ function PartnersSpread({
   );
 }
 
-// The flow's single button — a filled pine plate. Press feedback is a physical
-// scale-down + a light haptic.
-function CtaButton({ label, onPress }: { label: string; onPress: () => void }) {
+// The flow's button. `solid` is the filled pine plate (the terminal "Start
+// tracking" CTA); `soft` is a quiet pine-tint + accent outline + accent label
+// (the cover's "Get started"), matching the option-pill selection register.
+// Press feedback is a physical scale-down + a light haptic.
+function CtaButton({
+  label,
+  onPress,
+  variant = 'solid',
+}: {
+  label: string;
+  onPress: () => void;
+  variant?: 'solid' | 'soft';
+}) {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  const soft = variant === 'soft';
   return (
     <Pressable
       onPress={onPress}
@@ -614,11 +666,11 @@ function CtaButton({ label, onPress }: { label: string; onPress: () => void }) {
       style={({ pressed }) => [styles.ctaWrap, pressed && styles.ctaPressed]}>
       <SketchSurface
         seed={`intro-cta-${label}`}
-        fill={colors.accent}
+        fill={soft ? colors.accentMuted : colors.accent}
         stroke={colors.accent}
         radius={10}
         style={styles.cta}>
-        <ThemedText style={styles.ctaLabel}>{label}</ThemedText>
+        <ThemedText style={[styles.ctaLabel, soft && styles.ctaLabelSoft]}>{label}</ThemedText>
       </SketchSurface>
     </Pressable>
   );
@@ -755,6 +807,9 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       lineHeight: 23,
       color: colors.accentOn,
     },
+    ctaLabelSoft: {
+      color: colors.accent,
+    },
     pressed: {
       opacity: 0.6,
     },
@@ -767,6 +822,11 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     },
     coverBody: {
       textAlign: 'center',
+    },
+    coverSignIn: {
+      textAlign: 'center',
+      fontSize: 15,
+      paddingVertical: spacing.xs,
     },
     footer: {
       gap: spacing.lg,

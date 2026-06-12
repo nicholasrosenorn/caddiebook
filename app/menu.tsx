@@ -16,6 +16,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import { useRoundFull } from '@/lib/data/rounds';
+import { useNeedsClubSetup, useSetupTooltip } from '@/lib/data/settings';
 import { GOAL_CATEGORIES } from '@/lib/goals';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -50,6 +51,15 @@ export default function MenuScreen() {
   const { roundId } = useLocalSearchParams<{ roundId?: string }>();
   const { data: roundDetail } = useRoundFull(roundId);
   const goals = roundDetail?.goals ?? null;
+  // Gentle nudge to fill out the bag / carry distances — only outside a round.
+  const needsSetup = useNeedsClubSetup() && !roundId;
+
+  // Opening the menu means the player found it, so retire the first-login
+  // coachmark (the dot itself lingers until they actually visit the yardages).
+  const { dismiss: dismissTooltip } = useSetupTooltip();
+  useEffect(() => {
+    if (!roundId) dismissTooltip();
+  }, [roundId, dismissTooltip]);
 
   // 0 = closed (panel off-screen left, backdrop clear), 1 = fully open.
   const progress = useSharedValue(0);
@@ -167,6 +177,7 @@ export default function MenuScreen() {
         <View style={styles.list}>
           {ITEMS.map((item, i) => {
             const disabled = !item.route;
+            const showNudge = item.key === 'yardages' && needsSetup;
             return (
               <View key={item.key}>
                 {i > 0 && <SketchDivider seed={`menu-${item.key}`} />}
@@ -177,9 +188,12 @@ export default function MenuScreen() {
                   accessibilityLabel={item.label}
                   style={({ pressed }) => [styles.row, pressed && !disabled && styles.rowPressed]}>
                   <View style={styles.rowText}>
-                    <ThemedText style={[styles.rowLabel, disabled && styles.rowLabelDisabled]}>
-                      {item.label}
-                    </ThemedText>
+                    <View style={styles.labelRow}>
+                      <ThemedText style={[styles.rowLabel, disabled && styles.rowLabelDisabled]}>
+                        {item.label}
+                      </ThemedText>
+                      {showNudge ? <View style={styles.nudgeDot} /> : null}
+                    </View>
                     <ThemedText type="muted" style={styles.rowHint}>
                       {item.hint}
                     </ThemedText>
@@ -320,6 +334,17 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     rowText: {
       flex: 1,
       gap: 2,
+    },
+    labelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+    nudgeDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: colors.danger,
     },
     rowLabel: {
       fontFamily: fonts.serif,

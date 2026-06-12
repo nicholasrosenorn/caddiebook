@@ -15,6 +15,12 @@ import { queryClient } from './query-client';
 const BAG_KEY = 'bag';
 const CLUB_YARDAGES_KEY = 'club_yardages';
 const WEDGE_PARTIALS_KEY = 'wedge_partials';
+// Onboarding flags: set once the player opens the yardages tool / has seen the
+// first-login coachmark. Stored account-side (not device prefs) so they ride the
+// same reactive settings query the nudge reads — visiting clears the dot on the
+// same frame — and so a returning player isn't re-onboarded on every device.
+const YARDAGES_VISITED_KEY = 'yardages_visited';
+const SETUP_TOOLTIP_SEEN_KEY = 'setup_tooltip_seen';
 
 export type WedgePartials = { tq: number | null; half: number | null; quarter: number | null };
 const EMPTY_PARTIALS: WedgePartials = { tq: null, half: null, quarter: null };
@@ -114,6 +120,64 @@ export function useSetBag() {
     (clubs: string[]) => setSetting(BAG_KEY, JSON.stringify(clubs)),
     [setSetting],
   );
+}
+
+// Drives the gentle "fill out your data" nudge (the menu dot + first-login
+// coachmark). It's an onboarding prompt, so it clears once the player has *been*
+// to the yardages tool — visiting counts even if they set nothing — and never
+// shows to a returning player who already has a bag or carries. Returns false
+// while the query is still empty so the dot never flashes before the cache
+// rehydrates.
+export function useNeedsClubSetup(): boolean {
+  const settings = useSettingsMap();
+  if (!settings.data) return false;
+  if (settings.data[YARDAGES_VISITED_KEY] === '1') return false;
+  const bag = parseBag(settings.data[BAG_KEY]);
+  const yardages = parseClubYardages(settings.data[CLUB_YARDAGES_KEY]);
+  return bag.length === 0 || Object.keys(yardages).length === 0;
+}
+
+// Marks the yardages tool as visited (one-shot — guards against rewriting once
+// set). Call it when the yardages screen mounts to retire the nudge.
+export function useMarkYardagesVisited() {
+  const uid = useUserId();
+  const setSetting = useSetSetting();
+  return useCallback(() => {
+    if (readSettings(uid)[YARDAGES_VISITED_KEY] === '1') return;
+    void setSetting(YARDAGES_VISITED_KEY, '1');
+  }, [uid, setSetting]);
+}
+
+// The first-login coachmark pointing at the menu. Shows alongside the nudge
+// until dismissed (tapping it, or opening the menu). Its own "seen" flag lets it
+// retire independently of the dot, which lingers until the yardages visit.
+export function useSetupTooltip(): { show: boolean; dismiss: () => void } {
+  const uid = useUserId();
+  const settings = useSettingsMap();
+  const setSetting = useSetSetting();
+  const needsSetup = useNeedsClubSetup();
+  const seen = settings.data?.[SETUP_TOOLTIP_SEEN_KEY] === '1';
+  const dismiss = useCallback(() => {
+    if (readSettings(uid)[SETUP_TOOLTIP_SEEN_KEY] === '1') return;
+    void setSetting(SETUP_TOOLTIP_SEEN_KEY, '1');
+  }, [uid, setSetting]);
+  return { show: needsSetup && !seen, dismiss };
+}
+
+// Dev-only: wipe the bag, carries, and both onboarding flags so the setup nudge
+// (menu dot + first-login coachmark) replays from a clean slate. Reactive — the
+// dot/tooltip reappear on the next render, no reload needed. Empty string reads
+// back as unset through every parser above.
+export function useResetSetupNudge() {
+  const setSetting = useSetSetting();
+  return useCallback(async () => {
+    await Promise.all([
+      setSetting(BAG_KEY, ''),
+      setSetting(CLUB_YARDAGES_KEY, ''),
+      setSetting(YARDAGES_VISITED_KEY, ''),
+      setSetting(SETUP_TOOLTIP_SEEN_KEY, ''),
+    ]);
+  }, [setSetting]);
 }
 
 export function useClubYardages() {
