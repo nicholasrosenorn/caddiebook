@@ -3,11 +3,20 @@ import { Hono } from 'hono';
 
 import { db } from '../db/client';
 import { pool } from '../db/client';
-import { friendRequests, friendships, roundLikes, users } from '../db/schema';
+import {
+  contentReports,
+  friendRequests,
+  friendships,
+  roundLikes,
+  userBlocks,
+  users,
+} from '../db/schema';
 import { requireAuth, type AppEnv } from '../auth/middleware';
+import { BODY_LIMIT, jsonBodyLimit } from '../middleware/body-limit';
 import { rateLimit } from '../middleware/rate-limit';
 import type {
   AcceptResponse,
+  BlockedUsersResponse,
   FeedResponse,
   FriendRoundDetail,
   FriendsResponse,
@@ -17,6 +26,8 @@ import type {
   NotificationsResponse,
   PublicProfile,
   Relation,
+  ReportReason,
+  ReportRequest,
   RequestCountResponse,
   RoundLikersResponse,
   SendRequestResponse,
@@ -24,6 +35,8 @@ import type {
   UserSearchResult,
   WireHole,
 } from '../wire';
+
+const REPORT_REASONS: ReportReason[] = ['spam', 'harassment', 'objectionable', 'other'];
 
 type UserRow = typeof users.$inferSelect;
 
@@ -53,8 +66,65 @@ async function areFriends(a: string, b: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+// True if either user has blocked the other. Every social read/contact path
+// excludes blocked pairs so a block is mutually invisible (Guideline 1.2).
+async function blockedPairExists(a: string, b: string): Promise<boolean> {
+  const rows = await db
+    .select({ blockerId: userBlocks.blockerId })
+    .from(userBlocks)
+    .where(
+      or(
+        and(eq(userBlocks.blockerId, a), eq(userBlocks.blockedId, b)),
+        and(eq(userBlocks.blockerId, b), eq(userBlocks.blockedId, a)),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+// A SQL NOT EXISTS fragment excluding rows where `otherCol` is blocked with
+// `me` in either direction. `me` is a bound param value; `otherCol` is a raw
+// column reference already in the surrounding query.
+function notBlockedSql(meParam: string, otherCol: string): string {
+  return (
+    `NOT EXISTS (SELECT 1 FROM user_blocks ub WHERE ` +
+    `(ub.blocker_id = ${meParam} AND ub.blocked_id = ${otherCol}) OR ` +
+    `(ub.blocker_id = ${otherCol} AND ub.blocked_id = ${meParam}))`
+  );
+}
+
+// Tear down all directed social state between two users (friendship, mutual
+// likes, pending requests). Shared by unfriend and block.
+async function cleanupRelationship(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  me: string,
+  other: string,
+): Promise<void> {
+  const { low, high } = orderPair(me, other);
+  await tx
+    .delete(friendships)
+    .where(and(eq(friendships.userLow, low), eq(friendships.userHigh, high)));
+  await tx
+    .delete(roundLikes)
+    .where(
+      or(
+        and(eq(roundLikes.roundOwnerId, me), eq(roundLikes.likerId, other)),
+        and(eq(roundLikes.roundOwnerId, other), eq(roundLikes.likerId, me)),
+      ),
+    );
+  await tx
+    .delete(friendRequests)
+    .where(
+      or(
+        and(eq(friendRequests.fromUserId, me), eq(friendRequests.toUserId, other)),
+        and(eq(friendRequests.fromUserId, other), eq(friendRequests.toUserId, me)),
+      ),
+    );
+}
+
 export const communityRoutes = new Hono<AppEnv>();
 
+communityRoutes.use('*', jsonBodyLimit(BODY_LIMIT.small));
 communityRoutes.use('*', requireAuth);
 // Generous per-user cap for reads; a tighter cap on writes (search + requests)
 // to blunt enumeration / friend-request spam.
@@ -87,6 +157,10 @@ communityRoutes.get('/users/search', writeLimit, async (c) => {
           ilike(sql`${users.firstName} || ' ' || ${users.lastName}`, pattern),
         ),
         ne(users.id, me),
+        // Hide users blocked in either direction.
+        sql`NOT EXISTS (SELECT 1 FROM user_blocks ub WHERE
+          (ub.blocker_id = ${me} AND ub.blocked_id = ${users.id}) OR
+          (ub.blocker_id = ${users.id} AND ub.blocked_id = ${me}))`,
       ),
     )
     .limit(10);
@@ -131,6 +205,9 @@ communityRoutes.post('/friend-requests', writeLimit, async (c) => {
   const target = (await db.select().from(users).where(eq(users.username, username)).limit(1))[0];
   if (!target) return c.json({ error: 'user not found' }, 404);
   if (target.id === me) return c.json({ error: 'cannot friend yourself' }, 400);
+  // A block in either direction makes the target unreachable. Mirror the
+  // "user not found" response so a blocker isn't revealed to the blocked user.
+  if (await blockedPairExists(me, target.id)) return c.json({ error: 'user not found' }, 404);
   if (await areFriends(me, target.id)) return c.json({ error: 'already friends' }, 409);
 
   // Reverse-direction pending request → accept it instead of stacking a new one.
@@ -237,6 +314,7 @@ communityRoutes.get('/notifications', async (c) => {
        JOIN rounds r ON r.user_id = rl.round_owner_id AND r.id = rl.round_id
          AND r.deleted_at IS NULL
        WHERE rl.round_owner_id = $1 AND rl.liker_id <> $1
+         AND ${notBlockedSql('$1', 'rl.liker_id')}
        ORDER BY rl.created_at DESC
        LIMIT ${NOTIFICATIONS_LIMIT}`,
       [me],
@@ -247,7 +325,8 @@ communityRoutes.get('/notifications', async (c) => {
               f.created_at, u.username, u.first_name, u.last_name, u.avatar
        FROM friendships f
        JOIN users u ON u.id = CASE WHEN f.user_low = $1 THEN f.user_high ELSE f.user_low END
-       WHERE f.user_low = $1 OR f.user_high = $1
+       WHERE (f.user_low = $1 OR f.user_high = $1)
+         AND ${notBlockedSql('$1', 'CASE WHEN f.user_low = $1 THEN f.user_high ELSE f.user_low END')}
        ORDER BY f.created_at DESC
        LIMIT ${NOTIFICATIONS_LIMIT}`,
       [me],
@@ -358,28 +437,84 @@ communityRoutes.get('/friends', async (c) => {
 communityRoutes.delete('/friends/:friendUserId', async (c) => {
   const me = c.get('userId');
   const other = c.req.param('friendUserId');
-  const { low, high } = orderPair(me, other);
+  await db.transaction((tx) => cleanupRelationship(tx, me, other));
+  return c.json({ ok: true });
+});
+
+// --- Moderation: block / report -------------------------------------------
+
+// POST /community/users/:id/block — block a user. Blocking also tears down any
+// existing friendship/likes/requests so the pair becomes mutually invisible.
+communityRoutes.post('/users/:id/block', writeLimit, async (c) => {
+  const me = c.get('userId');
+  const other = c.req.param('id');
+  if (other === me) return c.json({ error: 'cannot block yourself' }, 400);
   await db.transaction(async (tx) => {
+    await cleanupRelationship(tx, me, other);
     await tx
-      .delete(friendships)
-      .where(and(eq(friendships.userLow, low), eq(friendships.userHigh, high)));
-    // Remove likes either user placed on the other's rounds.
-    await tx
-      .delete(roundLikes)
-      .where(
-        or(
-          and(eq(roundLikes.roundOwnerId, me), eq(roundLikes.likerId, other)),
-          and(eq(roundLikes.roundOwnerId, other), eq(roundLikes.likerId, me)),
-        ),
-      );
-    await tx
-      .delete(friendRequests)
-      .where(
-        or(
-          and(eq(friendRequests.fromUserId, me), eq(friendRequests.toUserId, other)),
-          and(eq(friendRequests.fromUserId, other), eq(friendRequests.toUserId, me)),
-        ),
-      );
+      .insert(userBlocks)
+      .values({ blockerId: me, blockedId: other })
+      .onConflictDoNothing();
+  });
+  return c.json({ ok: true });
+});
+
+// DELETE /community/users/:id/block — unblock (does not restore friendship).
+communityRoutes.delete('/users/:id/block', writeLimit, async (c) => {
+  const me = c.get('userId');
+  const other = c.req.param('id');
+  await db
+    .delete(userBlocks)
+    .where(and(eq(userBlocks.blockerId, me), eq(userBlocks.blockedId, other)));
+  return c.json({ ok: true });
+});
+
+// GET /community/blocks — users I have blocked.
+communityRoutes.get('/blocks', async (c) => {
+  const me = c.get('userId');
+  const rows = await db
+    .select({
+      id: users.id,
+      username: users.username,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      avatar: users.avatar,
+    })
+    .from(userBlocks)
+    .innerJoin(users, eq(users.id, userBlocks.blockedId))
+    .where(eq(userBlocks.blockerId, me))
+    .orderBy(desc(userBlocks.createdAt));
+  return c.json<BlockedUsersResponse>({ blocked: rows.map(toPublicProfile) });
+});
+
+// POST /community/reports — file a report against a round or user. An admin
+// actions it via /admin/reports; here we just record it (status 'open').
+communityRoutes.post('/reports', writeLimit, async (c) => {
+  const me = c.get('userId');
+  const body = (await c.req.json().catch(() => null)) as Partial<ReportRequest> | null;
+  const targetType = body?.targetType;
+  const targetOwnerId = typeof body?.targetOwnerId === 'string' ? body.targetOwnerId : '';
+  const reason = body?.reason;
+  if (targetType !== 'round' && targetType !== 'user') {
+    return c.json({ error: 'invalid targetType' }, 400);
+  }
+  if (!targetOwnerId) return c.json({ error: 'targetOwnerId required' }, 400);
+  if (!reason || !REPORT_REASONS.includes(reason)) {
+    return c.json({ error: 'invalid reason' }, 400);
+  }
+  const targetRoundId =
+    targetType === 'round' && typeof body?.targetRoundId === 'string' ? body.targetRoundId : null;
+  if (targetType === 'round' && !targetRoundId) {
+    return c.json({ error: 'targetRoundId required for round reports' }, 400);
+  }
+  const note = typeof body?.note === 'string' ? body.note.slice(0, 1000) : null;
+  await db.insert(contentReports).values({
+    reporterId: me,
+    targetType,
+    targetOwnerId,
+    targetRoundId,
+    reason,
+    note,
   });
   return c.json({ ok: true });
 });
@@ -499,6 +634,7 @@ communityRoutes.get('/feed', async (c) => {
      WHERE r.deleted_at IS NULL
        AND r.completed_at IS NOT NULL
        AND COALESCE(r.exclude_from_sharing, 0) = 0
+       AND ${notBlockedSql('$1', 'r.user_id')}
        ${keyset}
      ORDER BY r.completed_at DESC, r.id DESC
      LIMIT $${limitIdx}`,
@@ -545,6 +681,7 @@ async function loadShareableRound(
   roundId: string,
 ): Promise<Record<string, unknown> | null> {
   if (ownerId !== me && !(await areFriends(me, ownerId))) return null;
+  if (ownerId !== me && (await blockedPairExists(me, ownerId))) return null;
   const res = await pool.query(
     `SELECT user_id AS owner_id, id, course_name, date_played, hole_count,
             completed_at, created_at

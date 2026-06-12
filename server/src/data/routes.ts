@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
 
 import { requireAuth, type AppEnv } from '../auth/middleware';
+import { BODY_LIMIT, jsonBodyLimit } from '../middleware/body-limit';
 import { rateLimit } from '../middleware/rate-limit';
 import { dispatchRoundShareNotifications } from '../notifications/dispatch';
 import type {
@@ -36,6 +37,7 @@ import {
 
 export const dataRoutes = new Hono<AppEnv>();
 
+dataRoutes.use('*', jsonBodyLimit(BODY_LIMIT.data));
 dataRoutes.use('*', requireAuth);
 // Sized for the worst case: a fully-offline 18-hole round replays a couple
 // hundred sequential commands when connectivity returns.

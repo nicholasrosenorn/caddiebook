@@ -4,12 +4,14 @@ import { Hono } from 'hono';
 import { requireAuth, type AppEnv } from '../auth/middleware';
 import { db } from '../db/client';
 import { pushTokens } from '../db/schema';
+import { BODY_LIMIT, jsonBodyLimit } from '../middleware/body-limit';
 import { rateLimit } from '../middleware/rate-limit';
 import type { RegisterPushTokenRequest, UnregisterPushTokenRequest } from '../wire';
 import { isExpoPushToken } from './dispatch';
 
 export const notificationsRoutes = new Hono<AppEnv>();
 
+notificationsRoutes.use('*', jsonBodyLimit(BODY_LIMIT.small));
 notificationsRoutes.use('*', requireAuth);
 notificationsRoutes.use(
   '*',

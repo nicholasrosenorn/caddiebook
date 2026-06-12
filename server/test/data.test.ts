@@ -373,3 +373,33 @@ describe('/data auth & limits', () => {
     resetRateLimits();
   });
 });
+
+describe('/data input validation', () => {
+  it('rejects a request body over the data size limit (413)', async () => {
+    const user = randomUUID();
+    // Over BODY_LIMIT.data (512 KiB) — rejected by middleware before the handler.
+    const res = await authed(user, '/data/settings/bag', 'PUT', {
+      value: 'x'.repeat(600 * 1024),
+    });
+    expect(res.status).toBe(413);
+  });
+
+  it('caps a long-form text field (settings value, 10k ceiling)', async () => {
+    const user = randomUUID();
+    const res = await authed(user, '/data/settings/bag', 'PUT', {
+      value: 'x'.repeat(10_001),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('caps a short text field (round course_name, 1k ceiling)', async () => {
+    const user = randomUUID();
+    const roundId = randomUUID();
+    const res = await authed(user, `/data/rounds/${roundId}`, 'PUT', {
+      course_name: 'x'.repeat(1_001),
+      hole_count: 9,
+      holes: holeRows(roundId, 9),
+    });
+    expect(res.status).toBe(400);
+  });
+});

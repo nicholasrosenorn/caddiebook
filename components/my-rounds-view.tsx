@@ -1,13 +1,13 @@
-import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 import { router } from 'expo-router';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, TextInput, View } from 'react-native';
+import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 import Animated from 'react-native-reanimated';
 
 import { PressableScale } from '@/components/pressable-scale';
 import { SketchDivider, SketchSurface, TopoChip } from '@/components/sketch';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { ThemedText } from '@/components/themed-text';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import type { Round, RoundSummary } from '@/lib/data/models';
@@ -192,9 +192,6 @@ function RoundCard({
               ) : null}
             </View>
           </View>
-          <ThemedText type="muted" style={styles.holes}>
-            {item.summary.holesPlayed}/{item.holeCount}
-          </ThemedText>
         </View>
 
         <View style={styles.scoreRow}>

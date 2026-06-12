@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 
 import { requireAuth, type AppEnv } from '../auth/middleware';
+import { BODY_LIMIT, jsonBodyLimit } from '../middleware/body-limit';
 import { rateLimit } from '../middleware/rate-limit';
 import { dispatchRoundShareNotifications } from '../notifications/dispatch';
 import type { PushRequest } from '../wire';
@@ -9,6 +10,9 @@ import { applyPush } from './push';
 
 export const syncRoutes = new Hono<AppEnv>();
 
+// Legacy migration flushes a whole local DB in one un-chunked POST, so this cap
+// is intentionally generous — it bounds memory without breaking an upgrade.
+syncRoutes.use('*', jsonBodyLimit(BODY_LIMIT.legacy));
 // Every sync route requires a valid access token; handlers read the user id.
 syncRoutes.use('*', requireAuth);
 

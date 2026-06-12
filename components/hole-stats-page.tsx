@@ -11,6 +11,7 @@ import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import type { Hole } from '@/lib/data/models';
 import { useUpdateHole } from '@/lib/data/rounds';
+import { containsProfanity } from '@/lib/moderation/profanity';
 import { deriveGir, resolveGir, resolveUpAndDown } from '@/lib/stats';
 
 type HoleField = keyof Omit<Hole, 'id' | 'roundId' | 'holeNumber'>;
@@ -39,6 +40,7 @@ export function HoleStatsPage({ roundId, hole }: Props) {
   // keyed by hole number in the controller, so it remounts per hole — the draft
   // resets cleanly and the unmount flush below saves any in-progress note.
   const [notes, setNotes] = useState(hole.notes ?? '');
+  const [notesError, setNotesError] = useState(false);
   const notesRef = useRef(notes);
   notesRef.current = notes;
   const savedNotesRef = useRef((hole.notes ?? '').trim());
@@ -46,6 +48,14 @@ export function HoleStatsPage({ roundId, hole }: Props) {
   const saveNotes = (next: string) => {
     const trimmed = next.trim();
     if (trimmed === savedNotesRef.current) return;
+    // Block objectionable notes before they enqueue: the server would reject
+    // the write (422) and the outbox would silently drop it, so catch it here
+    // and tell the user. The note stays in the draft for editing.
+    if (containsProfanity(trimmed)) {
+      setNotesError(true);
+      return;
+    }
+    setNotesError(false);
     savedNotesRef.current = trimmed;
     void update('notes', trimmed.length > 0 ? trimmed : null);
   };
@@ -157,7 +167,10 @@ export function HoleStatsPage({ roundId, hole }: Props) {
           style={styles.notesSurface}>
           <TextInput
             value={notes}
-            onChangeText={setNotes}
+            onChangeText={(t) => {
+              setNotes(t);
+              if (notesError) setNotesError(false);
+            }}
             onBlur={() => saveNotes(notes)}
             placeholder="Notes for this hole…"
             placeholderTextColor={colors.textMuted}
@@ -166,6 +179,11 @@ export function HoleStatsPage({ roundId, hole }: Props) {
             textAlignVertical="top"
           />
         </SketchSurface>
+        {notesError ? (
+          <ThemedText style={styles.notesError}>
+            Let’s keep notes clean — this note wasn’t saved.
+          </ThemedText>
+        ) : null}
       </View>
     </ScrollView>
   );
@@ -210,6 +228,10 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
   },
   notesBlock: {
     gap: spacing.sm,
+  },
+  notesError: {
+    fontSize: 13,
+    color: colors.danger,
   },
   notesSurface: {
     minHeight: 80,

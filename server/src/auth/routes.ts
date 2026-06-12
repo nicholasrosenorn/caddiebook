@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { db, type Db } from '../db/client';
 import { refreshTokens, users } from '../db/schema';
 import { env } from '../env';
+import { containsProfanity } from '../moderation/profanity';
 import type { AuthResponse, AuthUser, ProfileUpdate, RefreshResponse } from '../wire';
 import {
   REFRESH_TTL_MS,
@@ -15,6 +16,7 @@ import {
 import { requireAuth, type AppEnv } from './middleware';
 import { verifyAppleToken, verifyGoogleToken, type ProviderIdentity } from './verify';
 import { clientIp, rateLimit } from '../middleware/rate-limit';
+import { BODY_LIMIT, jsonBodyLimit } from '../middleware/body-limit';
 
 type UserRow = typeof users.$inferSelect;
 
@@ -91,6 +93,7 @@ async function issue(user: UserRow): Promise<AuthResponse> {
 
 export const authRoutes = new Hono<AppEnv>();
 
+authRoutes.use('*', jsonBodyLimit(BODY_LIMIT.small));
 // Throttle token endpoints per client IP to blunt brute-force / token grinding.
 authRoutes.use('*', rateLimit({ name: 'auth', windowMs: 5 * 60_000, max: 30, key: clientIp }));
 
@@ -179,6 +182,10 @@ authRoutes.post('/logout', async (c) => {
 // --- Profile (authenticated) -----------------------------------------------
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
+// Length ceilings on the free-text profile fields (avatar is a short icon-name
+// identifier, not a URL/blob). Blunts storage abuse on the users table.
+const MAX_NAME_LEN = 100;
+const MAX_AVATAR_LEN = 256;
 
 // Current account's profile. Lets the client refresh what it cached at sign-in
 // (e.g. edits made on another device).
@@ -198,6 +205,24 @@ authRoutes.patch('/me', requireAuth, async (c) => {
   const username = typeof body?.username === 'string' ? body.username.trim().toLowerCase() : '';
   if (!USERNAME_RE.test(username)) {
     return c.json({ error: 'username must be 3-20 chars: a-z, 0-9, underscore' }, 400);
+  }
+  if (
+    (typeof body?.firstName === 'string' && body.firstName.length > MAX_NAME_LEN) ||
+    (typeof body?.lastName === 'string' && body.lastName.length > MAX_NAME_LEN)
+  ) {
+    return c.json({ error: `name must be at most ${MAX_NAME_LEN} characters` }, 400);
+  }
+  if (typeof body?.avatar === 'string' && body.avatar.length > MAX_AVATAR_LEN) {
+    return c.json({ error: `avatar must be at most ${MAX_AVATAR_LEN} characters` }, 400);
+  }
+  // The handle and names are visible to other users (search, feed, requests),
+  // so they pass the same objectionable-language gate as shared round text.
+  if (
+    containsProfanity(username) ||
+    containsProfanity(body?.firstName) ||
+    containsProfanity(body?.lastName)
+  ) {
+    return c.json({ error: 'objectionable_language' }, 422);
   }
 
   // Pre-check keeps the common case a clean 409; the unique index is the source

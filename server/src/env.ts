@@ -26,6 +26,11 @@ export const env = {
   port: Number(optional('PORT', '8080')),
   // POST /auth/dev is only mounted when this is exactly '1'.
   devAuth: optional('DEV_AUTH', '0') === '1',
+  // Comma-separated user ids allowed to call the /admin moderation endpoints.
+  adminUserIds: optional('ADMIN_USER_IDS', '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0),
 };
 
 export type Env = typeof env;

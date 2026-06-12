@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
+import { ModerationMenu } from '@/components/moderation-menu';
 import { PressableScale } from '@/components/pressable-scale';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
@@ -134,6 +135,10 @@ export default function AddFriendScreen() {
                 ) : null}
               </View>
               <RelationButton relation={relation} onAdd={() => onAdd(item)} colors={colors} styles={styles} />
+              <ModerationMenu
+                user={item}
+                onBlocked={() => setResults((prev) => prev.filter((u) => u.id !== item.id))}
+              />
             </View>
           );
         }}

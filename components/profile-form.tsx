@@ -18,8 +18,9 @@ import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import { UsernameTakenError } from '@/lib/api/client';
+import { ObjectionableLanguageError, UsernameTakenError } from '@/lib/api/client';
 import { useAuth } from '@/lib/auth/provider';
+import { containsProfanity } from '@/lib/moderation/profanity';
 
 export const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
@@ -69,6 +70,16 @@ export function ProfileForm({
   const submit = async () => {
     if (!canSubmit) return;
     setError(null);
+    // Pre-check so the user gets immediate feedback; the server (422) is the
+    // authoritative gate for objectionable language on profile fields.
+    if (
+      containsProfanity(trimmedFirst) ||
+      containsProfanity(lastName) ||
+      containsProfanity(username)
+    ) {
+      setError('Let’s keep names and handles clean — please pick something else.');
+      return;
+    }
     setBusy(true);
     try {
       await updateProfile({
@@ -81,6 +92,8 @@ export function ProfileForm({
     } catch (e) {
       if (e instanceof UsernameTakenError) {
         setError('That username is taken — try another.');
+      } else if (e instanceof ObjectionableLanguageError) {
+        setError('Let’s keep names and handles clean — please pick something else.');
       } else {
         setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.');
       }

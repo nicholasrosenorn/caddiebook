@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 
 import { pool } from '../db/client';
+import { containsProfanity } from '../moderation/profanity';
 import { TABLE_SPECS, type SyncableTable } from '../sync/tables';
 import type {
   CoursesResponse,
@@ -23,7 +24,7 @@ import type {
 export class DataError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 404 = 400,
+    readonly status: 400 | 404 | 422 = 400,
   ) {
     super(message);
   }
@@ -38,6 +39,51 @@ function ident(name: string): string {
 function normalize(v: WireValue | undefined): WireValue {
   if (typeof v === 'boolean') return v ? 1 : 0;
   return v ?? null;
+}
+
+// Per-column free-text ceilings. Anything longer is rejected (400) to blunt
+// storage abuse and oversized rows. Long-form fields (round/journal prose and
+// the settings value blob, which holds the bag/yardage JSON) get more room;
+// everything else (names, clubs, review answers, goals, tags) is short.
+const LONG_TEXT_COLUMNS = new Set(['notes', 'body', 'value']);
+const MAX_TEXT_LEN = 1_000;
+const MAX_LONG_TEXT_LEN = 10_000;
+
+function checkTextLength(column: string, value: WireValue): void {
+  if (typeof value !== 'string') return;
+  const max = LONG_TEXT_COLUMNS.has(column) ? MAX_LONG_TEXT_LEN : MAX_TEXT_LEN;
+  if (value.length > max) {
+    throw new DataError(`${column} exceeds ${max} characters`);
+  }
+}
+
+// Columns whose text is visible to other users (feed cards + friend round
+// detail), so they must pass the profanity gate. Private blobs (settings JSON,
+// journal body) and fixed-vocabulary columns (clubs) are intentionally absent.
+const PROFANITY_COLUMNS = new Set([
+  'course_name',
+  'notes',
+  'most_costly',
+  'common_miss',
+  'range_focus',
+  'execution_goal',
+  'strategic_goal',
+  'mental_goal',
+]);
+
+function checkProfanity(column: string, value: WireValue): void {
+  if (!PROFANITY_COLUMNS.has(column)) return;
+  if (typeof value !== 'string') return;
+  if (containsProfanity(value)) {
+    throw new DataError('objectionable_language', 422);
+  }
+}
+
+// Run both content gates on a writable column's value.
+function checkColumnValue(column: string, value: WireValue): WireValue {
+  checkTextLength(column, value);
+  checkProfanity(column, value);
+  return value;
 }
 
 function now(): string {
@@ -86,7 +132,12 @@ async function upsertRow(
   }
 
   const insertCols = [...cols, 'user_id', 'updated_at', 'deleted_at'];
-  const values: WireValue[] = [...cols.map((c) => normalize(row[c])), userId, now(), null];
+  const values: WireValue[] = [
+    ...cols.map((c) => checkColumnValue(c, normalize(row[c]))),
+    userId,
+    now(),
+    null,
+  ];
   const placeholders = insertCols.map((_, i) => `$${i + 1}`);
 
   const skip = new Set([...spec.idColumns, ...conflictCols]);
@@ -121,7 +172,7 @@ async function patchHole(
       Object.prototype.hasOwnProperty.call(patch, c),
   );
   if (cols.length === 0) return;
-  const values: WireValue[] = cols.map((c) => normalize(patch[c]));
+  const values: WireValue[] = cols.map((c) => checkColumnValue(c, normalize(patch[c])));
   const set = cols.map((c, i) => `${ident(c)} = $${i + 1}`).join(', ');
   values.push(now(), userId, roundId, holeNumber);
   const base = cols.length;

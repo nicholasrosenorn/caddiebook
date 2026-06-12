@@ -90,6 +90,38 @@ export type RequestCountResponse = { count: number };
 export type AcceptResponse = { ok: true; friend: PublicProfile };
 export type FriendsResponse = { friends: PublicProfile[] };
 
+// --- Moderation ------------------------------------------------------------
+
+export type BlockedUsersResponse = { blocked: PublicProfile[] };
+
+export type ReportReason = 'spam' | 'harassment' | 'objectionable' | 'other';
+export type ReportRequest = {
+  targetType: 'round' | 'user';
+  targetOwnerId: string;
+  targetRoundId?: string | null;
+  reason: ReportReason;
+  note?: string | null;
+};
+
+// --- Admin moderation queue ------------------------------------------------
+
+export type AdminReport = {
+  id: string;
+  reporter: PublicProfile | null;
+  target: PublicProfile | null;
+  targetType: 'round' | 'user';
+  targetOwnerId: string;
+  targetRoundId: string | null;
+  reason: string;
+  note: string | null;
+  status: string;
+  action: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+};
+export type AdminReportsResponse = { reports: AdminReport[] };
+export type AdminResolveRequest = { action: 'remove_content' | 'ban_user' | 'dismiss' };
+
 // A single notification-feed entry. Derived on the fly (no stored read-state):
 // pending friend requests always sort first, then likes on my rounds and new
 // friendships by recency. `id` is a synthetic stable key for React lists; for a

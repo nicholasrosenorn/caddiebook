@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 
+import { adminRoutes } from './admin/routes';
 import { authRoutes } from './auth/routes';
 import { communityRoutes } from './community/routes';
 import { dataRoutes } from './data/routes';
@@ -18,5 +19,6 @@ export function createApp() {
   app.route('/sync', syncRoutes);
   app.route('/community', communityRoutes);
   app.route('/notifications', notificationsRoutes);
+  app.route('/admin', adminRoutes);
   return app;
 }

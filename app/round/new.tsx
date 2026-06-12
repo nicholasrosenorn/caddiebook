@@ -27,6 +27,7 @@ import type { Tee } from '@/lib/data/models';
 import { useCourses, useCreateTee, useEnsureCourse } from '@/lib/data/courses';
 import { useCreateRound } from '@/lib/data/rounds';
 import { useBag, useSetBag } from '@/lib/data/settings';
+import { containsProfanity } from '@/lib/moderation/profanity';
 
 const HOLE_OPTIONS = [
   { value: '9', label: '9' },
@@ -110,6 +111,13 @@ export default function NewRoundScreen() {
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
+    // The course name is shared on the feed, so it passes the same content gate
+    // as other UGC. Catch it here before the round PUT enqueues — otherwise the
+    // server would reject it (422) and the outbox would drop the whole round.
+    if (containsProfanity(courseName) || containsProfanity(teeName)) {
+      Alert.alert('Let’s keep it clean', 'Please choose a different course or tee name.');
+      return;
+    }
     setSubmitting(true);
     try {
       const ratingNum = parseNum(rating);

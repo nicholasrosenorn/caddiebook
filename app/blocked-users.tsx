@@ -1,29 +1,27 @@
-import { router, Stack, useFocusEffect } from 'expo-router';
+import { Stack, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 
-import { HeaderIconButton } from '@/components/header-icon-button';
-import { ModerationMenu } from '@/components/moderation-menu';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/icon-symbol';
-import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import { listFriends, unfriend } from '@/lib/api/client';
+import { listBlockedUsers, unblockUser } from '@/lib/api/client';
 import type { PublicProfile } from '@/lib/api/types';
 
-export default function FriendsScreen() {
+export default function BlockedUsersScreen() {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  const [friends, setFriends] = useState<PublicProfile[] | null>(null);
+  const [blocked, setBlocked] = useState<PublicProfile[] | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setFriends(await listFriends());
+      setBlocked(await listBlockedUsers());
     } catch {
-      setFriends([]);
+      setBlocked([]);
     }
   }, []);
 
@@ -33,47 +31,32 @@ export default function FriendsScreen() {
     }, [load]),
   );
 
-  const onRemove = useCallback((friend: PublicProfile) => {
-    const name = friend.username ? `@${friend.username}` : 'this friend';
-    Alert.alert(
-      'Remove friend?',
-      `${name} will no longer see your rounds, and you won't see theirs. You can add them again later.`,
-      [
+  const onUnblock = useCallback(
+    (user: PublicProfile) => {
+      const name = user.username ? `@${user.username}` : 'this user';
+      Alert.alert('Unblock?', `${name} will be able to find and follow you again. This does not restore any past friendship.`, [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Remove',
-          style: 'destructive',
+          text: 'Unblock',
           onPress: async () => {
-            // Optimistically drop the row, restore it if the call fails.
-            setFriends((prev) => prev?.filter((f) => f.id !== friend.id) ?? null);
+            setBlocked((prev) => prev?.filter((u) => u.id !== user.id) ?? null);
             try {
-              await unfriend(friend.id);
+              await unblockUser(user.id);
             } catch {
-              Alert.alert('Could not remove', 'Please try again.');
+              Alert.alert('Could not unblock', 'Please try again.');
               load();
             }
           },
         },
-      ],
-    );
-  }, [load]);
-
-  const headerRight = useCallback(
-    () => (
-      <HeaderIconButton
-        name="person.badge.plus"
-        accessibilityLabel="Add friends"
-        color={colors.textPrimary}
-        onPress={() => router.push('/add-friends' as any)}
-      />
-    ),
-    [colors.textPrimary],
+      ]);
+    },
+    [load],
   );
 
-  if (friends === null) {
+  if (blocked === null) {
     return (
       <Screen>
-        <Stack.Screen options={{ headerRight }} />
+        <Stack.Screen options={{ title: 'Blocked' }} />
         <View style={styles.empty}>
           <ActivityIndicator color={colors.accent} />
         </View>
@@ -83,32 +66,18 @@ export default function FriendsScreen() {
 
   return (
     <Screen padded={false}>
-      <Stack.Screen options={{ headerRight }} />
+      <Stack.Screen options={{ title: 'Blocked' }} />
       <FlatList
-        data={friends}
+        data={blocked}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         ListEmptyComponent={
           <View style={styles.empty}>
-            <ThemedText type="subtitle">No friends yet</ThemedText>
+            <ThemedText type="subtitle">No one blocked</ThemedText>
             <ThemedText type="muted" style={styles.centerText}>
-              Find players by their @username to follow their rounds.
+              People you block won’t see your rounds or profile, and you won’t see theirs.
             </ThemedText>
-            <Pressable
-              onPress={() => router.push('/add-friends' as any)}
-              accessibilityRole="button"
-              accessibilityLabel="Add friends"
-              style={({ pressed }) => [styles.ctaWrap, pressed && styles.pressed]}>
-              <SketchSurface
-                seed="friends-empty-cta"
-                fill={colors.accent}
-                stroke={colors.accent}
-                grain
-                style={styles.cta}>
-                <ThemedText style={styles.ctaLabel}>Add friends</ThemedText>
-              </SketchSurface>
-            </Pressable>
           </View>
         }
         renderItem={({ item }) => (
@@ -116,7 +85,7 @@ export default function FriendsScreen() {
             <IconSymbol
               name={(item.avatar as IconSymbolName) ?? 'person.crop.circle'}
               size={32}
-              color={colors.accent}
+              color={colors.textMuted}
             />
             <View style={styles.rowText}>
               <ThemedText style={styles.handle}>
@@ -129,19 +98,15 @@ export default function FriendsScreen() {
                 </ThemedText>
               ) : null}
             </View>
-            <Pressable onPress={() => onRemove(item)} style={({ pressed }) => pressed && styles.pressed}>
+            <Pressable onPress={() => onUnblock(item)} style={({ pressed }) => pressed && styles.pressed}>
               <SketchSurface
-                seed={`friend-remove-${item.id}`}
+                seed={`unblock-${item.id}`}
                 fill={colors.surface}
                 stroke={colors.borderStrong}
                 style={styles.actionBtn}>
-                <ThemedText style={styles.removeLabel}>Remove</ThemedText>
+                <ThemedText style={styles.actionLabel}>Unblock</ThemedText>
               </SketchSurface>
             </Pressable>
-            <ModerationMenu
-              user={item}
-              onBlocked={() => setFriends((prev) => prev?.filter((f) => f.id !== item.id) ?? null)}
-            />
           </View>
         )}
       />
@@ -170,22 +135,6 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       textAlign: 'center',
       maxWidth: 280,
     },
-    ctaWrap: {
-      marginTop: spacing.md,
-    },
-    cta: {
-      paddingHorizontal: spacing.xl,
-      paddingVertical: spacing.sm,
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: 44,
-    },
-    ctaLabel: {
-      color: colors.accentOn,
-      fontFamily: fonts.serif,
-      fontSize: 16,
-      lineHeight: 22,
-    },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -208,7 +157,7 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       justifyContent: 'center',
       minHeight: 40,
     },
-    removeLabel: {
+    actionLabel: {
       color: colors.textSecondary,
       fontFamily: fonts.serif,
       fontSize: 15,

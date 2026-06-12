@@ -201,6 +201,10 @@ export const users = pgTable('users', {
   username: text('username').unique(),
   avatar: text('avatar'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  // Set when an admin bans the account for an objectionable-content report.
+  // requireAuth rejects any request from a banned user (403), so a ban ejects
+  // them from both reads and writes — App Store Guideline 1.2 "eject the user".
+  bannedAt: timestamp('banned_at', { withTimezone: true }),
 });
 
 // Server-side refresh-token store for rotation + reuse detection. Each row is one
@@ -279,6 +283,50 @@ export const roundLikes = pgTable(
   }),
 );
 
+// --- Moderation -----------------------------------------------------------
+//
+// Server-owned UGC-safety state (App Store Guideline 1.2 / Google Play UGC):
+// directed user blocks and a report ledger an admin actions. Also NOT synced.
+
+// A directed block. blocker_id no longer sees, is seen by, or can be contacted
+// by blocked_id; every /community read excludes pairs blocked in EITHER
+// direction (see blockedPairExists). PK collapses duplicate blocks.
+export const userBlocks = pgTable(
+  'user_blocks',
+  {
+    blockerId: uuid('blocker_id').notNull(),
+    blockedId: uuid('blocked_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.blockerId, t.blockedId] }),
+    byBlocked: index('user_blocks_blocked_idx').on(t.blockedId),
+  }),
+);
+
+// A report filed against a round or a user. An admin resolves it (remove the
+// content / ban the user / dismiss); `status`='open' rows are the moderation
+// queue. target_round_id is null for user-level reports.
+export const contentReports = pgTable(
+  'content_reports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    reporterId: uuid('reporter_id').notNull(),
+    targetType: text('target_type').notNull(), // 'round' | 'user'
+    targetOwnerId: uuid('target_owner_id').notNull(),
+    targetRoundId: text('target_round_id'),
+    reason: text('reason').notNull(),
+    note: text('note'),
+    status: text('status').notNull().default('open'), // 'open' | 'resolved' | 'dismissed'
+    action: text('action'), // 'removed' | 'banned' | 'dismissed'
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  },
+  (t) => ({
+    byStatus: index('content_reports_status_idx').on(t.status, t.createdAt),
+  }),
+);
+
 // --- Notifications --------------------------------------------------------
 //
 // Also NOT synced (server-owned). Push notifications are sent through Expo's
@@ -332,6 +380,8 @@ export const schema = {
   friendRequests,
   friendships,
   roundLikes,
+  userBlocks,
+  contentReports,
   pushTokens,
   roundShareNotifications,
 };

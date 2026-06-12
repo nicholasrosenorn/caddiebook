@@ -1,8 +1,9 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, DevSettings, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, DevSettings, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
+import { ListGroup, ListRow } from '@/components/list-group';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
@@ -10,6 +11,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, THEME_ORDER, themes, type FontSet, type Palette, type ThemeId } from '@/constants/theme';
 import { useColors, useFontSet, useTheme } from '@/constants/theme-context';
 import { listFriends } from '@/lib/api/client';
+import { EULA_URL, SUPPORT_EMAIL, TERMS_URL } from '@/lib/legal';
 import { useAuth } from '@/lib/auth/provider';
 import { clearAllRounds, seedSampleRounds } from '@/lib/dev-seed';
 import { drainNow, subscribeOutbox } from '@/lib/data/outbox';
@@ -116,23 +118,31 @@ export default function SettingsScreen() {
 
         {session ? (
           <View style={styles.section}>
-            <ThemedText type="caption">CLUBHOUSE</ThemedText>
-            <Pressable
-              onPress={() => router.push('/friends')}
-              accessibilityRole="button"
-              accessibilityLabel="View friends"
-              style={({ pressed }) => pressed && styles.cardPressed}>
-              <SketchSurface seed="friends-card" radius={12} style={styles.communityRow}>
-                <IconSymbol name="person.2.fill" size={20} color={colors.accent} />
-                <ThemedText style={styles.cardLabel}>Friends</ThemedText>
-                {friendCount !== null ? (
-                  <View style={styles.countChip}>
-                    <ThemedText style={styles.countText}>{friendCount}</ThemedText>
+            <ThemedText type="caption" style={styles.sectionTitle}>
+              CLUBHOUSE
+            </ThemedText>
+            <ListGroup seed="clubhouse-group">
+              <ListRow
+                icon="person.2.fill"
+                label="Friends"
+                onPress={() => router.push('/friends')}
+                right={
+                  <View style={styles.trailing}>
+                    {friendCount !== null ? (
+                      <ThemedText type="muted" style={styles.trailingValue}>
+                        {friendCount}
+                      </ThemedText>
+                    ) : null}
+                    <IconSymbol name="chevron.right" size={16} color={colors.textMuted} />
                   </View>
-                ) : null}
-                <IconSymbol name="chevron.right" size={16} color={colors.textMuted} />
-              </SketchSurface>
-            </Pressable>
+                }
+              />
+              <ListRow
+                icon="hand.raised"
+                label="Blocked"
+                onPress={() => router.push('/blocked-users' as any)}
+              />
+            </ListGroup>
           </View>
         ) : null}
 
@@ -150,6 +160,29 @@ export default function SettingsScreen() {
             />
           ))}
         </View>
+        </View>
+
+        <View style={styles.section}>
+          <ThemedText type="caption" style={styles.sectionTitle}>
+            ABOUT &amp; SAFETY
+          </ThemedText>
+          <ListGroup seed="about-group">
+            <ListRow
+              icon="envelope"
+              label="Contact us"
+              onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
+            />
+            <ListRow
+              icon="checkmark.shield"
+              label="Community Guidelines"
+              onPress={() => Linking.openURL(EULA_URL)}
+            />
+            <ListRow
+              icon="doc.text"
+              label="Terms of Service"
+              onPress={() => Linking.openURL(TERMS_URL)}
+            />
+          </ListGroup>
         </View>
 
         {__DEV__ && (
@@ -391,6 +424,15 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       fontFamily: fonts.serifBold,
       fontSize: 14,
       color: colors.accent,
+    },
+    trailing: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
+    trailingValue: {
+      fontFamily: fonts.serif,
+      fontSize: 16,
     },
     syncError: {
       fontSize: 13,

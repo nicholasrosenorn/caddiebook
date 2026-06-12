@@ -48,7 +48,7 @@ const QUESTIONS: Question[] = [
   {
     id: 'motivation',
     title: 'What brings you to\nCaddie Book?',
-    options: ['Compete', 'Improve my game', 'Log my rounds', 'Play more social'],
+    options: ['Compete', 'Improve my game', 'Log my rounds', 'Play socially'],
     tip: {
       insight: 'Golfers who track their game improve up to 2× faster than those who only keep score.',
       feature:

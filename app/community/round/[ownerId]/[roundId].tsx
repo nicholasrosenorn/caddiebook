@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 
 import { ApproachTarget } from '@/components/approach-target';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
+import { ModerationMenu } from '@/components/moderation-menu';
 import { Scorecard } from '@/components/scorecard';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
@@ -117,6 +118,12 @@ export default function FriendRoundScreen() {
               color={colors.accent}
             />
             <ThemedText style={styles.ownerName}>{ownerName}</ThemedText>
+            <View style={{ flex: 1 }} />
+            <ModerationMenu
+              user={detail.owner}
+              round={{ ownerId: detail.ownerId, roundId: detail.id }}
+              onBlocked={() => router.back()}
+            />
           </View>
           <ThemedText type="caption">{formatDate(detail.datePlayed)}</ThemedText>
           <ThemedText type="title">{detail.courseName}</ThemedText>

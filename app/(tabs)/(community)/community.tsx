@@ -21,6 +21,7 @@ import Animated, {
 
 import { EdgeSwipeOpener } from '@/components/edge-swipe-opener';
 import { HeaderIconButton } from '@/components/header-icon-button';
+import { ModerationMenu } from '@/components/moderation-menu';
 import { PressableScale } from '@/components/pressable-scale';
 import { Screen } from '@/components/screen';
 import { SketchDivider, SketchSurface, TopoChip } from '@/components/sketch';
@@ -86,6 +87,11 @@ export default function CommunityScreen() {
       setLoadingMore(false);
     }
   }, [cursor, loadingMore]);
+
+  // Drop every round by a now-blocked owner out of the feed immediately.
+  const onBlocked = useCallback((ownerId: string) => {
+    setRounds((prev) => prev?.filter((r) => r.ownerId !== ownerId) ?? null);
+  }, []);
 
   // Optimistic like toggle, reconciled with the server's authoritative count.
   const onToggleLike = useCallback(async (item: FeedRound) => {
@@ -217,7 +223,14 @@ export default function CommunityScreen() {
           }
           renderItem={({ item, index }) => (
             <Animated.View entering={listItemIn(index)}>
-              <FeedCard item={item} onToggleLike={() => onToggleLike(item)} colors={colors} styles={styles} />
+              <FeedCard
+                item={item}
+                myId={session?.user?.id}
+                onToggleLike={() => onToggleLike(item)}
+                onBlocked={() => onBlocked(item.ownerId)}
+                colors={colors}
+                styles={styles}
+              />
             </Animated.View>
           )}
         />
@@ -229,12 +242,16 @@ export default function CommunityScreen() {
 
 function FeedCard({
   item,
+  myId,
   onToggleLike,
+  onBlocked,
   colors,
   styles,
 }: {
   item: FeedRound;
+  myId?: string;
   onToggleLike: () => void;
+  onBlocked: () => void;
   colors: Palette;
   styles: ReturnType<typeof makeStyles>;
 }) {
@@ -264,7 +281,16 @@ function FeedCard({
               </ThemedText>
             ) : null}
           </View>
-          <ThemedText type="muted" style={styles.date}>{formatDate(item.datePlayed)}</ThemedText>
+          <View style={styles.ownerMeta}>
+            <ThemedText type="muted" style={styles.date}>{formatDate(item.datePlayed)}</ThemedText>
+            {myId && item.ownerId !== myId ? (
+              <ModerationMenu
+                user={item.owner}
+                round={{ ownerId: item.ownerId, roundId: item.id }}
+                onBlocked={onBlocked}
+              />
+            ) : null}
+          </View>
         </View>
 
         <ThemedText type="subtitle" numberOfLines={1} style={styles.course}>
@@ -447,9 +473,15 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     ownerHandle: {
       fontSize: 12,
     },
+    ownerMeta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.sm,
+      alignSelf: 'flex-start',
+      paddingTop: 2,
+    },
     date: {
       fontSize: 12,
-      alignSelf: 'flex-start',
     },
     course: {
       color: colors.textPrimary,

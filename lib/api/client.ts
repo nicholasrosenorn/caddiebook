@@ -9,6 +9,7 @@ import type {
   AcceptResponse,
   AuthResponse,
   AuthUser,
+  BlockedUsersResponse,
   FeedResponse,
   FriendRoundDetail,
   FriendsResponse,
@@ -20,6 +21,7 @@ import type {
   PublicProfile,
   PushResponse,
   RefreshResponse,
+  ReportRequest,
   RequestCountResponse,
   RoundLikersResponse,
   SendRequestResponse,
@@ -39,6 +41,10 @@ export class UsernameTakenError extends Error {}
 // Thrown by sendFriendRequest so the add-friend UI can give a precise message.
 export class UserNotFoundError extends Error {}
 export class AlreadyFriendsError extends Error {}
+
+// Thrown when the server rejects a write (422) for objectionable language, so
+// the profile UI can show "let's keep it clean" instead of a generic failure.
+export class ObjectionableLanguageError extends Error {}
 
 // Thrown by authedRequest for a non-ok response, carrying the status so callers
 // (the outbox) can distinguish a permanent 4xx from a transient 5xx/429.
@@ -138,6 +144,7 @@ export function getMe(): Promise<AuthUser> {
 export async function updateProfile(patch: ProfileUpdate): Promise<AuthUser> {
   const res = await authedRaw('/auth/me', 'PATCH', patch);
   if (res.status === 409) throw new UsernameTakenError('username taken');
+  if (res.status === 422) throw new ObjectionableLanguageError('objectionable language');
   if (!res.ok) throw new Error(`profile update failed: ${res.status}`);
   return (await res.json()) as AuthUser;
 }
@@ -244,6 +251,27 @@ export async function listNotifications(): Promise<NotificationItem[]> {
   );
   return notifications;
 }
+
+// --- Moderation (authenticated) --------------------------------------------
+
+export async function blockUser(userId: string): Promise<void> {
+  await authedRequest(`/community/users/${userId}/block`, 'POST');
+}
+
+export async function unblockUser(userId: string): Promise<void> {
+  await authedRequest(`/community/users/${userId}/block`, 'DELETE');
+}
+
+export async function listBlockedUsers(): Promise<PublicProfile[]> {
+  const { blocked } = await authedRequest<BlockedUsersResponse>('/community/blocks', 'GET');
+  return blocked;
+}
+
+export async function reportContent(payload: ReportRequest): Promise<void> {
+  await authedRequest('/community/reports', 'POST', payload);
+}
+
+// --- Push tokens (authenticated) -------------------------------------------
 
 export async function registerPushToken(token: string, platform?: string): Promise<void> {
   await authedRequest('/notifications/token', 'POST', { token, platform });
