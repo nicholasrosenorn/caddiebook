@@ -23,21 +23,12 @@ import { approachResult, driverLane, type DriverLane } from '@/lib/shots';
 import {
   computePerParAverages,
   computeScoreDistribution,
+  PUTT_BUCKETS,
   resolveGir,
   resolveUpAndDown,
   type PerParAverages,
   type ScoreDistribution,
 } from '@/lib/stats';
-
-// Putt distance buckets — kept in sync with components/putting-page.tsx (BANDS)
-// and app/round/[id]/summary.tsx (PUTT_BUCKETS). distance_ft is the upper bound.
-export const PUTT_BUCKETS = [
-  { ft: 3, label: '<3 ft' },
-  { ft: 10, label: '3–10 ft' },
-  { ft: 15, label: '10–15 ft' },
-  { ft: 25, label: '15–25 ft' },
-  { ft: 50, label: '25+ ft' },
-] as const;
 
 export type HoleCountFilter = 'all' | 9 | 18;
 export type RoundsFilter = 20 | 40 | 60 | 'all';

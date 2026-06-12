@@ -56,7 +56,7 @@ export default function WedgeGridScreen() {
 
   // The cached settings query is the source of truth; setters patch the cache
   // synchronously (optimistic) and queue the server write.
-  const { bag: storedBag } = useBag();
+  const { bag: storedBag, bagSet } = useBag();
   const { yardages } = useClubYardages();
   const { partials } = useWedgePartials();
   const setBag = useSetBag();
@@ -64,8 +64,8 @@ export default function WedgeGridScreen() {
   const setWedgePartial = useSetWedgePartial();
 
   const bag = useMemo(
-    () => (storedBag.length > 0 ? storedBag : [...CLUB_OPTIONS]),
-    [storedBag],
+    () => (bagSet ? storedBag : [...CLUB_OPTIONS]),
+    [bagSet, storedBag],
   );
   const wedges = useMemo(() => wedgesFromBag(bag), [bag]);
 

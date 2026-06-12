@@ -108,6 +108,7 @@ export function DrivePage({ roundId, hole, shotsForRound, onComplete }: Props) {
       ) : (
         <View style={styles.hintRow}>
           <InfoHint
+            size={16}
             title="Marking your drive"
             message="Tap the fairway oval where your drive came to rest. Left, center, or right lane sets the line; the center lane counts as a fairway hit (FIR). Tap again to move it. The club chips below record what you hit."
           />
@@ -186,6 +187,7 @@ const makeStyles = (colors: Palette) =>
     flexShrink: 1,
     textAlign: 'center',
     color: colors.textMuted,
+    fontSize: 13,
   },
   form: {
     gap: spacing.md,

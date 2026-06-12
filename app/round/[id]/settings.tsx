@@ -15,7 +15,7 @@ export default function RoundSettingsScreen() {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, inRound } = useLocalSearchParams<{ id: string; inRound?: string }>();
   const insets = useSafeAreaInsets();
   const [ratingText, setRatingText] = useState('');
   const [slopeText, setSlopeText] = useState('');
@@ -92,20 +92,23 @@ export default function RoundSettingsScreen() {
           ) : null}
         </View>
 
-        <Pressable
-          onPress={() => router.replace(`/round/${round.id}` as any)}
-          accessibilityRole="button"
-          accessibilityLabel="Edit round"
-          style={({ pressed }) => [styles.editCtaWrap, pressed && styles.pressed]}>
-          <SketchSurface
-            seed="settings-edit"
-            fill={colors.surface}
-            stroke={colors.borderStrong}
-            style={styles.editCta}>
-            <IconSymbol name="pencil" size={16} color={colors.accent} />
-            <ThemedText style={styles.editCtaLabel}>Edit round</ThemedText>
-          </SketchSurface>
-        </Pressable>
+        {/* Hidden when reached from the in-round menu — you're already editing. */}
+        {!inRound ? (
+          <Pressable
+            onPress={() => router.replace(`/round/${round.id}` as any)}
+            accessibilityRole="button"
+            accessibilityLabel="Edit round"
+            style={({ pressed }) => [styles.editCtaWrap, pressed && styles.pressed]}>
+            <SketchSurface
+              seed="settings-edit"
+              fill={colors.surface}
+              stroke={colors.borderStrong}
+              style={styles.editCta}>
+              <IconSymbol name="pencil" size={16} color={colors.accent} />
+              <ThemedText style={styles.editCtaLabel}>Edit round</ThemedText>
+            </SketchSurface>
+          </Pressable>
+        ) : null}
 
         <SketchSurface seed="settings-hcp-toggle" style={styles.card}>
           <Pressable

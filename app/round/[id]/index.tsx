@@ -208,7 +208,11 @@ export default function RoundScreen() {
                 <PuttingPage roundId={id} hole={currentHole} putts={putts} />
               </View>
               <View style={{ height: pageHeight }}>
-                <HoleStatsPage roundId={id} hole={currentHole} />
+                <HoleStatsPage
+                  key={`hole-stats-${currentHole.holeNumber}`}
+                  roundId={id}
+                  hole={currentHole}
+                />
               </View>
             </ScrollView>
 

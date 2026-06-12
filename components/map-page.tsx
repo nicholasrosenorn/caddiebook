@@ -37,6 +37,9 @@ const ZOOM_EXIT_SPAN_YDS = 120;
 // Dispersion overlay: historical approaches from holes played within this
 // many yards of the live target distance.
 const DISPERSION_WINDOW_YDS = 15;
+// Cap the overlay to the most recent shots (by round date played) — keeps the
+// map cheap to render and weights the picture toward recent form.
+const MAX_DISPERSION_SHOTS = 100;
 // Approach shots store (xNorm, yNorm) with the pin at (0.5, 0.5); the outer
 // ring's normalized radius ↔ feet pair sets the physical scale.
 const OUTER_RING = APPROACH_RINGS[APPROACH_RINGS.length - 1];
@@ -48,6 +51,8 @@ type ApproachSample = {
   xNorm: number;
   yNorm: number;
   distanceYds: number;
+  playedAt: string;
+  holeNumber: number;
 };
 
 type PermissionState = 'pending' | 'granted' | 'denied';
@@ -109,6 +114,7 @@ export function MapPage() {
     if (!statsData) return [];
     const { rounds, holes, shots } = statsData;
     const completed = new Set(rounds.filter((r) => r.completedAt != null).map((r) => r.id));
+    const roundById = new Map(rounds.map((r) => [r.id, r]));
     const holeByKey = new Map(holes.map((h) => [`${h.roundId}:${h.holeNumber}`, h]));
     const samples: ApproachSample[] = [];
     for (const shot of shots) {
@@ -116,13 +122,21 @@ export function MapPage() {
       if (!completed.has(shot.roundId)) continue;
       const hole = holeByKey.get(`${shot.roundId}:${shot.holeNumber}`);
       if (!hole || hole.approachDistanceYds == null || hole.greenBlocked) continue;
+      const round = roundById.get(shot.roundId);
+      if (!round) continue;
       samples.push({
         key: shot.id,
         xNorm: shot.xNorm,
         yNorm: shot.yNorm,
         distanceYds: hole.approachDistanceYds,
+        playedAt: round.datePlayed,
+        holeNumber: shot.holeNumber,
       });
     }
+    // Newest round first, so windowing + slicing below keeps the most recent.
+    samples.sort(
+      (a, b) => b.playedAt.localeCompare(a.playedAt) || b.holeNumber - a.holeNumber,
+    );
     return samples;
   }, [statsData]);
 
@@ -247,10 +261,11 @@ export function MapPage() {
     if (!zoomedIn || !dispersionOn || !userLoc || !target || distanceYds == null) {
       return null;
     }
-    const inWindow = history.filter(
-      (s) => Math.abs(s.distanceYds - distanceYds) <= DISPERSION_WINDOW_YDS,
-    );
-    if (inWindow.length === 0) return null;
+    // history is pre-sorted newest-first, so the filtered slice is too — cap to
+    // the most recent shots within the window.
+    const inWindow = history
+      .filter((s) => Math.abs(s.distanceYds - distanceYds) <= DISPERSION_WINDOW_YDS)
+      .slice(0, MAX_DISPERSION_SHOTS);
     const bearing = bearingDeg(userLoc, target);
     return {
       count: inWindow.length,
@@ -404,12 +419,17 @@ export function MapPage() {
               <ThemedText style={styles.chipNumber}>{distanceYds}</ThemedText>
               <ThemedText style={styles.chipUnit}>yds</ThemedText>
             </View>
-            {dispersion != null && (
-              <ThemedText style={styles.chipCaption}>
-                {dispersion.count} {dispersion.count === 1 ? 'shot' : 'shots'} ·{' '}
-                {dispersion.lo}–{dispersion.hi} yds
-              </ThemedText>
-            )}
+            {dispersion != null &&
+              (dispersion.count === 0 ? (
+                <ThemedText style={styles.chipCaption}>
+                  No tracked shots · {dispersion.lo}–{dispersion.hi} yds
+                </ThemedText>
+              ) : (
+                <ThemedText style={styles.chipCaption}>
+                  {dispersion.count} {dispersion.count === 1 ? 'shot' : 'shots'} ·{' '}
+                  {dispersion.lo}–{dispersion.hi} yds
+                </ThemedText>
+              ))}
           </>
         ) : (
           <ThemedText type="muted" style={styles.chipHint}>
@@ -443,11 +463,12 @@ export function MapPage() {
           {({ pressed }) => (
             <>
               <GlassSurface borderRadius={20} />
+              {dispersionOn && <View style={styles.activeFill} pointerEvents="none" />}
               {pressed && <View style={styles.pressedOverlay} pointerEvents="none" />}
               <IconSymbol
                 name="aqi.medium"
                 size={18}
-                color={dispersionOn ? colors.accent : colors.textPrimary}
+                color={dispersionOn ? colors.accentOn : colors.textPrimary}
               />
             </>
           )}
@@ -464,11 +485,12 @@ export function MapPage() {
           {({ pressed }) => (
             <>
               <GlassSurface borderRadius={20} />
+              {zoomedIn && <View style={styles.activeFill} pointerEvents="none" />}
               {pressed && <View style={styles.pressedOverlay} pointerEvents="none" />}
               <IconSymbol
                 name="magnifyingglass"
                 size={18}
-                color={zoomedIn ? colors.accent : colors.textPrimary}
+                color={zoomedIn ? colors.accentOn : colors.textPrimary}
               />
             </>
           )}
@@ -610,5 +632,10 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       ...StyleSheet.absoluteFillObject,
       borderRadius: 20,
       backgroundColor: colors.accentMuted,
+    },
+    activeFill: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: 20,
+      backgroundColor: colors.accent,
     },
   });

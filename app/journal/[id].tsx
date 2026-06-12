@@ -45,6 +45,11 @@ export default function JournalEntryScreen() {
   bodyRef.current = body;
   entryIdRef.current = entryId;
 
+  // The last-persisted tag/body, so a write is skipped when nothing changed.
+  // Bumping updated_at on a no-op save would reorder the list and falsify the date.
+  const savedTagRef = useRef<JournalTag | null>(null);
+  const savedBodyRef = useRef<string | null>(null);
+
   // Hydrate an existing entry from the cached journal list.
   useEffect(() => {
     if (isNew || !id || loaded) return;
@@ -52,6 +57,8 @@ export default function JournalEntryScreen() {
     if (!entry) return;
     setTag(entry.tag);
     setBody(entry.body ?? '');
+    savedTagRef.current = entry.tag;
+    savedBodyRef.current = (entry.body ?? '').trim();
     setLoaded(true);
   }, [id, isNew, loaded, entries]);
 
@@ -60,6 +67,8 @@ export default function JournalEntryScreen() {
     return () => {
       const trimmed = bodyRef.current.trim();
       if (entryIdRef.current) {
+        // Skip a no-op save so we don't bump the entry's date for an untouched open.
+        if (tagRef.current === savedTagRef.current && trimmed === savedBodyRef.current) return;
         void updateEntry(entryIdRef.current, { tag: tagRef.current, body: trimmed });
       } else if (trimmed.length > 0) {
         void createEntry({ tag: tagRef.current, body: trimmed });
@@ -72,11 +81,17 @@ export default function JournalEntryScreen() {
   const persist = async (nextTag: JournalTag, nextBody: string): Promise<string | null> => {
     const trimmed = nextBody.trim();
     if (entryId) {
+      // Only write (and bump the date) when the tag or body actually changed.
+      if (nextTag === savedTagRef.current && trimmed === savedBodyRef.current) return entryId;
+      savedTagRef.current = nextTag;
+      savedBodyRef.current = trimmed;
       await updateEntry(entryId, { tag: nextTag, body: trimmed });
       return entryId;
     }
     if (trimmed.length === 0) return null;
     const newId = await createEntry({ tag: nextTag, body: trimmed });
+    savedTagRef.current = nextTag;
+    savedBodyRef.current = trimmed;
     // Update the ref synchronously so the unmount-save (which may run before the
     // next render) sees the new id and updates rather than creating a duplicate.
     entryIdRef.current = newId;

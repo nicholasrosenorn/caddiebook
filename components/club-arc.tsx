@@ -51,8 +51,10 @@ function apexHeight(span: number, loft: number, maxH: number): number {
 
 // One drawn trajectory: a ground line, a tee with a teed ball, a dotted arc,
 // and a flag at the landing point. Position-aware — the flag's x IS the
-// yardage. `active` inks it green (set / being dragged); otherwise it's a muted
-// resting line. When carry is null it parks muted at `parkedAt`.
+// yardage. `active` inks it green (set); otherwise it's a muted resting line.
+// When carry is null it parks muted at `parkedAt`. Set `flag={false}` to omit
+// the landing flag so a caller can render it as an animated overlay instead
+// (see `ArcFlag`).
 type ClubArcProps = {
   width: number;
   height: number;
@@ -60,6 +62,7 @@ type ClubArcProps = {
   active?: boolean;
   loft?: number;
   parkedAt?: number;
+  flag?: boolean;
 };
 
 function ClubArcImpl({
@@ -69,6 +72,7 @@ function ClubArcImpl({
   active = false,
   loft = 0.5,
   parkedAt = 100,
+  flag = true,
 }: ClubArcProps) {
   const colors = useColors();
   const groundY = height - 12;
@@ -111,19 +115,58 @@ function ClubArcImpl({
         opacity={set ? 1 : 0.7}
       />
 
-      {/* Flag at the landing */}
-      <Line x1={x1} y1={groundY} x2={x1} y2={groundY - 16} stroke={flagInk} strokeWidth={1.6} />
-      <Polygon
-        points={`${x1},${groundY - 16} ${x1 + 9},${groundY - 13} ${x1},${groundY - 10}`}
-        fill={flagInk}
-        opacity={set ? 1 : 0.6}
-      />
-      <Circle cx={x1} cy={groundY} r={2.2} fill={flagInk} />
+      {/* Flag at the landing (omitted when a caller renders ArcFlag itself) */}
+      {flag && (
+        <>
+          <Line x1={x1} y1={groundY} x2={x1} y2={groundY - 16} stroke={flagInk} strokeWidth={1.6} />
+          <Polygon
+            points={`${x1},${groundY - 16} ${x1 + 9},${groundY - 13} ${x1},${groundY - 10}`}
+            fill={flagInk}
+            opacity={set ? 1 : 0.6}
+          />
+          <Circle cx={x1} cy={groundY} r={2.2} fill={flagInk} />
+        </>
+      )}
     </Svg>
   );
 }
 
 export const ClubArc = memo(ClubArcImpl);
+
+// The landing flag, extracted so it can ride an animated overlay (gliding to a
+// new carry on commit) while `ClubArc` redraws the static flight path beneath.
+// Drawn in a compact SVG with the pole at a fixed local x; the caller positions
+// it with `flagOffsetX(carry, width)` as a `translateX`.
+const FLAG_W = 24;
+const FLAG_POLE_X = 4;
+
+// translateX that lands ArcFlag's pole exactly at `carry`'s x on the band.
+export function flagOffsetX(carry: number, width: number): number {
+  return carryToX(carry, width) - FLAG_POLE_X;
+}
+
+type ArcFlagProps = { height: number; set: boolean };
+
+function ArcFlagImpl({ height, set }: ArcFlagProps) {
+  const colors = useColors();
+  const groundY = height - 12;
+  const ink = set ? colors.accent : colors.borderStrong;
+  const x = FLAG_POLE_X;
+  return (
+    <Svg width={FLAG_W} height={height} pointerEvents="none">
+      <Line x1={x} y1={groundY} x2={x} y2={groundY - 16} stroke={ink} strokeWidth={1.6} />
+      <Polygon
+        points={`${x},${groundY - 16} ${x + 9},${groundY - 13} ${x},${groundY - 10}`}
+        fill={ink}
+        opacity={set ? 1 : 0.6}
+      />
+      <Circle cx={x} cy={groundY} r={2.2} fill={ink} />
+    </Svg>
+  );
+}
+
+export const ArcFlag = memo(ArcFlagImpl);
+export { FLAG_W };
 
 // The "your bag" plate: all set clubs as nested arcs from one tee, landing at
 // flags along a shared ground line. The silhouette of the whole bag — the gaps

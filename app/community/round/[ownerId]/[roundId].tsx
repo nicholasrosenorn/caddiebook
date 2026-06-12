@@ -7,14 +7,27 @@ import { DriverTarget, type TargetPin } from '@/components/driver-target';
 import { Scorecard } from '@/components/scorecard';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
+import {
+  ScoreDistributionBars,
+  Section,
+  SplitDistanceBars,
+  StatTile,
+} from '@/components/stats-figures';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import { getFriendRound, likeRound, unlikeRound } from '@/lib/api/client';
-import { wireHoleToHole, wireShotToShot } from '@/lib/community/map';
+import { wireHoleToHole, wirePuttToPutt, wireShotToShot } from '@/lib/community/map';
 import type { FriendRoundDetail } from '@/lib/api/types';
-import { computeRoundSummary, formatPct, totalPar } from '@/lib/stats';
+import {
+  computePerParAverages,
+  computeRoundSummary,
+  computeScoreDistribution,
+  formatPct,
+  PUTT_BUCKETS,
+  totalPar,
+} from '@/lib/stats';
 
 export default function FriendRoundScreen() {
   const colors = useColors();
@@ -74,9 +87,12 @@ export default function FriendRoundScreen() {
 
   const holes = detail.holes.map(wireHoleToHole);
   const shots = detail.shots.map(wireShotToShot);
+  const putts = detail.putts.map(wirePuttToPutt);
   const summary = computeRoundSummary(holes);
   const parPlayed = totalPar(holes);
   const toPar = summary.holesPlayed > 0 ? summary.totalScore - parPlayed : null;
+  const perPar = computePerParAverages(holes);
+  const distribution = computeScoreDistribution(holes);
   const ownerName = detail.owner.username
     ? `@${detail.owner.username}`
     : detail.owner.firstName ?? 'A friend';
@@ -118,25 +134,15 @@ export default function FriendRoundScreen() {
             <ThemedText type="caption">TO PAR</ThemedText>
             <ThemedText style={styles.bigScore}>{toPar == null ? '—' : formatToPar(toPar)}</ThemedText>
           </View>
-          <View style={styles.scoreDivider} />
-          <View style={styles.scoreCol}>
-            <ThemedText type="caption">HOLES</ThemedText>
-            <ThemedText style={styles.bigScore}>
-              {summary.holesPlayed}
-              <ThemedText style={styles.bigScoreSuffix}>/{detail.holeCount}</ThemedText>
-            </ThemedText>
-          </View>
         </SketchSurface>
 
         <View style={styles.statRow}>
-          <StatTile label="GIR" value={formatPct(summary.girPct)} colors={colors} styles={styles} />
-          <StatTile label="FIR" value={formatPct(summary.firPct)} colors={colors} styles={styles} />
-          <StatTile label="U&D" value={formatPct(summary.udPct)} colors={colors} styles={styles} />
+          <StatTile label="GIR" value={formatPct(summary.girPct)} />
+          <StatTile label="FIR" value={formatPct(summary.firPct)} />
+          <StatTile label="U&D" value={formatPct(summary.udPct)} />
           <StatTile
             label="Putts"
             value={summary.totalPutts > 0 ? String(summary.totalPutts) : '—'}
-            colors={colors}
-            styles={styles}
           />
         </View>
 
@@ -158,12 +164,24 @@ export default function FriendRoundScreen() {
           </Pressable>
         </View>
 
-        <Section title="Scorecard" styles={styles}>
+        <Section title="Scorecard">
           <Scorecard holes={holes} />
         </Section>
 
+        <Section title="Scoring by par">
+          <View style={styles.statRow}>
+            <StatTile label="Par 3" value={formatAvg(perPar.par3)} />
+            <StatTile label="Par 4" value={formatAvg(perPar.par4)} />
+            <StatTile label="Par 5" value={formatAvg(perPar.par5)} />
+          </View>
+        </Section>
+
+        <Section title="Score distribution">
+          <ScoreDistributionBars distribution={distribution} />
+        </Section>
+
         {drivePins.length > 0 ? (
-          <Section title="Drive dispersion" styles={styles}>
+          <Section title="Drive dispersion">
             <View style={styles.targetWrap}>
               <DriverTarget pins={drivePins} width={233} height={350} />
             </View>
@@ -171,10 +189,25 @@ export default function FriendRoundScreen() {
         ) : null}
 
         {approachPins.length > 0 ? (
-          <Section title="Approach dispersion" styles={styles}>
+          <Section title="Approach dispersion">
             <View style={styles.targetWrap}>
               <ApproachTarget pins={approachPins} size={240} />
             </View>
+          </Section>
+        ) : null}
+
+        {putts.length > 0 ? (
+          <Section title="Putting">
+            <SplitDistanceBars
+              seedPrefix="putt"
+              successLabel="Made"
+              failLabel="Missed"
+              rows={PUTT_BUCKETS.map((b) => {
+                const inBucket = putts.filter((p) => p.distanceFt === b.ft);
+                const makes = inBucket.filter((p) => p.made).length;
+                return { key: String(b.ft), label: b.label, success: makes, total: inBucket.length };
+              })}
+            />
           </Section>
         ) : null}
       </ScrollView>
@@ -182,43 +215,8 @@ export default function FriendRoundScreen() {
   );
 }
 
-function Section({
-  title,
-  children,
-  styles,
-}: {
-  title: string;
-  children: React.ReactNode;
-  styles: ReturnType<typeof makeStyles>;
-}) {
-  return (
-    <View style={styles.section}>
-      <ThemedText type="subtitle">{title}</ThemedText>
-      <View style={styles.sectionBody}>{children}</View>
-    </View>
-  );
-}
-
-function StatTile({
-  label,
-  value,
-  styles,
-}: {
-  label: string;
-  value: string;
-  colors: Palette;
-  styles: ReturnType<typeof makeStyles>;
-}) {
-  return (
-    <SketchSurface seed={`friend-stat-${label}`} style={styles.statTile}>
-      <ThemedText type="caption" numberOfLines={1}>
-        {label.toUpperCase()}
-      </ThemedText>
-      <ThemedText style={styles.statTileValue} numberOfLines={1}>
-        {value}
-      </ThemedText>
-    </SketchSurface>
-  );
+function formatAvg(value: number | null): string {
+  return value != null ? value.toFixed(1) : '—';
 }
 
 function formatDate(iso: string | null): string {
@@ -284,30 +282,9 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       color: colors.textPrimary,
       lineHeight: 40,
     },
-    bigScoreSuffix: {
-      fontFamily: fonts.serif,
-      fontSize: 18,
-      lineHeight: 24,
-      color: colors.textSecondary,
-    },
     statRow: {
       flexDirection: 'row',
       gap: spacing.sm,
-    },
-    statTile: {
-      flex: 1,
-      minWidth: 0,
-      minHeight: 64,
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.sm,
-      gap: 4,
-      alignItems: 'center',
-    },
-    statTileValue: {
-      fontFamily: fonts.serifBold,
-      fontSize: 20,
-      lineHeight: 27,
-      color: colors.textPrimary,
     },
     likeRow: {
       flexDirection: 'row',
@@ -322,12 +299,6 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     },
     pressed: {
       opacity: 0.6,
-    },
-    section: {
-      gap: spacing.md,
-    },
-    sectionBody: {
-      gap: spacing.sm,
     },
     targetWrap: {
       alignItems: 'center',

@@ -55,10 +55,10 @@ export default function NewRoundScreen() {
   // cached server queries. Brand-new bag shows every club; the player trims it.
   const { data: coursesData } = useCourses();
   const courses = useMemo(() => coursesData ?? [], [coursesData]);
-  const { bag: storedBag } = useBag();
+  const { bag: storedBag, bagSet } = useBag();
   const bag = useMemo(
-    () => (storedBag.length > 0 ? storedBag : [...CLUB_OPTIONS]),
-    [storedBag],
+    () => (bagSet ? storedBag : [...CLUB_OPTIONS]),
+    [bagSet, storedBag],
   );
   const setBag = useSetBag();
   const ensureCourse = useEnsureCourse();

@@ -9,11 +9,17 @@ import { GlassSurface } from '@/components/glass-surface';
 import { Scorecard } from '@/components/scorecard';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
+import {
+  ScoreDistributionBars,
+  Section,
+  SplitDistanceBars,
+  StatTile,
+} from '@/components/stats-figures';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import type { Hole, PostRoundReview, PreRoundGoals, Putt } from '@/lib/data/models';
+import type { Hole, PostRoundReview, PreRoundGoals } from '@/lib/data/models';
 import { useRoundFull } from '@/lib/data/rounds';
 import { useStatsBundle } from '@/lib/data/stats';
 import { GOAL_CATEGORIES } from '@/lib/goals';
@@ -30,17 +36,10 @@ import {
   computeScoreDistribution,
   countGreenBlocked,
   formatPct,
+  PUTT_BUCKETS,
   totalPar,
   totalPenalties,
 } from '@/lib/stats';
-
-const PUTT_BUCKETS = [
-  { ft: 3, label: '<3 ft' },
-  { ft: 10, label: '3–10 ft' },
-  { ft: 15, label: '10–15 ft' },
-  { ft: 25, label: '15–25 ft' },
-  { ft: 50, label: '25+ ft' },
-] as const;
 
 export default function SummaryScreen() {
   const colors = useColors();
@@ -57,6 +56,11 @@ export default function SummaryScreen() {
   const putts = detail?.putts ?? [];
   const review = detail?.review ?? null;
   const goals = detail?.goals ?? null;
+
+  const holesWithNotes = useMemo(
+    () => holes.filter((h) => h.notes?.trim()),
+    [holes],
+  );
 
   // New Handicap Index after this round + how it moved from the index carried in.
   const hcp = useMemo(() => {
@@ -130,14 +134,6 @@ export default function SummaryScreen() {
               {toPar == null ? '—' : formatToPar(toPar)}
             </ThemedText>
           </View>
-          <View style={styles.scoreCardDivider} />
-          <View style={styles.scoreCardCol}>
-            <ThemedText type="caption">HOLES</ThemedText>
-            <ThemedText style={styles.bigScore}>
-              {summary.holesPlayed}
-              <ThemedText style={styles.bigScoreSuffix}>/{round.holeCount}</ThemedText>
-            </ThemedText>
-          </View>
         </SketchSurface>
 
         {hcp ? (
@@ -196,9 +192,9 @@ export default function SummaryScreen() {
 
         <Section title="Scoring by par">
           <View style={styles.perParRow}>
-            <PerParTile label="Par 3" value={perPar.par3} />
-            <PerParTile label="Par 4" value={perPar.par4} />
-            <PerParTile label="Par 5" value={perPar.par5} />
+            <StatTile label="Par 3" value={formatAvg(perPar.par3)} />
+            <StatTile label="Par 4" value={formatAvg(perPar.par4)} />
+            <StatTile label="Par 5" value={formatAvg(perPar.par5)} />
           </View>
         </Section>
 
@@ -228,7 +224,20 @@ export default function SummaryScreen() {
         </Section>
 
         <Section title="Putting">
-          <PuttingDistribution putts={putts} />
+          {putts.length === 0 ? (
+            <ThemedText type="muted">No putts logged.</ThemedText>
+          ) : (
+            <SplitDistanceBars
+              seedPrefix="putt"
+              successLabel="Made"
+              failLabel="Missed"
+              rows={PUTT_BUCKETS.map((b) => {
+                const inBucket = putts.filter((p) => p.distanceFt === b.ft);
+                const makes = inBucket.filter((p) => p.made).length;
+                return { key: String(b.ft), label: b.label, success: makes, total: inBucket.length };
+              })}
+            />
+          )}
         </Section>
 
         <Section title="Round goals">
@@ -238,6 +247,24 @@ export default function SummaryScreen() {
         <Section title="Post-round review">
           {review ? <ReviewAnswers review={review} /> : <NoReview />}
         </Section>
+
+        {holesWithNotes.length > 0 ? (
+          <Section title="Hole notes">
+            <SketchSurface seed="summary-notes" style={styles.reviewCard}>
+              {holesWithNotes.map((h, i) => (
+                <View
+                  key={h.id}
+                  style={[
+                    styles.noteRow,
+                    i < holesWithNotes.length - 1 && styles.reviewRowDivider,
+                  ]}>
+                  <ThemedText type="caption">HOLE {h.holeNumber}</ThemedText>
+                  <ThemedText style={styles.noteBody}>{h.notes?.trim()}</ThemedText>
+                </View>
+              ))}
+            </SketchSurface>
+          </Section>
+        ) : null}
       </ScrollView>
 
       <Pressable
@@ -273,179 +300,8 @@ export default function SummaryScreen() {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const colors = useColors();
-  const fonts = useFontSet();
-  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  return (
-    <View style={styles.section}>
-      <ThemedText type="subtitle">{title}</ThemedText>
-      <View style={styles.sectionBody}>{children}</View>
-    </View>
-  );
-}
-
-function StatTile({ label, value }: { label: string; value: string }) {
-  const colors = useColors();
-  const fonts = useFontSet();
-  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  return (
-    <SketchSurface seed={`summary-stat-${label}`} style={styles.statTile}>
-      <ThemedText type="caption" numberOfLines={1}>
-        {label.toUpperCase()}
-      </ThemedText>
-      <ThemedText style={styles.statTileValue} numberOfLines={1}>
-        {value}
-      </ThemedText>
-    </SketchSurface>
-  );
-}
-
-function PerParTile({ label, value }: { label: string; value: number | null }) {
-  const colors = useColors();
-  const fonts = useFontSet();
-  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  return (
-    <SketchSurface seed={`summary-perpar-${label}`} style={styles.perParTile}>
-      <ThemedText type="caption" numberOfLines={1}>
-        {label.toUpperCase()}
-      </ThemedText>
-      <ThemedText style={styles.perParValue} numberOfLines={1}>
-        {value != null ? value.toFixed(1) : '—'}
-      </ThemedText>
-    </SketchSurface>
-  );
-}
-
-function ScoreDistributionBars({
-  distribution,
-}: {
-  distribution: ReturnType<typeof computeScoreDistribution>;
-}) {
-  const colors = useColors();
-  const fonts = useFontSet();
-  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  const DIST_ROWS: {
-    key: keyof ReturnType<typeof computeScoreDistribution>;
-    label: string;
-    color: string;
-  }[] = [
-    { key: 'eagleOrBetter', label: 'Eagle+', color: colors.info },
-    { key: 'birdie', label: 'Birdie', color: colors.accent },
-    { key: 'par', label: 'Par', color: colors.borderStrong },
-    { key: 'bogey', label: 'Bogey', color: colors.warning },
-    { key: 'doubleBogey', label: 'Double', color: '#F97316' },
-    { key: 'tripleOrWorse', label: 'Triple+', color: colors.danger },
-  ];
-  const max = Math.max(1, ...DIST_ROWS.map((r) => distribution[r.key]));
-  return (
-    <View style={styles.distList}>
-      {DIST_ROWS.map((row) => {
-        const count = distribution[row.key];
-        const frac = count > 0 ? count / max : 0;
-        return (
-          <View key={row.key} style={styles.distRowItem}>
-            <ThemedText style={styles.distRowLabel}>{row.label}</ThemedText>
-            <SketchSurface
-              seed={`dist-${row.key}`}
-              radius={7}
-              fill={colors.surfaceAlt}
-              style={styles.distBarTrack}>
-              <View
-                style={[
-                  styles.distBarFill,
-                  {
-                    flex: frac,
-                    backgroundColor: count > 0 ? row.color : 'transparent',
-                    minWidth: count > 0 ? 6 : 0,
-                  },
-                ]}
-              />
-              <View style={{ flex: Math.max(0, 1 - frac) }} />
-            </SketchSurface>
-            <ThemedText type="muted" style={styles.distRowCount}>
-              {count}
-            </ThemedText>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function PuttingDistribution({ putts }: { putts: Putt[] }) {
-  const colors = useColors();
-  const fonts = useFontSet();
-  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  const buckets = PUTT_BUCKETS.map((b) => {
-    const inBucket = putts.filter((p) => p.distanceFt === b.ft);
-    const makes = inBucket.filter((p) => p.made).length;
-    const misses = inBucket.length - makes;
-    return { ...b, makes, misses, total: inBucket.length };
-  });
-
-  if (putts.length === 0) {
-    return <ThemedText type="muted">No putts logged.</ThemedText>;
-  }
-
-  return (
-    <View style={styles.puttingList}>
-      {buckets.map((b) => {
-        const makesFrac = b.total > 0 ? b.makes / b.total : 0;
-        const missesFrac = b.total > 0 ? b.misses / b.total : 0;
-        return (
-          <View key={b.ft} style={styles.puttRow}>
-            <ThemedText style={styles.puttLabel}>{b.label}</ThemedText>
-            <SketchSurface
-              seed={`putt-${b.ft}`}
-              radius={7}
-              fill={colors.surfaceAlt}
-              style={styles.puttBarTrack}>
-              <View
-                style={[
-                  styles.puttBarMake,
-                  { flex: makesFrac, minWidth: b.makes > 0 ? 6 : 0 },
-                ]}
-              />
-              <View
-                style={[
-                  styles.puttBarMiss,
-                  { flex: missesFrac, minWidth: b.misses > 0 ? 6 : 0 },
-                ]}
-              />
-              <View style={{ flex: Math.max(0, 1 - makesFrac - missesFrac) }} />
-            </SketchSurface>
-            <View style={styles.puttCounts}>
-              {b.total > 0 ? (
-                <>
-                  <ThemedText style={styles.puttPct} numberOfLines={1}>
-                    {Math.round(makesFrac * 100)}%
-                  </ThemedText>
-                  <ThemedText type="muted" style={styles.puttFraction} numberOfLines={1}>
-                    {b.makes}/{b.total}
-                  </ThemedText>
-                </>
-              ) : (
-                <ThemedText type="muted" style={styles.puttPct}>
-                  —
-                </ThemedText>
-              )}
-            </View>
-          </View>
-        );
-      })}
-      <View style={styles.puttLegend}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, styles.puttBarMake]} />
-          <ThemedText type="caption">Made</ThemedText>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendSwatch, styles.puttBarMiss]} />
-          <ThemedText type="caption">Missed</ThemedText>
-        </View>
-      </View>
-    </View>
-  );
+function formatAvg(value: number | null): string {
+  return value != null ? value.toFixed(1) : '—';
 }
 
 function RoundGoals({ goals }: { goals: PreRoundGoals | null }) {
@@ -593,12 +449,6 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     color: colors.textPrimary,
     lineHeight: 40,
   },
-  bigScoreSuffix: {
-    fontFamily: fonts.serif,
-    fontSize: 18,
-    lineHeight: 24,
-    color: colors.textSecondary,
-  },
   statGrid: {
     gap: spacing.sm,
   },
@@ -606,73 +456,9 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     flexDirection: 'row',
     gap: spacing.sm,
   },
-  statTile: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 64,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-    gap: 4,
-    alignItems: 'center',
-  },
-  statTileValue: {
-    fontFamily: fonts.serifBold,
-    fontSize: 22,
-    lineHeight: 30,
-    color: colors.textPrimary,
-  },
   perParRow: {
     flexDirection: 'row',
     gap: spacing.sm,
-  },
-  perParTile: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 64,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.sm,
-    alignItems: 'center',
-    gap: 4,
-  },
-  perParValue: {
-    fontFamily: fonts.serifBold,
-    fontSize: 22,
-    lineHeight: 30,
-    color: colors.textPrimary,
-  },
-  section: {
-    gap: spacing.md,
-  },
-  sectionBody: {
-    gap: spacing.sm,
-  },
-  distList: {
-    gap: spacing.sm,
-  },
-  distRowItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  distRowLabel: {
-    width: 64,
-    fontFamily: fonts.serif,
-    fontSize: 14,
-    color: colors.textPrimary,
-  },
-  distBarTrack: {
-    flex: 1,
-    height: 16,
-    flexDirection: 'row',
-    borderRadius: 7,
-    overflow: 'hidden',
-  },
-  distBarFill: {
-    height: '100%',
-  },
-  distRowCount: {
-    width: 28,
-    textAlign: 'right',
   },
   targetWrap: {
     alignItems: 'center',
@@ -680,62 +466,6 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
   },
   centerText: {
     textAlign: 'center',
-  },
-  puttingList: {
-    gap: spacing.sm,
-  },
-  puttRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  puttLabel: {
-    width: 64,
-    fontFamily: fonts.serif,
-    fontSize: 14,
-    color: colors.textPrimary,
-  },
-  puttBarTrack: {
-    flex: 1,
-    height: 16,
-    flexDirection: 'row',
-    borderRadius: 7,
-    overflow: 'hidden',
-  },
-  puttBarMake: {
-    backgroundColor: colors.accent,
-    height: '100%',
-  },
-  puttBarMiss: {
-    backgroundColor: colors.danger,
-    height: '100%',
-  },
-  puttCounts: {
-    width: 72,
-    alignItems: 'flex-end',
-  },
-  puttPct: {
-    fontFamily: fonts.serif,
-    fontSize: 15,
-    color: colors.textPrimary,
-  },
-  puttFraction: {
-    fontSize: 12,
-  },
-  puttLegend: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    paddingTop: spacing.xs,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  legendSwatch: {
-    width: 10,
-    height: 10,
-    borderRadius: 2,
   },
   reviewCard: {
     paddingHorizontal: spacing.xs,
@@ -761,6 +491,17 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     fontFamily: fonts.serif,
     fontSize: 16,
     lineHeight: 22,
+    color: colors.textPrimary,
+  },
+  noteRow: {
+    gap: 4,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  noteBody: {
+    fontFamily: fonts.serif,
+    fontSize: 16,
+    lineHeight: 23,
     color: colors.textPrimary,
   },
   reviewQuestion: {

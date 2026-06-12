@@ -96,6 +96,11 @@ export default function MenuScreen() {
 
   const openSettings = () => closeThen(() => router.replace('/settings' as any));
 
+  const openRoundSettings = () => {
+    if (!roundId) return;
+    closeThen(() => router.replace(`/round/${roundId}/settings?inRound=1` as any));
+  };
+
   const openGoals = () => {
     if (!roundId) return;
     closeThen(() => router.replace(`/round/${roundId}/goals` as any));
@@ -209,21 +214,24 @@ export default function MenuScreen() {
           })}
         </View>
 
-        {/* Settings pinned to the bottom of the panel */}
+        {/* Settings pinned to the bottom — round settings while in a round,
+            otherwise global app settings. */}
         <View style={styles.footer}>
           <SketchDivider seed="menu-settings" />
           <Pressable
-            onPress={openSettings}
+            onPress={roundId ? openRoundSettings : openSettings}
             accessibilityRole="button"
-            accessibilityLabel="Settings"
+            accessibilityLabel={roundId ? 'Round settings' : 'Settings'}
             style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
             <View style={styles.settingsIcon}>
               <IconSymbol name="gearshape" size={20} color={colors.textSecondary} />
             </View>
             <View style={styles.rowText}>
-              <ThemedText style={styles.rowLabel}>Settings</ThemedText>
+              <ThemedText style={styles.rowLabel}>
+                {roundId ? 'Round settings' : 'Settings'}
+              </ThemedText>
               <ThemedText type="muted" style={styles.rowHint}>
-                Theme &amp; appearance
+                {roundId ? 'Handicap · sharing · delete' : 'Theme & appearance'}
               </ThemedText>
             </View>
             <IconSymbol name="chevron.right" size={20} color={colors.textMuted} />

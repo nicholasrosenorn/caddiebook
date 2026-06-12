@@ -169,6 +169,17 @@ export function computePerParAverages(holes: Hole[]): PerParAverages {
   };
 }
 
+// Putt distance buckets — the single source of truth. `ft` is the stored
+// `distance_ft` upper bound; the `50` bucket is the open-ended "25+ ft".
+// `components/putting-page.tsx` (BANDS) mirrors these values in board order.
+export const PUTT_BUCKETS = [
+  { ft: 3, label: '<3 ft' },
+  { ft: 10, label: '3–10 ft' },
+  { ft: 15, label: '10–15 ft' },
+  { ft: 25, label: '15–25 ft' },
+  { ft: 50, label: '25+ ft' },
+] as const;
+
 export type PuttingStats = {
   total: number;
   perHole: number | null;

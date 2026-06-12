@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { BinaryChoice } from '@/components/binary-choice';
 import { OptionRow } from '@/components/option-row';
@@ -33,6 +33,28 @@ export function HoleStatsPage({ roundId, hole }: Props) {
       console.error(err);
     }
   };
+
+  // Free-text notes are held in local draft state for smooth typing and written
+  // through on blur (text writes go on blur per convention). This component is
+  // keyed by hole number in the controller, so it remounts per hole — the draft
+  // resets cleanly and the unmount flush below saves any in-progress note.
+  const [notes, setNotes] = useState(hole.notes ?? '');
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
+  const savedNotesRef = useRef((hole.notes ?? '').trim());
+
+  const saveNotes = (next: string) => {
+    const trimmed = next.trim();
+    if (trimmed === savedNotesRef.current) return;
+    savedNotesRef.current = trimmed;
+    void update('notes', trimmed.length > 0 ? trimmed : null);
+  };
+
+  // Flush an unsaved note on unmount (e.g. switching holes without blurring).
+  useEffect(() => {
+    return () => saveNotes(notesRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on unmount
+  }, []);
 
   const showFir = hole.par == null || hole.par >= 4;
   const blocked = hole.greenBlocked === true;
@@ -126,6 +148,25 @@ export function HoleStatsPage({ roundId, hole }: Props) {
         value={hole.penalties}
         onChange={(v) => update('penalties', v)}
       />
+
+      <View style={styles.notesBlock}>
+        <ThemedText type="caption">NOTES</ThemedText>
+        <SketchSurface
+          seed={`hole-notes-${hole.holeNumber}`}
+          fill={colors.surfaceAlt}
+          style={styles.notesSurface}>
+          <TextInput
+            value={notes}
+            onChangeText={setNotes}
+            onBlur={() => saveNotes(notes)}
+            placeholder="Notes for this hole…"
+            placeholderTextColor={colors.textMuted}
+            style={styles.notesInput}
+            multiline
+            textAlignVertical="top"
+          />
+        </SketchSurface>
+      </View>
     </ScrollView>
   );
 }
@@ -166,5 +207,22 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     flexShrink: 1,
     fontSize: 14,
     color: colors.textSecondary,
+  },
+  notesBlock: {
+    gap: spacing.sm,
+  },
+  notesSurface: {
+    minHeight: 80,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  notesInput: {
+    flex: 1,
+    fontFamily: fonts.serif,
+    fontSize: 16,
+    lineHeight: 23,
+    color: colors.textPrimary,
+    minHeight: 64,
+    paddingTop: spacing.xs,
   },
 });

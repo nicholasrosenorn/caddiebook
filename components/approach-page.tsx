@@ -169,6 +169,7 @@ export function ApproachPage({ roundId, hole, shotsForRound, onComplete }: Props
       ) : (
         <View style={styles.hintRow}>
           <InfoHint
+            size={16}
             title="Marking your approach"
             message="Tap the ring target where your approach finished, relative to the pin at center. Distance from center sets proximity; landing inside the rings counts as a green in regulation (GIR). Tap again to move it. Set the club and yards-in below."
           />
@@ -289,6 +290,7 @@ const makeStyles = (colors: Palette) =>
     flexShrink: 1,
     textAlign: 'center',
     color: colors.textMuted,
+    fontSize: 13,
   },
   badge: {
     alignSelf: 'center',

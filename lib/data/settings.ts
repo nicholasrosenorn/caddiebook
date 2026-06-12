@@ -111,7 +111,14 @@ export function parseWedgePartials(value: string | undefined): Record<string, We
 
 export function useBag() {
   const settings = useSettingsMap();
-  return { ...settings, bag: parseBag(settings.data?.[BAG_KEY]) };
+  // `bagSet` distinguishes a brand-new player (key absent → callers default to
+  // all clubs) from one who deliberately cleared their bag to empty (key present,
+  // value `[]` → honor it, so the bag editor's "Clear" actually clears).
+  return {
+    ...settings,
+    bag: parseBag(settings.data?.[BAG_KEY]),
+    bagSet: settings.data?.[BAG_KEY] != null,
+  };
 }
 
 export function useSetBag() {

@@ -1,11 +1,12 @@
 import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 import { router } from 'expo-router';
-import { useCallback, useMemo, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, View } from 'react-native';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, TextInput, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { PressableScale } from '@/components/pressable-scale';
 import { SketchDivider, SketchSurface, TopoChip } from '@/components/sketch';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { ThemedText } from '@/components/themed-text';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
@@ -24,6 +25,7 @@ export function MyRoundsView({ header }: { header?: ReactNode }) {
   const tabBarHeight = useBottomTabBarHeight();
   const { data, isPending } = useRounds();
   const deleteRound = useDeleteRound();
+  const [query, setQuery] = useState('');
 
   const rounds = useMemo<RoundWithSummary[] | null>(() => {
     if (!data) return null;
@@ -36,6 +38,12 @@ export function MyRoundsView({ header }: { header?: ReactNode }) {
       };
     });
   }, [data]);
+
+  const q = query.trim().toLowerCase();
+  const filteredRounds = useMemo(
+    () => (rounds && q ? rounds.filter((r) => r.courseName.toLowerCase().includes(q)) : rounds),
+    [rounds, q],
+  );
 
   const confirmDelete = useCallback(
     (round: RoundWithSummary) => {
@@ -104,9 +112,32 @@ export function MyRoundsView({ header }: { header?: ReactNode }) {
   return (
     <View style={styles.flex}>
       <FlatList
-        data={rounds}
+        data={filteredRounds ?? []}
         keyExtractor={(item) => item.id}
-        ListHeaderComponent={header ? <>{header}</> : null}
+        ListHeaderComponent={
+          <>
+            {header}
+            <SketchSurface seed="my-rounds-search" radius={8} style={styles.searchSurface}>
+              <IconSymbol name="magnifyingglass" size={18} color={colors.textMuted} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder="search by course name"
+                placeholderTextColor={colors.textMuted}
+                style={styles.searchInput}
+                returnKeyType="search"
+                autoCorrect={false}
+                autoCapitalize="none"
+                clearButtonMode="while-editing"
+              />
+            </SketchSurface>
+          </>
+        }
+        ListEmptyComponent={
+          <ThemedText type="muted" style={styles.noMatch}>
+            No rounds match “{query.trim()}”
+          </ThemedText>
+        }
         // Matches the Progress ScrollView: both views stay mounted, so pin the
         // top inset behavior to "never" on both to stop iOS auto-adjusting only
         // one of them (which shifted the header when switching tabs).
@@ -257,6 +288,26 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     list: {
       paddingHorizontal: spacing.md,
       paddingVertical: spacing.md,
+    },
+    searchSurface: {
+      minHeight: 44,
+      marginBottom: spacing.md,
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingLeft: spacing.md,
+    },
+    searchInput: {
+      flex: 1,
+      paddingLeft: spacing.sm,
+      paddingRight: spacing.md,
+      paddingVertical: spacing.sm,
+      fontSize: 16,
+      color: colors.textPrimary,
+      minHeight: 44,
+    },
+    noMatch: {
+      textAlign: 'center',
+      paddingVertical: spacing.lg,
     },
     separator: {
       height: spacing.md,

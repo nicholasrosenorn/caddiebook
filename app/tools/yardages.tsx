@@ -1,22 +1,45 @@
+import * as Haptics from 'expo-haptics';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
   View,
+  type GestureResponderEvent,
   type LayoutChangeEvent,
 } from 'react-native';
+import Animated, {
+  Easing,
+  interpolateColor,
+  ReduceMotion,
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { BagPicker } from '@/components/bag-picker';
-import { BagFan, ClubArc, clubLoft, xToCarry } from '@/components/club-arc';
+import {
+  ArcFlag,
+  BagFan,
+  CARRY_MAX,
+  CARRY_MIN,
+  CARRY_STEP,
+  ClubArc,
+  clubLoft,
+  flagOffsetX,
+  FLAG_W,
+  xToCarry,
+} from '@/components/club-arc';
 import { InfoHint } from '@/components/info-hint';
+import { PressableScale } from '@/components/pressable-scale';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { CLUB_OPTIONS, sortByDriveLength } from '@/constants/clubs';
-import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
+import { listItemIn } from '@/lib/motion';
 import {
   useBag,
   useClubYardages,
@@ -28,9 +51,12 @@ import {
 const DEFAULT_YDS = 100;
 const BAND_HEIGHT = 76;
 const FAN_HEIGHT = 132;
-// Extra vertical room around the arc that still counts as "on the flag" — keeps
-// the drag from being lost when the finger drifts off the line a little.
-const BAND_TOUCH_SLOP = 28;
+
+const lightTap = () => {
+  if (process.env.EXPO_OS === 'ios') {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  }
+};
 
 // Derive the in-play club list (Putter excluded, longest → shortest) from a bag.
 function clubsFromBag(bag: string[]): string[] {
@@ -44,7 +70,7 @@ export default function YardagesScreen() {
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   // The cached settings query is the source of truth: the setters patch the
   // cache synchronously (optimistic) so the UI updates on the same frame.
-  const { bag: storedBag } = useBag();
+  const { bag: storedBag, bagSet } = useBag();
   const { yardages } = useClubYardages();
   const setBag = useSetBag();
   const setClubYardage = useSetClubYardage();
@@ -55,10 +81,11 @@ export default function YardagesScreen() {
     markVisited();
   }, [markVisited]);
 
-  // Empty/unset bag means "all clubs" everywhere else, so show that here too.
+  // Unset bag (key absent) means "all clubs" everywhere else, so show that here
+  // too; an explicitly-cleared bag (key present, empty) is honored.
   const bag = useMemo(
-    () => (storedBag.length > 0 ? storedBag : [...CLUB_OPTIONS]),
-    [storedBag],
+    () => (bagSet ? storedBag : [...CLUB_OPTIONS]),
+    [bagSet, storedBag],
   );
   const clubs = useMemo(() => clubsFromBag(bag), [bag]);
 
@@ -96,21 +123,22 @@ export default function YardagesScreen() {
 
         <View style={styles.introRow}>
           <ThemedText type="muted" style={styles.intro}>
-            Drag a flag to set a carry distance. Long-press a yardage to clear it.
+            Tap the arc to set a carry. Use −/+ to fine-tune. Long-press a yardage to clear it.
           </ThemedText>
           <InfoHint
             title="Setting your yardages"
-            message="Drag the flag along each club's arc to set its typical carry. Once two or more clubs have a number, the full-bag fan plots them together. Long-press a yardage to clear it."
+            message="Tap along each club's arc to drop a flag at your typical carry, then nudge it with the −/+ buttons. Once two or more clubs have a number, the full-bag fan plots them together. Long-press a yardage to clear it."
           />
         </View>
 
-        {clubs.map((club) => (
-          <ArcCard
-            key={club}
-            club={club}
-            yards={yardages[club] ?? null}
-            onCommit={(next) => onCommit(club, next)}
-          />
+        {clubs.map((club, i) => (
+          <Animated.View key={club} entering={listItemIn(i)}>
+            <ArcCard
+              club={club}
+              yards={yardages[club] ?? null}
+              onCommit={(next) => onCommit(club, next)}
+            />
+          </Animated.View>
         ))}
       </ScrollView>
     </Screen>
@@ -159,75 +187,136 @@ function ArcCard({
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const [bandW, setBandW] = useState(0);
-  const [drag, setDrag] = useState<number | null>(null);
-  const display = drag ?? yards;
   const loft = useMemo(() => clubLoft(club), [club]);
 
-  // Keep the latest band width / value in refs so the (stable) PanResponder
-  // always reads current values without being recreated on every render.
-  const widthRef = useRef(0);
-  widthRef.current = bandW;
-  const yardsRef = useRef(yards);
-  yardsRef.current = yards;
+  // The landing flag rides an animated overlay so it glides to a new carry on
+  // commit while the dotted flight path redraws beneath it. `pulse` gives the
+  // yardage a brief ink-tinted swell when it changes.
+  const flagX = useSharedValue(0);
+  const pulse = useSharedValue(1);
+  const placed = useRef(false);
+  const prevYards = useRef<number | null>(yards);
 
-  const pan = useMemo(
-    () =>
-      PanResponder.create({
-        // Don't steal the touch on start — let the list scroll. Claim only once
-        // the gesture is clearly horizontal, then track the flag under the finger.
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_e, g) =>
-          Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 3,
-        // Once we own the gesture, don't let the parent ScrollView reclaim it
-        // mid-drag — the flag should stay glued to the finger until release.
-        onPanResponderTerminationRequest: () => false,
-        onPanResponderGrant: (e) => setDrag(xToCarry(e.nativeEvent.locationX, widthRef.current)),
-        onPanResponderMove: (e) => setDrag(xToCarry(e.nativeEvent.locationX, widthRef.current)),
-        onPanResponderRelease: (e) => {
-          const next = xToCarry(e.nativeEvent.locationX, widthRef.current);
-          setDrag(null);
-          if (next !== yardsRef.current) onCommit(next);
-        },
-        onPanResponderTerminate: () => setDrag(null),
-      }),
-    [onCommit],
-  );
+  // Glide the flag to the new carry. First placement (once the band is measured)
+  // is instant so the flag doesn't fly in from the edge on mount.
+  useEffect(() => {
+    if (bandW <= 0) return;
+    const target = flagOffsetX(yards ?? DEFAULT_YDS, bandW);
+    if (!placed.current) {
+      flagX.value = target;
+      placed.current = true;
+    } else {
+      flagX.value = withTiming(target, {
+        duration: 220,
+        easing: Easing.out(Easing.cubic),
+        reduceMotion: ReduceMotion.System,
+      });
+    }
+  }, [yards, bandW, flagX]);
+
+  // Swell the number when it lands on a new value (not on mount, not on clear).
+  useEffect(() => {
+    const prev = prevYards.current;
+    prevYards.current = yards;
+    if (yards == null || prev === yards) return;
+    pulse.value = withSequence(
+      withTiming(1.08, { duration: 90, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System }),
+      withTiming(1, { duration: 140, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System }),
+    );
+  }, [yards, pulse]);
+
+  const flagStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: flagX.value }],
+  }));
+  const numStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulse.value }],
+    color: interpolateColor(pulse.value, [1, 1.08], [colors.textPrimary, colors.accent]),
+  }));
 
   const onBandLayout = (e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
     if (w !== bandW) setBandW(w);
   };
 
+  const onTapBand = (e: GestureResponderEvent) => {
+    if (bandW <= 0) return;
+    const next = xToCarry(e.nativeEvent.locationX, bandW);
+    if (next === yards) return;
+    lightTap();
+    onCommit(next);
+  };
+
+  const step = (dir: 1 | -1) => {
+    if (yards == null) return;
+    const next = Math.max(CARRY_MIN, Math.min(CARRY_MAX, yards + dir * CARRY_STEP));
+    if (next === yards) return;
+    lightTap();
+    onCommit(next);
+  };
+
   return (
     <SketchSurface seed={`yds-${club}`} radius={12} style={styles.card}>
       <View style={styles.head}>
         <ThemedText style={styles.club}>{club}</ThemedText>
-        <Pressable
-          onLongPress={() => onCommit(null)}
-          disabled={yards == null}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={`${club} carry${yards != null ? `, ${yards} yards, long-press to clear` : ''}`}>
-          {display != null ? (
-            <ThemedText style={[styles.yards, drag != null && styles.yardsActive]}>
-              {display} <ThemedText style={styles.unit}>yds</ThemedText>
-            </ThemedText>
-          ) : (
-            <ThemedText style={styles.empty}>drag to set</ThemedText>
-          )}
-        </Pressable>
+
+        {yards == null ? (
+          <ThemedText style={styles.empty}>tap to set</ThemedText>
+        ) : (
+          <View style={styles.stepperRow}>
+            <PressableScale
+              style={styles.stepBtn}
+              hitSlop={8}
+              onPress={() => step(-1)}
+              accessibilityRole="button"
+              accessibilityLabel={`Decrease ${club} carry`}>
+              <ThemedText style={styles.stepGlyph}>−</ThemedText>
+            </PressableScale>
+
+            <Pressable
+              onLongPress={() => onCommit(null)}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={`${club} carry, ${yards} yards, long-press to clear`}>
+              <Animated.Text style={[styles.yards, numStyle]}>
+                {yards}
+                <ThemedText style={styles.unit}> yds</ThemedText>
+              </Animated.Text>
+            </Pressable>
+
+            <PressableScale
+              style={styles.stepBtn}
+              hitSlop={8}
+              onPress={() => step(1)}
+              accessibilityRole="button"
+              accessibilityLabel={`Increase ${club} carry`}>
+              <ThemedText style={styles.stepGlyph}>+</ThemedText>
+            </PressableScale>
+          </View>
+        )}
       </View>
 
-      <View style={styles.band} onLayout={onBandLayout} {...pan.panHandlers}>
+      <View style={styles.band} onLayout={onBandLayout}>
         {bandW > 0 && (
-          <ClubArc
-            width={bandW}
-            height={BAND_HEIGHT}
-            carry={display}
-            active={drag != null || yards != null}
-            loft={loft}
-            parkedAt={DEFAULT_YDS}
-          />
+          <>
+            <ClubArc
+              width={bandW}
+              height={BAND_HEIGHT}
+              carry={yards}
+              active={yards != null}
+              loft={loft}
+              parkedAt={DEFAULT_YDS}
+              flag={false}
+            />
+            <Animated.View pointerEvents="none" style={[styles.flagOverlay, flagStyle]}>
+              <ArcFlag height={BAND_HEIGHT} set={yards != null} />
+            </Animated.View>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={onTapBand}
+              accessibilityRole="button"
+              accessibilityLabel={`${club} carry${yards != null ? `, ${yards} yards` : ''}, tap the arc to set`}
+            />
+          </>
         )}
       </View>
     </SketchSurface>
@@ -278,6 +367,7 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 28,
   },
   club: {
     fontFamily: fonts.serif,
@@ -285,14 +375,31 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     lineHeight: 24,
     color: colors.textPrimary,
   },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  stepBtn: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepGlyph: {
+    fontFamily: fonts.serif,
+    fontSize: 22,
+    lineHeight: 26,
+    color: colors.accent,
+  },
   yards: {
     fontFamily: fonts.serifBold,
     fontSize: 18,
     lineHeight: 24,
     color: colors.textPrimary,
-  },
-  yardsActive: {
-    color: colors.accent,
+    transformOrigin: 'right',
+    minWidth: 58,
+    textAlign: 'right',
   },
   unit: {
     fontFamily: fonts.serif,
@@ -305,11 +412,16 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     color: colors.textMuted,
   },
   band: {
-    // Touch area is taller than the visible arc, but negative margins keep the
-    // arc's on-screen position and the card's layout unchanged.
-    height: BAND_HEIGHT + BAND_TOUCH_SLOP * 2,
-    paddingVertical: BAND_TOUCH_SLOP,
-    marginVertical: -BAND_TOUCH_SLOP,
+    // The whole band height is the tap target; kept clear of the header so a
+    // stepper tap never falls through to the arc's tap-to-place surface.
+    height: BAND_HEIGHT,
     justifyContent: 'center',
+  },
+  flagOverlay: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: FLAG_W,
+    height: BAND_HEIGHT,
   },
 });

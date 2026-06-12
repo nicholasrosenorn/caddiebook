@@ -15,7 +15,9 @@ const LABEL_W = 64;
 const FRINGE = 8; // width of the darker fringe band around the board
 
 // Distance bands, ordered far → near so the cup sits at the bottom and you read
-// down the line toward the hole. `value` is the stored `distance_ft` bucket.
+// down the line toward the hole. `value` is the stored `distance_ft` bucket —
+// the board mirrors the canonical PUTT_BUCKETS values (`lib/stats.ts`) in this
+// reversed order with abbreviated labels.
 type Band = { value: number; label: string };
 const BANDS: Band[] = [
   { value: 50, label: '25+' },
