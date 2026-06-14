@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, StyleSheet, View } from 'react-native';
 
-import { blockUser, reportContent } from '@/lib/api/client';
-import type { PublicProfile, ReportReason } from '@/lib/api/types';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
+import { blockUser, reportContent } from '@/lib/api/client';
+import type { PublicProfile, ReportReason } from '@/lib/api/types';
 
 import { SketchSurface } from './sketch';
 import { ThemedText } from './themed-text';

@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { eq } from 'drizzle-orm';
+
 import { createApp } from '../src/app';
-import { signAccessToken } from '../src/auth/jwt';
+import { signAccessToken, verifyRefreshToken } from '../src/auth/jwt';
 import { db, pool } from '../src/db/client';
-import { users } from '../src/db/schema';
+import { refreshTokens, users } from '../src/db/schema';
 import { runMigrations } from '../src/migrate';
 import { resetRateLimits } from '../src/middleware/rate-limit';
 import type { AuthResponse, AuthUser, RefreshResponse } from '../src/wire';
@@ -58,11 +60,33 @@ describe('refresh-token rotation', () => {
     expect((await refresh(rt2)).status).toBe(200);
   });
 
-  it('detects reuse of a rotated token and revokes the whole family', async () => {
+  it('re-issues within the reuse grace window without killing the family', async () => {
     const { refreshToken: rt1 } = await devLogin();
     const { refreshToken: rt2 } = (await (await refresh(rt1)).json()) as RefreshResponse;
 
-    // Replaying the now-rotated rt1 is treated as theft → 401...
+    // A near-simultaneous replay of the just-rotated rt1 (e.g. a foreground
+    // refetch stampede) is benign: it gets fresh tokens, not a 401.
+    const replay = await refresh(rt1);
+    expect(replay.status).toBe(200);
+    const { refreshToken: rt3 } = (await replay.json()) as RefreshResponse;
+    expect(rt3).toBeTruthy();
+
+    // The family survives: the legitimately-rotated rt2 still refreshes.
+    expect((await refresh(rt2)).status).toBe(200);
+  });
+
+  it('detects reuse of a long-rotated token and revokes the whole family', async () => {
+    const { refreshToken: rt1 } = await devLogin();
+    const { refreshToken: rt2 } = (await (await refresh(rt1)).json()) as RefreshResponse;
+
+    // Age rt1's revocation past the grace window so the replay reads as theft.
+    const { jti } = await verifyRefreshToken(rt1);
+    await db
+      .update(refreshTokens)
+      .set({ revokedAt: new Date(Date.now() - 60_000) })
+      .where(eq(refreshTokens.id, jti));
+
+    // Replaying the long-rotated rt1 is treated as theft → 401...
     expect((await refresh(rt1)).status).toBe(401);
     // ...and it nukes the family, so the legitimately-rotated rt2 dies too.
     expect((await refresh(rt2)).status).toBe(401);

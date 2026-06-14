@@ -155,12 +155,14 @@ function AppRoot({
   onIntroDone,
   onIntroSignIn,
   onQuizSkip,
+  onQuizExit,
   onAuthBack,
 }: {
   stage: IntroStage;
   onIntroDone: () => void;
   onIntroSignIn: () => void;
   onQuizSkip: () => void;
+  onQuizExit: () => void;
   onAuthBack: () => void;
 }) {
   const { session } = useAuth();
@@ -169,7 +171,7 @@ function AppRoot({
     return <Navigation />;
   }
   if (stage === 'value') return <Intro onDone={onIntroDone} onSignIn={onIntroSignIn} />;
-  if (stage === 'quiz') return <Personalize onDone={onQuizSkip} />;
+  if (stage === 'quiz') return <Personalize onDone={onQuizSkip} onExit={onQuizExit} />;
   return <SignIn onBack={stage === 'auth' ? onAuthBack : undefined} />;
 }
 
@@ -264,6 +266,8 @@ export default function RootLayout() {
             // to sign-in) but remembers the origin stage so back still works.
             onIntroSignIn={() => goAuth('value')}
             onQuizSkip={() => goAuth('quiz')}
+            // Backing out of the quiz returns to the intro value story.
+            onQuizExit={() => setIntroStage('value')}
             onAuthBack={() => setIntroStage(authReturn)}
           />
           {/* Returning users (a cached session, or the intro already seen) get

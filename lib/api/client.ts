@@ -76,7 +76,7 @@ async function rawRequest(
 // Exchange the refresh token for a fresh access token; null if it can't.
 // Refresh rotates server-side, so persist the new refresh token too — the old
 // one is now revoked and reusing it would trip the server's theft detection.
-async function tryRefresh(): Promise<string | null> {
+async function doRefresh(): Promise<string | null> {
   const refreshToken = await getRefreshToken();
   if (!refreshToken) return null;
   const res = await rawRequest('/auth/refresh', { method: 'POST', body: { refreshToken } });
@@ -84,6 +84,25 @@ async function tryRefresh(): Promise<string | null> {
   const data = (await res.json()) as RefreshResponse;
   await Promise.all([setAccessToken(data.accessToken), setRefreshToken(data.refreshToken)]);
   return data.accessToken;
+}
+
+// Single-flight guard around doRefresh. On foreground the app fires many authed
+// requests at once (every stale query refetches + the outbox drains); with an
+// expired access token they'd all 401 and each call /auth/refresh with the SAME
+// rotating refresh token. The server revokes a token on rotation, so the first
+// wins and the rest present an already-revoked token — which trips theft
+// detection and kills the whole family, forcing a re-login. Collapsing the
+// stampede into one in-flight refresh (all callers await it and reuse its token)
+// keeps rotation to exactly one hop per access-token expiry.
+let refreshInFlight: Promise<string | null> | null = null;
+
+function tryRefresh(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
 }
 
 // Authenticated request with one transparent refresh-and-retry on 401. Returns

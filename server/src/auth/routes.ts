@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { db, type Db } from '../db/client';
@@ -74,6 +74,23 @@ async function mintRefreshToken(
   return signRefreshToken(userId, jti, familyId);
 }
 
+// True if the family still holds a non-revoked, unexpired token — i.e. a normal
+// rotation left a usable successor. False after theft/logout revoked the family.
+async function familyHasLiveToken(familyId: string): Promise<boolean> {
+  const live = await db
+    .select({ id: refreshTokens.id })
+    .from(refreshTokens)
+    .where(
+      and(
+        eq(refreshTokens.familyId, familyId),
+        isNull(refreshTokens.revokedAt),
+        gt(refreshTokens.expiresAt, new Date()),
+      ),
+    )
+    .limit(1);
+  return live.length > 0;
+}
+
 // Revoke every still-live token in a rotation family (sign-out / theft).
 async function revokeFamily(familyId: string, conn: Db | Tx = db): Promise<void> {
   await conn
@@ -121,10 +138,17 @@ authRoutes.post('/google', async (c) => {
   return c.json(await issue(await findOrCreateUser('google', identity)));
 });
 
+// Reuse grace window: a refresh token revoked this recently is treated as a
+// benign concurrent replay (a network retry, a second in-flight request, or a
+// brief multi-device overlap) rather than theft. Within the window we re-issue
+// in the same family instead of killing it; a replay long after rotation still
+// trips theft detection below. Keeps rotation robust without weakening it.
+const REFRESH_REUSE_GRACE_MS = 30_000;
+
 // Rotating refresh: verify the token against the store, then revoke it and mint
 // a replacement in the same family. Replaying an already-revoked token is treated
-// as theft and kills the whole family. Legacy tokens without a jti fail verify →
-// 401 → the client re-authenticates.
+// as theft and kills the whole family — except within the brief reuse grace
+// window above. Legacy tokens without a jti fail verify → 401 → re-auth.
 authRoutes.post('/refresh', async (c) => {
   const body = (await c.req.json().catch(() => null)) as { refreshToken?: string } | null;
   if (!body?.refreshToken) return c.json({ error: 'refreshToken required' }, 400);
@@ -141,6 +165,23 @@ authRoutes.post('/refresh', async (c) => {
   )[0];
   if (!row) return c.json({ error: 'invalid refresh token' }, 401);
   if (row.revokedAt) {
+    // A near-simultaneous replay of a just-rotated token is benign (a foreground
+    // refetch stampede, a network retry): re-issue in the same family instead of
+    // treating it as theft. Two conditions must both hold:
+    //   1. revoked within the grace window — a delayed replay is real theft; and
+    //   2. the family still has a live successor — a normal rotation always
+    //      leaves one, whereas theft detection and logout revoke the whole
+    //      family, so a sibling replayed right after must NOT resurrect it.
+    const fresh =
+      Date.now() - row.revokedAt.getTime() <= REFRESH_REUSE_GRACE_MS &&
+      (await familyHasLiveToken(claims.familyId));
+    if (fresh) {
+      const [accessToken, refreshToken] = await Promise.all([
+        signAccessToken(claims.userId),
+        mintRefreshToken(claims.userId, claims.familyId),
+      ]);
+      return c.json<RefreshResponse>({ accessToken, refreshToken });
+    }
     await revokeFamily(claims.familyId);
     return c.json({ error: 'refresh token revoked' }, 401);
   }

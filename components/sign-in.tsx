@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { useMemo } from 'react';
-import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -8,9 +8,11 @@ import { AuthButtons } from '@/components/auth-buttons';
 import { CoverHero, CoverLockup, heroIn } from '@/components/cover-hero';
 import { FirstRunTheme } from '@/components/first-run-theme';
 import { Screen } from '@/components/screen';
+import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
+import { EULA_URL, TERMS_URL } from '@/lib/legal';
 import { revealUp } from '@/lib/motion';
 
 // The closing page of the first-run set, mirroring the launch splash: the same
@@ -68,6 +70,21 @@ function SignInContent({ onBack }: { onBack?: () => void }) {
           <Animated.View entering={revealUp(7)}>
             <AuthButtons />
           </Animated.View>
+          {/* Guideline 1.2: the EULA agreement, surfaced at the account-creation
+              point for both Apple and Google sign-in. */}
+          <Animated.View entering={revealUp(8)}>
+            <ThemedText style={styles.terms}>
+              By continuing, you agree to our{' '}
+              <Text style={styles.termsLink} onPress={() => Linking.openURL(TERMS_URL)}>
+                Terms of Service
+              </Text>{' '}
+              and{' '}
+              <Text style={styles.termsLink} onPress={() => Linking.openURL(EULA_URL)}>
+                Community Guidelines
+              </Text>
+              .
+            </ThemedText>
+          </Animated.View>
         </View>
       </View>
     </Screen>
@@ -102,6 +119,18 @@ const makeStyles = (colors: Palette) =>
       textAlign: 'center',
       maxWidth: 320,
       alignSelf: 'center',
+    },
+    terms: {
+      fontSize: 12,
+      lineHeight: 18,
+      textAlign: 'center',
+      maxWidth: 300,
+      alignSelf: 'center',
+      color: colors.textMuted,
+    },
+    termsLink: {
+      color: colors.textSecondary,
+      textDecorationLine: 'underline',
     },
     pressed: {
       transform: [{ scale: 0.97 }],
