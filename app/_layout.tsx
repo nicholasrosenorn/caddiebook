@@ -14,7 +14,7 @@ import * as Notifications from 'expo-notifications';
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
@@ -34,6 +34,7 @@ import { AuthProvider, useAuth } from '@/lib/auth/provider';
 import { loadSession, type Session } from '@/lib/auth/tokens';
 import { getPref, setPref } from '@/lib/local/prefs';
 import { migrateLegacyPrefs } from '@/lib/migration/legacy-flush';
+import { TOUR_SEEN_KEY } from '@/lib/tour';
 
 const INTRO_SEEN_KEY = 'intro_seen';
 
@@ -49,7 +50,26 @@ function Navigation() {
   const colors = useColors();
   const fonts = useFontSet();
   const { themeId } = useTheme();
+  const { session } = useAuth();
   const isDark = themes[themeId].dark ?? false;
+
+  // Auto-present the post-sign-in tour once. The async pref read naturally defers
+  // the push until after the navigator has mounted; a ref guards against the
+  // re-render from session/theme changes firing it twice. Presenting counts as
+  // "seen" so it never re-appears on the next launch (the Me-tab nudge + CTA
+  // handle re-engagement); replaying it is an explicit action.
+  const tourChecked = useRef(false);
+  useEffect(() => {
+    if (tourChecked.current || !session?.user.username) return;
+    tourChecked.current = true;
+    getPref(TOUR_SEEN_KEY)
+      .then((seen) => {
+        if (seen === '1') return;
+        void setPref(TOUR_SEEN_KEY, '1');
+        router.push('/tour');
+      })
+      .catch(() => {});
+  }, [session]);
 
   // Deep-link from a tapped push notification. useLastNotificationResponse covers
   // both a cold start (app launched by the tap) and a warm tap. The payload's
@@ -122,6 +142,7 @@ function Navigation() {
         <Stack.Screen name="journal/index" options={{ title: 'Journal', headerBackTitle: 'Back' }} />
         <Stack.Screen name="journal/[id]" options={{ title: 'Note', headerBackTitle: 'Journal' }} />
         <Stack.Screen name="round/new" options={{ title: 'New Round', presentation: 'modal' }} />
+        <Stack.Screen name="tour" options={{ headerShown: false }} />
         <Stack.Screen name="round/[id]/index" options={{ headerShown: false }} />
         <Stack.Screen name="round/[id]/goals" options={{ headerShown: false }} />
         <Stack.Screen name="round/[id]/review" options={{ headerShown: false }} />

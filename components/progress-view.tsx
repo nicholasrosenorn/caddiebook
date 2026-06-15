@@ -18,7 +18,7 @@ import { CLUB_OPTIONS, sortByDriveLength } from '@/constants/clubs';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import type { Hole, PostRoundReview, Putt, Round, Shot } from '@/lib/data/models';
-import { useStatsBundle } from '@/lib/data/stats';
+import { useStatsBundle, type StatsBundle } from '@/lib/data/stats';
 import type { HandicapHistory } from '@/lib/handicap';
 import {
   aggregateApproach,
@@ -108,22 +108,38 @@ function sortByClubOrder(clubs: string[]): string[] {
   return [...clubs].sort((a, b) => rank(a) - rank(b));
 }
 
+// Tab usage: owns the bottom-tab height + the live stats query, then hands them
+// to the shared base. The base takes its data + bottom inset as plain props so it
+// can also render outside the tabs navigator (the onboarding tour reuses it with a
+// sample bundle, where `useBottomTabBarHeight` would throw).
 export function ProgressView({ header }: { header?: ReactNode }) {
+  const tabBarHeight = useBottomTabBarHeight();
+  const bundle = useStatsBundle();
+  return <ProgressViewBase header={header} bundle={bundle.data ?? null} bottomInset={tabBarHeight} />;
+}
+
+export function ProgressViewBase({
+  header,
+  bundle,
+  bottomInset,
+}: {
+  header?: ReactNode;
+  bundle: StatsBundle | null;
+  bottomInset: number;
+}) {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  const tabBarHeight = useBottomTabBarHeight();
   const [holeFilter, setHoleFilter] = useState<HoleCountFilter>(18);
   const [roundsFilter, setRoundsFilter] = useState<RoundsFilter>(20);
   const [clubFilter, setClubFilter] = useState<ClubFilter>('all');
   const [driveClubFilter, setDriveClubFilter] = useState<ClubFilter>('all');
-  const bundle = useStatsBundle();
 
   // One cached server read (refetched on focus/foreground) replaces the old
   // five whole-table SQLite queries; the groupings stay client-side.
   const data = useMemo<Data | null>(() => {
-    if (!bundle.data) return null;
-    const { rounds, holes, shots, putts, reviews } = bundle.data;
+    if (!bundle) return null;
+    const { rounds, holes, shots, putts, reviews } = bundle;
     const reviewsByRound = new Map<string, PostRoundReview>();
     for (const rv of reviews) reviewsByRound.set(rv.roundId, rv);
     return {
@@ -133,7 +149,7 @@ export function ProgressView({ header }: { header?: ReactNode }) {
       puttsByRound: groupBy(putts, (p) => p.roundId),
       reviewsByRound,
     };
-  }, [bundle.data]);
+  }, [bundle]);
 
   // Rounds matching the hole-count + recency filters; shared by every section.
   const filteredRounds = useMemo(() => {
@@ -246,7 +262,7 @@ export function ProgressView({ header }: { header?: ReactNode }) {
   return (
     <View style={styles.flex}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: tabBarHeight + spacing.lg }]}
+        contentContainerStyle={[styles.content, { paddingBottom: bottomInset + spacing.lg }]}
         // Both Progress and My Rounds stay mounted together, so each has its own
         // scroll view. iOS only auto-adjusts the top content inset of one of
         // several coexisting scroll views, which made the header jump vertically
@@ -627,7 +643,7 @@ function TrendCard({
   );
 }
 
-function MentalGameCard({ review, empty }: { review: ReviewInsights; empty: boolean }) {
+export function MentalGameCard({ review, empty }: { review: ReviewInsights; empty: boolean }) {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);

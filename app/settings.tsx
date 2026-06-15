@@ -18,6 +18,8 @@ import { drainNow, subscribeOutbox } from '@/lib/data/outbox';
 import { queryClient } from '@/lib/data/query-client';
 import { useResetSetupNudge } from '@/lib/data/settings';
 import { setPref } from '@/lib/local/prefs';
+import { requestStoreReview, STORE_REVIEW_REQUESTED_KEY } from '@/lib/review-prompt';
+import { TOUR_NUDGE_DISMISSED_KEY, TOUR_SEEN_KEY } from '@/lib/tour';
 
 export default function SettingsScreen() {
   const colors = useColors();
@@ -75,7 +77,9 @@ export default function SettingsScreen() {
     <Screen>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
-          <ThemedText type="caption">ACCOUNT</ThemedText>
+          <ThemedText type="caption" style={styles.sectionTitle}>
+            ACCOUNT
+          </ThemedText>
           <Pressable
             onPress={() => router.push('/edit-profile')}
             accessibilityRole="button"
@@ -150,16 +154,16 @@ export default function SettingsScreen() {
           <ThemedText type="caption" style={styles.sectionTitle}>
             APPEARANCE
           </ThemedText>
-          <View style={styles.gallery}>
-          {THEME_ORDER.map((id) => (
-            <ThemeCard
-              key={id}
-              id={id}
-              selected={id === themeId}
-              onSelect={() => setTheme(id)}
-            />
-          ))}
-        </View>
+          <ListGroup seed="appearance-group">
+            {THEME_ORDER.map((id) => (
+              <ThemeRow
+                key={id}
+                id={id}
+                selected={id === themeId}
+                onSelect={() => setTheme(id)}
+              />
+            ))}
+          </ListGroup>
         </View>
 
         <View style={styles.section}>
@@ -167,6 +171,11 @@ export default function SettingsScreen() {
             ABOUT &amp; SAFETY
           </ThemedText>
           <ListGroup seed="about-group">
+            <ListRow
+              icon="star.fill"
+              label="Review Caddie Book"
+              onPress={() => void requestStoreReview()}
+            />
             <ListRow
               icon="envelope"
               label="Contact us"
@@ -270,6 +279,28 @@ export default function SettingsScreen() {
 
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Replay tour"
+              onPress={async () => {
+                // Re-arm the tour's seen flag, the sparse-data nudge, and the
+                // one-shot review prompt, then open it immediately.
+                await Promise.all([
+                  setPref(TOUR_SEEN_KEY, '0'),
+                  setPref(TOUR_NUDGE_DISMISSED_KEY, '0'),
+                  setPref(STORE_REVIEW_REQUESTED_KEY, '0'),
+                ]);
+                router.push('/tour');
+              }}
+              style={({ pressed }) => pressed && styles.cardPressed}>
+              <SketchSurface seed="dev-replay-tour" radius={12} style={styles.devRow}>
+                <ThemedText style={styles.cardLabel}>Replay tour</ThemedText>
+                <ThemedText type="muted" style={styles.cardHint}>
+                  Re-arms the tour, nudge &amp; review flags, then opens it
+                </ThemedText>
+              </SketchSurface>
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
               accessibilityLabel="Reset setup nudge"
               disabled={devBusy}
               onPress={() =>
@@ -296,7 +327,7 @@ export default function SettingsScreen() {
   );
 }
 
-function ThemeCard({
+function ThemeRow({
   id,
   selected,
   onSelect,
@@ -316,35 +347,25 @@ function ThemeCard({
       accessibilityRole="button"
       accessibilityLabel={`${label} theme`}
       accessibilityState={{ selected }}
-      style={({ pressed }) => pressed && styles.cardPressed}>
-      <SketchSurface
-        seed={`theme-${id}`}
-        radius={12}
-        stroke={selected ? colors.accent : colors.borderStrong}
-        strokeWidth={selected ? 2 : 1.3}
-        style={styles.card}>
+      style={({ pressed }) => pressed && styles.rowPressed}>
+      <View style={styles.themeRow}>
         {/* Swatch shows the preset's own ink-on-paper pairing */}
         <View style={[styles.swatch, { backgroundColor: palette.background, borderColor: palette.borderStrong }]}>
           <View style={[styles.swatchInk, { backgroundColor: palette.accent }]} />
           <View style={[styles.swatchLine, { backgroundColor: palette.accent }]} />
-          <View style={[styles.swatchLineShort, { backgroundColor: palette.borderStrong }]} />
         </View>
 
-        <View style={styles.cardText}>
-          <ThemedText style={[styles.cardLabel, { fontFamily: themeFonts.serifBold }]}>
+        <View style={styles.themeText}>
+          <ThemedText style={[styles.themeLabel, { fontFamily: themeFonts.serifBold }]}>
             {label}
           </ThemedText>
-          <ThemedText type="muted" style={styles.cardHint}>
+          <ThemedText type="muted" style={styles.cardHint} numberOfLines={1}>
             {hint}
           </ThemedText>
         </View>
 
-        {selected ? (
-          <IconSymbol name="checkmark" size={20} color={colors.accent} />
-        ) : (
-          <View style={styles.checkPlaceholder} />
-        )}
-      </SketchSurface>
+        {selected ? <IconSymbol name="checkmark" size={16} color={colors.accent} /> : null}
+      </View>
     </Pressable>
   );
 }
@@ -440,51 +461,50 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       color: colors.textSecondary,
       fontFamily: fonts.serif,
     },
-    gallery: {
-      gap: spacing.sm,
-    },
-    card: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.md,
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.md,
-      minHeight: 76,
-    },
     cardPressed: {
       opacity: 0.6,
     },
+    rowPressed: {
+      opacity: 0.55,
+    },
+    themeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      minHeight: 50,
+      paddingVertical: spacing.sm,
+    },
     swatch: {
-      width: 52,
-      height: 52,
-      borderRadius: 8,
+      width: 30,
+      height: 30,
+      borderRadius: 6,
       borderWidth: 1,
-      padding: 8,
-      justifyContent: 'center',
-      gap: 4,
+      padding: 5,
+      justifyContent: 'flex-end',
       overflow: 'hidden',
     },
     swatchInk: {
       position: 'absolute',
-      top: 7,
-      right: 7,
-      width: 14,
-      height: 14,
-      borderRadius: 7,
+      top: 5,
+      right: 5,
+      width: 9,
+      height: 9,
+      borderRadius: 4.5,
     },
     swatchLine: {
-      height: 4,
+      height: 3,
       width: '70%',
-      borderRadius: 2,
+      borderRadius: 1.5,
     },
-    swatchLineShort: {
-      height: 4,
-      width: '45%',
-      borderRadius: 2,
-    },
-    cardText: {
+    themeText: {
       flex: 1,
-      gap: 2,
+      gap: 1,
+    },
+    themeLabel: {
+      fontFamily: fonts.serif,
+      fontSize: 16,
+      lineHeight: 22,
+      color: colors.textPrimary,
     },
     cardLabel: {
       fontFamily: fonts.serif,
@@ -494,10 +514,6 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     },
     cardHint: {
       fontSize: 13,
-    },
-    checkPlaceholder: {
-      width: 20,
-      height: 20,
     },
     devSection: {
       gap: spacing.sm,

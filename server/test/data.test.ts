@@ -326,32 +326,8 @@ describe('/data review, goals, journal, settings, courses', () => {
   });
 });
 
-describe('/data completion notifications', () => {
-  it('marks a completed round in the share-notification ledger', async () => {
-    // The dispatcher joins users, so this needs a real account row.
-    const handle = `data_${randomUUID().slice(0, 8)}`;
-    const userRes = await pool.query<{ id: string }>(
-      `INSERT INTO users (username, email) VALUES ($1, $2) RETURNING id`,
-      [handle, `${handle}@t`],
-    );
-    const user = userRes.rows[0]!.id;
-    const { roundId } = await createRound(user);
-    await authed(user, `/data/rounds/${roundId}`, 'PUT', {
-      completed_at: '2026-06-10 16:00:00',
-    });
-    // The dispatcher is fire-and-forget; poll briefly for the ledger row.
-    let claimed = false;
-    for (let i = 0; i < 20 && !claimed; i++) {
-      const res = await pool.query(
-        `SELECT 1 FROM round_share_notifications WHERE round_owner_id = $1 AND round_id = $2`,
-        [user, roundId],
-      );
-      claimed = res.rows.length > 0;
-      if (!claimed) await new Promise((r) => setTimeout(r, 50));
-    }
-    expect(claimed).toBe(true);
-  });
-});
+// Share-notification dispatch behavior (claim/release, recency window, blocks) is
+// covered with Expo mocked in test/notifications.test.ts.
 
 describe('/data auth & limits', () => {
   it('rejects unauthenticated requests', async () => {

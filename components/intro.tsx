@@ -506,8 +506,8 @@ function ApproachSpread({
         <View style={[styles.spreadFooter, styles.spreadFooterRight]}>
           <Reveal revealed={revealed} order={3}>
             <ThemedText type="muted" style={[styles.body, styles.bodyNarrow]}>
-              One tap sets your proximity to the pin. Greens in regulation and putts by distance
-              derive themselves.
+              One tap sets your proximity to the pin. From there we chart your greens in regulation
+              and putts by distance.
             </ThemedText>
           </Reveal>
           <Reveal revealed={revealed} order={4} style={styles.cueReveal}>

@@ -8,6 +8,7 @@ import { ProgressView } from '@/components/progress-view';
 import { Screen } from '@/components/screen';
 import { SetupCoachmark } from '@/components/setup-coachmark';
 import { TextTabs } from '@/components/text-tabs';
+import { TourNudge } from '@/components/tour-nudge';
 import { ThemedText } from '@/components/themed-text';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
@@ -132,6 +133,7 @@ export default function ProfileScreen() {
         <MyRoundsView header={tab === 'rounds' ? header : undefined} />
       </View>
       {tooltip.show ? <SetupCoachmark onDismiss={tooltip.dismiss} /> : null}
+      <TourNudge />
       <EdgeSwipeOpener />
     </Screen>
   );
