@@ -17,29 +17,29 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { ApproachTarget } from '@/components/approach-target';
-import { DriverTarget, type TargetPin } from '@/components/driver-target';
+import { Image } from 'expo-image';
+
 import { GlassSurface } from '@/components/glass-surface';
 import { MentalGameCard, ProgressViewBase } from '@/components/progress-view';
-import { Board } from '@/components/putting-page';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
-import { Section, SplitDistanceBars } from '@/components/stats-figures';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
-import type { Putt } from '@/lib/data/models';
-import {
-  aggregateApproach,
-  aggregateDriver,
-  aggregateReview,
-  aggregateStats,
-} from '@/lib/lifetime-stats';
+import type { JournalEntry, PreRoundGoals } from '@/lib/data/models';
+import { GOAL_CATEGORIES } from '@/lib/goals';
+import { journalTagLabel } from '@/lib/journal';
+import { aggregateReview } from '@/lib/lifetime-stats';
 import { revealUp } from '@/lib/motion';
 import { requestStoreReview } from '@/lib/review-prompt';
 import { buildSampleSeason, type SampleSeason } from '@/lib/sample-stats';
 import { markTourSeen } from '@/lib/tour';
+
+const RANGEFINDER_MEASURE = require('@/assets/images/tour-rangefinder-measure.png');
+const RANGEFINDER_DISPERSION = require('@/assets/images/tour-rangefinder-dispersion.png');
+// Cropped iPhone screenshots are 1206×2442 (status bar removed).
+const SCREENSHOT_ASPECT = 1206 / 2442;
 
 // The post-sign-in tour: a horizontally-paged narrative that leads with the
 // payoff — a full, explorable example-season progress screen, rendered with the
@@ -157,25 +157,22 @@ export function Tour({ onDone }: { onDone: () => void }) {
                 season={season}
                 onContinue={() => scrollToStep(1)}
               />
-              <DriveDispersionPage
+              <CourseManagementPage
                 width={width}
                 height={pageHeight}
                 revealed={revealed[1]}
-                season={season}
                 onContinue={() => scrollToStep(2)}
               />
-              <ApproachDispersionPage
+              <JournalPage
                 width={width}
                 height={pageHeight}
                 revealed={revealed[2]}
-                season={season}
                 onContinue={() => scrollToStep(3)}
               />
-              <PuttingDeepDivePage
+              <GpsRangefinderPage
                 width={width}
                 height={pageHeight}
                 revealed={revealed[3]}
-                season={season}
                 onContinue={() => scrollToStep(4)}
               />
               <ReviewDeepDivePage
@@ -388,7 +385,7 @@ function ExampleSeasonPage({
       <ThemedText style={styles.welcomeTitle}>Welcome to Caddie Book</ThemedText>
       <ThemedText type="muted" style={styles.body}>
         Here’s sample data of what you’ll get from Caddie Book — scroll to explore the stats
-        you’ll build, then swipe through how each one is captured.
+        you’ll build.
       </ThemedText>
       <View style={styles.swipeCue}>
         <ThemedText type="caption" style={styles.swipeText}>
@@ -411,163 +408,189 @@ function ExampleSeasonPage({
   );
 }
 
-function DriveDispersionPage({
+// Page 2 — course management. A representative set of pre-round intentions,
+// shown on a read-only card mirroring the round summary's goals block.
+const SAMPLE_GOALS: PreRoundGoals = {
+  id: 'sample-goals',
+  roundId: 'sample',
+  execution: 'Commit to a full pre-shot routine on every tee',
+  strategic: 'Aim for the fat side of every green',
+  mental: 'Reset and breathe after every bogey',
+  createdAt: '',
+};
+
+function GoalsCard({ goals }: { goals: PreRoundGoals }) {
+  const colors = useColors();
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  const rows = GOAL_CATEGORIES.map((c) => ({ label: c.label, value: goals[c.key] })).filter(
+    (r): r is { label: string; value: string } => !!r.value,
+  );
+  return (
+    <SketchSurface seed="tour-goals" style={styles.cardSurface}>
+      {rows.map((row, i) => (
+        <View
+          key={row.label}
+          style={[styles.goalRow, i < rows.length - 1 && styles.cardRowDivider]}>
+          <ThemedText type="caption">{row.label.toUpperCase()}</ThemedText>
+          <ThemedText style={styles.goalValue}>{row.value}</ThemedText>
+        </View>
+      ))}
+    </SketchSurface>
+  );
+}
+
+function CourseManagementPage({
   width,
   height,
   revealed,
-  season,
   onContinue,
 }: {
   width: number;
   height: number;
   revealed: boolean;
-  season: SampleSeason;
   onContinue: () => void;
 }) {
-  const pins = useMemo<TargetPin[]>(() => {
-    const driver = aggregateDriver(season.bundle.rounds, season.holesByRound, season.shotsByRound, null);
-    return driver.pins.map((p) => ({ ...p, variant: 'muted' as const }));
-  }, [season]);
   return (
     <DeepDivePage
       width={width}
       height={height}
       revealed={revealed}
-      kicker="A CLOSER LOOK · DRIVES"
-      title={'Where your tee\nshots land.'}
-      body="Tap where each drive finishes on the fairway map. Over a season the pattern shows your real miss bias — left, right, or striped down the middle — so you can aim with it."
+      kicker="BEFORE THE ROUND · COURSE MANAGEMENT"
+      title={'Play with a\nplan.'}
+      body="Set three simple intentions before you tee off — how you’ll execute, how you’ll manage the course, and how you’ll stay level-headed. A clear plan turns good ball-striking into lower scores."
       onContinue={onContinue}
-      visual={<DriverTarget pins={pins} width={240} height={380} pinSize={6} />}
+      visualFill
+      visual={<GoalsCard goals={SAMPLE_GOALS} />}
     />
   );
 }
 
-function ApproachDispersionPage({
-  width,
-  height,
-  revealed,
-  season,
-  onContinue,
-}: {
-  width: number;
-  height: number;
-  revealed: boolean;
-  season: SampleSeason;
-  onContinue: () => void;
-}) {
-  const { pins, distanceRows } = useMemo(() => {
-    const all = aggregateApproach(season.bundle.rounds, season.holesByRound, season.shotsByRound, null);
-    // Per-distance green-hit split across all clubs — the "Approach distances"
-    // graph the Stats tab shows.
-    return {
-      pins: all.pins.map((p) => ({ ...p, variant: 'muted' as const })),
-      distanceRows: all.approachByDistance.map((b) => ({
-        key: b.label,
-        label: b.label,
-        success: b.hit,
-        total: b.total,
-      })),
-    };
-  }, [season]);
-  return (
-    <DeepDivePage
-      width={width}
-      height={height}
-      revealed={revealed}
-      kicker="A CLOSER LOOK · APPROACHES"
-      title={'How close you\nhit it.'}
-      body="Place each approach by its proximity to the pin. Tighter clusters mean more greens and shorter putts — and you’ll see which clubs and distances dial in."
-      onContinue={onContinue}
-      visual={<ApproachTarget pins={pins} size={300} pinSize={7} />}
-      belowVisual={
-        <Section title="Approach distances · All clubs">
-          <SplitDistanceBars
-            seedPrefix="tour-appr"
-            successLabel="Green hit"
-            failLabel="Missed"
-            rows={distanceRows}
-          />
-        </Section>
-      }
-    />
-  );
-}
-
-// A representative single-hole-ish set of sample putts across the distance bands,
-// shown on the real putting board (read-only). `holeNumber: 1` matches the board's
-// `holeNumber` so every glyph renders at full opacity rather than muted.
-function samplePutt(id: string, distanceFt: number, made: boolean): Putt {
-  return { id, roundId: 'sample', holeNumber: 1, distanceFt, made, createdAt: '' };
-}
-const SAMPLE_PUTTS: Putt[] = [
-  samplePutt('sp-1', 3, true),
-  samplePutt('sp-2', 3, true),
-  samplePutt('sp-3', 3, true),
-  samplePutt('sp-4', 10, true),
-  samplePutt('sp-5', 10, false),
-  samplePutt('sp-6', 15, true),
-  samplePutt('sp-7', 15, false),
-  samplePutt('sp-8', 25, false),
-  samplePutt('sp-9', 50, false),
+// Page 3 — the journal. A couple of representative entries across tags, rendered
+// on read-only cards mirroring the journal list.
+type SampleJournalEntry = JournalEntry & { displayDate: string };
+const SAMPLE_JOURNAL: SampleJournalEntry[] = [
+  {
+    id: 'tour-j1',
+    tag: 'swing_thought',
+    body: 'Slower transition — let the club fall before I turn through. Quiet hands.',
+    createdAt: '',
+    updatedAt: '',
+    displayDate: 'Jun 12',
+  },
+  {
+    id: 'tour-j2',
+    tag: 'practice_session',
+    body: '45 min wedges. 50/75/100 yd gaps dialed; still leaving the 60° short. Carry, not swing length.',
+    createdAt: '',
+    updatedAt: '',
+    displayDate: 'Jun 9',
+  },
 ];
 
-function PuttingDeepDivePage({
+function JournalCardList({ entries }: { entries: SampleJournalEntry[] }) {
+  const colors = useColors();
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  return (
+    <View style={styles.journalList}>
+      {entries.map((entry) => (
+        <SketchSurface key={entry.id} seed={`tour-${entry.id}`} style={styles.journalCard}>
+          <View style={styles.journalCardTop}>
+            <ThemedText type="caption">{journalTagLabel(entry.tag).toUpperCase()}</ThemedText>
+            <ThemedText type="muted" style={styles.journalCardDate}>
+              {entry.displayDate}
+            </ThemedText>
+          </View>
+          <ThemedText style={styles.journalCardBody} numberOfLines={3}>
+            {entry.body}
+          </ThemedText>
+        </SketchSurface>
+      ))}
+    </View>
+  );
+}
+
+function JournalPage({
   width,
   height,
   revealed,
-  season,
   onContinue,
 }: {
   width: number;
   height: number;
   revealed: boolean;
-  season: SampleSeason;
   onContinue: () => void;
 }) {
-  const boardWidth = Math.min(340, width - 64);
-  const makeRows = useMemo(() => {
-    const stats = aggregateStats(
-      season.bundle.rounds,
-      season.holesByRound,
-      season.shotsByRound,
-      season.puttsByRound,
-    );
-    return stats.puttBuckets.map((b) => ({
-      key: String(b.ft),
-      label: b.label,
-      success: b.makes,
-      total: b.total,
-    }));
-  }, [season]);
   return (
     <DeepDivePage
       width={width}
       height={height}
       revealed={revealed}
-      kicker="A CLOSER LOOK · PUTTING"
-      title={'Made and missed,\nby distance.'}
-      body="Tap each putt into a made or missed lane by distance — a filled disc for made, an open ring for missed. Over time it reveals your real make rates and where the three-putts hide."
+      kicker="OFF THE COURSE · JOURNAL"
+      title={'Write it down,\nplay it back.'}
+      body="Capture swing thoughts, practice notes, and round takeaways the moment they’re fresh. Tagged and dated, they become a record you can scroll back through to see what actually works for you."
       onContinue={onContinue}
-      visual={
-        <Board
-          width={boardWidth}
-          putts={SAMPLE_PUTTS}
-          holeNumber={1}
-          onAdd={() => {}}
-          onRemove={() => {}}
-        />
-      }
-      belowVisual={
-        <Section title="Putting by distance">
-          <SplitDistanceBars
-            seedPrefix="tour-putt"
-            successLabel="Made"
-            failLabel="Missed"
-            rows={makeRows}
-          />
-        </Section>
-      }
+      visualFill
+      visual={<JournalCardList entries={SAMPLE_JOURNAL} />}
     />
+  );
+}
+
+// Page 4 — the GPS rangefinder. Two cropped real screenshots, each in a rounded,
+// hairline-framed surface, stacked: the measuring line first (distance to the
+// pin), then the dispersion overlay (the shot history behind a number).
+function ScreenshotFrame({ source }: { source: number }) {
+  const colors = useColors();
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  return (
+    <SketchSurface seed={`tour-shot-${source}`} radius={16} stroke={colors.border} style={styles.shotFrame}>
+      <Image source={source} style={styles.shotImage} contentFit="cover" />
+    </SketchSurface>
+  );
+}
+
+function GpsRangefinderPage({
+  width,
+  height,
+  revealed,
+  onContinue,
+}: {
+  width: number;
+  height: number;
+  revealed: boolean;
+  onContinue: () => void;
+}) {
+  const colors = useColors();
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  return (
+    <View style={{ width, height }}>
+      <View style={styles.page}>
+        <Animated.ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.pageScroll}>
+          <Reveal revealed={revealed} order={0}>
+            <ThemedText type="caption" style={styles.kicker}>
+              ON THE COURSE · RANGEFINDER
+            </ThemedText>
+          </Reveal>
+          <Reveal revealed={revealed} order={1}>
+            <ThemedText style={styles.title}>{'Know your\nnumber.'}</ThemedText>
+          </Reveal>
+          <Reveal revealed={revealed} order={2}>
+            <ThemedText type="muted" style={styles.body}>
+              Tap the satellite map for exact yardage to any target. Switch on dispersion to see
+              every shot you’ve hit from that distance.
+            </ThemedText>
+          </Reveal>
+          <Reveal revealed={revealed} order={3} style={styles.shotStack}>
+            <ScreenshotFrame source={RANGEFINDER_MEASURE} />
+            <ScreenshotFrame source={RANGEFINDER_DISPERSION} />
+          </Reveal>
+        </Animated.ScrollView>
+        <PrimaryButton label="Next" onPress={onContinue} />
+      </View>
+    </View>
   );
 }
 
@@ -857,6 +880,66 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     belowVisual: {
       width: '100%',
       marginTop: spacing.sm,
+    },
+    // Goals card (course-management page) — mirrors summary's RoundGoals.
+    cardSurface: {
+      paddingHorizontal: spacing.xs,
+    },
+    cardRowDivider: {
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.border,
+    },
+    goalRow: {
+      gap: 4,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+    },
+    goalValue: {
+      fontFamily: fonts.serif,
+      fontSize: 16,
+      lineHeight: 22,
+      color: colors.textPrimary,
+    },
+    // Journal cards — mirror the journal list cards.
+    journalList: {
+      width: '100%',
+      gap: spacing.md,
+    },
+    journalCard: {
+      padding: spacing.md,
+      gap: spacing.sm,
+    },
+    journalCardTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
+    journalCardDate: {
+      fontSize: 12,
+    },
+    journalCardBody: {
+      fontFamily: fonts.serif,
+      fontSize: 17,
+      lineHeight: 24,
+      color: colors.textPrimary,
+    },
+    // Rangefinder screenshots — rounded, hairline-framed, stacked.
+    shotStack: {
+      width: '100%',
+      flexDirection: 'row',
+      gap: spacing.md,
+      marginTop: spacing.md,
+    },
+    shotFrame: {
+      flex: 1,
+      overflow: 'hidden',
+      borderRadius: 16,
+      padding: 0,
+    },
+    shotImage: {
+      width: '100%',
+      aspectRatio: SCREENSHOT_ASPECT,
     },
     // Example-season page: pinned Next button below the embedded progress view.
     exampleFooter: {
