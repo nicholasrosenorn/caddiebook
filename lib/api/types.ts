@@ -41,6 +41,11 @@ export type AuthResponse = {
   refreshToken: string;
   user: AuthUser;
 };
+// A name the provider hands us at sign-in (Apple `fullName`, Google profile),
+// sent to the server so a brand-new account is created with it prefilled. Apple
+// only shares the name on the first authorization; the server applies it on
+// create only, never overwriting an existing name. Mirrors server/src/wire.ts.
+export type ProviderName = { firstName: string | null; lastName: string | null };
 // Profile fields set during onboarding / edits. Mirrors server/src/wire.ts.
 export type ProfileUpdate = {
   firstName: string | null;

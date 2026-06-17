@@ -18,6 +18,7 @@ import type {
   NotificationItem,
   NotificationsResponse,
   ProfileUpdate,
+  ProviderName,
   PublicProfile,
   PushResponse,
   RefreshResponse,
@@ -136,12 +137,14 @@ async function exchangeProviderToken(path: string, body: unknown): Promise<AuthR
   return (await res.json()) as AuthResponse;
 }
 
-export function authApple(identityToken: string): Promise<AuthResponse> {
-  return exchangeProviderToken('/auth/apple', { identityToken });
+// `name` is the provider-supplied name (Apple only returns it on first auth);
+// the server uses it to seed a brand-new account and ignores it otherwise.
+export function authApple(identityToken: string, name?: ProviderName): Promise<AuthResponse> {
+  return exchangeProviderToken('/auth/apple', { identityToken, ...name });
 }
 
-export function authGoogle(idToken: string): Promise<AuthResponse> {
-  return exchangeProviderToken('/auth/google', { idToken });
+export function authGoogle(idToken: string, name?: ProviderName): Promise<AuthResponse> {
+  return exchangeProviderToken('/auth/google', { idToken, ...name });
 }
 
 // Revoke the refresh-token family on the server (sign-out). Best-effort: the

@@ -5,7 +5,14 @@ import { db, type Db } from '../db/client';
 import { refreshTokens, users } from '../db/schema';
 import { env } from '../env';
 import { containsProfanity } from '../moderation/profanity';
-import type { AuthResponse, AuthUser, ProfileUpdate, RefreshResponse } from '../wire';
+import type {
+  AppleAuthRequest,
+  AuthResponse,
+  AuthUser,
+  GoogleAuthRequest,
+  ProfileUpdate,
+  RefreshResponse,
+} from '../wire';
 import {
   REFRESH_TTL_MS,
   signAccessToken,
@@ -36,12 +43,25 @@ function toAuthUser(user: UserRow): AuthUser {
 // the root connection or inside a transaction.
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
+// A name the provider handed us at sign-in (Apple `fullName`, Google profile).
+// Trimmed + length-capped to match the /auth/me profile cap.
+type ProviderName = { firstName: string | null; lastName: string | null };
+
+function sanitizeName(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim().slice(0, 100);
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 // Find the user for a provider identity, or create one. If the provider sub is
 // new but the verified email matches an existing account, link the provider to
-// that account rather than forking a duplicate.
+// that account rather than forking a duplicate. `name` is only used on the
+// create path — it seeds a new account's profile (Apple shares the name only on
+// first auth) and must never overwrite an existing/edited name.
 async function findOrCreateUser(
   provider: 'apple' | 'google',
   { sub, email }: ProviderIdentity,
+  name: ProviderName = { firstName: null, lastName: null },
 ): Promise<UserRow> {
   const subColumn = provider === 'apple' ? users.appleSub : users.googleSub;
   const bySub = await db.select().from(users).where(eq(subColumn, sub)).limit(1);
@@ -56,8 +76,11 @@ async function findOrCreateUser(
     }
   }
 
-  const values = provider === 'apple' ? { appleSub: sub, email } : { googleSub: sub, email };
-  const created = await db.insert(users).values(values).returning();
+  const base = provider === 'apple' ? { appleSub: sub, email } : { googleSub: sub, email };
+  const created = await db
+    .insert(users)
+    .values({ ...base, firstName: name.firstName, lastName: name.lastName })
+    .returning();
   return created[0]!;
 }
 
@@ -115,7 +138,7 @@ authRoutes.use('*', jsonBodyLimit(BODY_LIMIT.small));
 authRoutes.use('*', rateLimit({ name: 'auth', windowMs: 5 * 60_000, max: 30, key: clientIp }));
 
 authRoutes.post('/apple', async (c) => {
-  const body = (await c.req.json().catch(() => null)) as { identityToken?: string } | null;
+  const body = (await c.req.json().catch(() => null)) as Partial<AppleAuthRequest> | null;
   if (!body?.identityToken) return c.json({ error: 'identityToken required' }, 400);
   let identity: ProviderIdentity;
   try {
@@ -123,11 +146,12 @@ authRoutes.post('/apple', async (c) => {
   } catch {
     return c.json({ error: 'invalid Apple token' }, 401);
   }
-  return c.json(await issue(await findOrCreateUser('apple', identity)));
+  const name = { firstName: sanitizeName(body.firstName), lastName: sanitizeName(body.lastName) };
+  return c.json(await issue(await findOrCreateUser('apple', identity, name)));
 });
 
 authRoutes.post('/google', async (c) => {
-  const body = (await c.req.json().catch(() => null)) as { idToken?: string } | null;
+  const body = (await c.req.json().catch(() => null)) as Partial<GoogleAuthRequest> | null;
   if (!body?.idToken) return c.json({ error: 'idToken required' }, 400);
   let identity: ProviderIdentity;
   try {
@@ -135,7 +159,8 @@ authRoutes.post('/google', async (c) => {
   } catch {
     return c.json({ error: 'invalid Google token' }, 401);
   }
-  return c.json(await issue(await findOrCreateUser('google', identity)));
+  const name = { firstName: sanitizeName(body.firstName), lastName: sanitizeName(body.lastName) };
+  return c.json(await issue(await findOrCreateUser('google', identity, name)));
 });
 
 // Reuse grace window: a refresh token revoked this recently is treated as a

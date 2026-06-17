@@ -9,6 +9,7 @@ import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
+import { useAuth } from '@/lib/auth/provider';
 
 export function Onboarding() {
   return (
@@ -23,6 +24,9 @@ function OnboardingContent() {
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const insets = useSafeAreaInsets();
+  // Prefill the name from the provider (Apple/Google) — stored on the account at
+  // sign-in. The user can still edit it and must pick a username before Finish.
+  const { session } = useAuth();
 
   const header = (
     <View style={styles.hero}>
@@ -40,7 +44,12 @@ function OnboardingContent() {
   return (
     <Screen marks>
       <ProfileForm
-        initial={{ firstName: '', lastName: '', username: '', avatar: DEFAULT_AVATAR }}
+        initial={{
+          firstName: session?.user.firstName ?? '',
+          lastName: session?.user.lastName ?? '',
+          username: '',
+          avatar: DEFAULT_AVATAR,
+        }}
         submitLabel="Finish"
         header={header}
         contentStyle={{

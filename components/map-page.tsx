@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, Path, RadialGradient, Stop } from 'react-native-svg';
 
 import { GlassSurface } from '@/components/glass-surface';
 import { ThemedText } from '@/components/themed-text';
@@ -45,6 +46,31 @@ const MAX_DISPERSION_SHOTS = 100;
 const OUTER_RING = APPROACH_RINGS[APPROACH_RINGS.length - 1];
 const FT_PER_NORM = OUTER_RING.ft / OUTER_RING.maxR;
 const METERS_PER_FOOT = 0.3048;
+// Device-heading cone ("where the phone is looking"), Apple/Google-Maps style:
+// a small, fixed-pixel translucent wedge fanning out from the user's dot, fading
+// with distance. Drawn in screen space (a Marker), so it's a constant on-screen
+// size at every zoom; we rotate it by (heading − cameraHeading) to keep it
+// pointing at the real-world bearing under the app's rotating camera.
+const CONE_VIEW = 64; // marker view box (px); apex sits at its center
+const CONE_CENTER = CONE_VIEW / 2;
+const CONE_RADIUS = 26; // beam length in px
+const CONE_HALF_ANGLE = 30; // degrees either side of straight-up
+// Filled sector pointing "up" (toward -y), apex at center. Sampled as line
+// segments to sidestep SVG arc-flag ambiguity — identical at this size.
+const CONE_PATH = (() => {
+  const steps = 12;
+  const parts = [`M ${CONE_CENTER} ${CONE_CENTER}`];
+  for (let i = 0; i <= steps; i++) {
+    const a = ((-CONE_HALF_ANGLE + (i / steps) * 2 * CONE_HALF_ANGLE) * Math.PI) / 180;
+    const x = CONE_CENTER + CONE_RADIUS * Math.sin(a);
+    const y = CONE_CENTER - CONE_RADIUS * Math.cos(a);
+    parts.push(`L ${x.toFixed(2)} ${y.toFixed(2)}`);
+  }
+  parts.push('Z');
+  return parts.join(' ');
+})();
+// Ignore sub-2° magnetometer jitter so the cone doesn't re-render constantly.
+const HEADING_MIN_DELTA_DEG = 2;
 
 type ApproachSample = {
   key: string;
@@ -73,6 +99,14 @@ export function MapPage() {
   // crosshair axes for reading long/short and left/right misses.
   const [zoomedIn, setZoomedIn] = useState(false);
   const [dispersionOn, setDispersionOn] = useState(false);
+  // Live device heading in degrees [0, 360); null until the first reading.
+  const [heading, setHeading] = useState<number | null>(null);
+  const headingSubRef = useRef<Location.LocationSubscription | null>(null);
+  const lastHeadingRef = useRef<number | null>(null);
+  // The camera's own heading (what's "up" on screen). The app fully controls it
+  // (rotateEnabled is off), so we mirror every animateCamera/region call here to
+  // keep the screen-space cone pointing at the true bearing. 0 = north-up.
+  const [cameraHeading, setCameraHeading] = useState(0);
   const { data: statsData } = useStatsBundle();
 
   const requestLocation = useCallback(async () => {
@@ -106,6 +140,34 @@ export function MapPage() {
   useEffect(() => {
     requestLocation();
   }, [requestLocation]);
+
+  // Live device heading for the orientation cone. Needs location permission
+  // (already granted here). trueHeading is -1 until geographic north resolves —
+  // fall back to magnetic so the cone still tracks; updates are throttled to
+  // skip sub-2° jitter from the magnetometer.
+  useEffect(() => {
+    if (permission !== 'granted') return;
+    let active = true;
+    Location.watchHeadingAsync((h) => {
+      if (!active) return;
+      const next = h.trueHeading >= 0 ? h.trueHeading : h.magHeading;
+      if (next == null || next < 0) return;
+      const prev = lastHeadingRef.current;
+      if (prev != null && Math.abs(((next - prev + 540) % 360) - 180) < HEADING_MIN_DELTA_DEG) {
+        return;
+      }
+      lastHeadingRef.current = next;
+      setHeading(next);
+    }).then((sub) => {
+      if (active) headingSubRef.current = sub;
+      else sub.remove();
+    });
+    return () => {
+      active = false;
+      headingSubRef.current?.remove();
+      headingSubRef.current = null;
+    };
+  }, [permission]);
 
   // Historical approach shots from completed rounds, joined to their hole's
   // approach distance — the corpus the zoom-mode dispersion overlay windows.
@@ -146,10 +208,12 @@ export function MapPage() {
   // would need a `zoom` value instead.
   const frameShot = (coord: LatLng) => {
     if (!userLoc) return;
+    const bearing = bearingDeg(userLoc, coord);
+    setCameraHeading(bearing);
     const meters = haversineYards(userLoc, coord) * METERS_PER_YARD;
     mapRef.current?.animateCamera(
       {
-        heading: bearingDeg(userLoc, coord),
+        heading: bearing,
         center: {
           latitude: (userLoc.latitude + coord.latitude) / 2,
           longitude: (userLoc.longitude + coord.longitude) / 2,
@@ -165,10 +229,9 @@ export function MapPage() {
     if (!userLoc) return;
     if (zoomedIn) {
       // Stay zoomed: re-center on the new target at the current pinch level.
-      mapRef.current?.animateCamera(
-        { heading: bearingDeg(userLoc, coord), center: coord },
-        { duration: 350 },
-      );
+      const bearing = bearingDeg(userLoc, coord);
+      setCameraHeading(bearing);
+      mapRef.current?.animateCamera({ heading: bearing, center: coord }, { duration: 350 });
     } else {
       frameShot(coord);
     }
@@ -177,9 +240,11 @@ export function MapPage() {
   const enterZoom = () => {
     if (!userLoc || !target) return;
     setZoomedIn(true);
+    const bearing = bearingDeg(userLoc, target);
+    setCameraHeading(bearing);
     mapRef.current?.animateCamera(
       {
-        heading: bearingDeg(userLoc, target),
+        heading: bearing,
         center: target,
         altitude: ZOOM_ENTRY_SPAN_YDS * METERS_PER_YARD * ALTITUDE_PER_METER,
       },
@@ -194,6 +259,7 @@ export function MapPage() {
 
   const recenter = () => {
     if (!userLoc) return;
+    setCameraHeading(0); // animateToRegion resets the camera to north-up
     mapRef.current?.animateToRegion(
       { ...userLoc, latitudeDelta: REGION_DELTA, longitudeDelta: REGION_DELTA },
       300,
@@ -282,6 +348,11 @@ export function MapPage() {
     };
   }, [zoomedIn, dispersionOn, userLoc, target, distanceYds, history]);
 
+  // On-screen rotation for the heading cone: the real-world bearing minus the
+  // camera's heading, so the wedge points the right way whatever's "up".
+  const coneRotation =
+    heading == null ? null : (((heading - cameraHeading) % 360) + 360) % 360;
+
   // Zooming out even a little past the entry framing dismisses zoom mode
   // back to the standard dot → target framing.
   const onRegionChangeComplete = (region: Region) => {
@@ -353,6 +424,32 @@ export function MapPage() {
           if ((e.nativeEvent as { action?: string }).action === 'marker-press') return;
           placeTarget(e.nativeEvent.coordinate);
         }}>
+        {userLoc && coneRotation != null && (
+          <Marker
+            coordinate={userLoc}
+            anchor={{ x: 0.5, y: 0.5 }}
+            flat={false}
+            pointerEvents="none">
+            <View
+              style={{ transform: [{ rotate: `${coneRotation}deg` }] }}
+              pointerEvents="none">
+              <Svg width={CONE_VIEW} height={CONE_VIEW}>
+                <Defs>
+                  <RadialGradient
+                    id="coneGrad"
+                    cx={CONE_CENTER}
+                    cy={CONE_CENTER}
+                    r={CONE_RADIUS}
+                    gradientUnits="userSpaceOnUse">
+                    <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.55} />
+                    <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0} />
+                  </RadialGradient>
+                </Defs>
+                <Path d={CONE_PATH} fill="url(#coneGrad)" />
+              </Svg>
+            </View>
+          </Marker>
+        )}
         {userLoc && target && (
           <Polyline
             coordinates={[userLoc, target]}

@@ -46,6 +46,20 @@ export type AuthResponse = {
   refreshToken: string;
   user: AuthUser;
 };
+// POST /auth/apple|/auth/google. The provider name (Apple `fullName`, Google
+// profile) rides along so a brand-new account is created with a prefilled name —
+// Apple only shares it on the FIRST authorization. It's only applied on create,
+// never overwriting an existing/edited name.
+export type AppleAuthRequest = {
+  identityToken: string;
+  firstName?: string | null;
+  lastName?: string | null;
+};
+export type GoogleAuthRequest = {
+  idToken: string;
+  firstName?: string | null;
+  lastName?: string | null;
+};
 // Refresh rotates: the response carries a fresh refresh token too (the old one
 // is now revoked server-side). The client must persist both.
 export type RefreshResponse = { accessToken: string; refreshToken: string };
