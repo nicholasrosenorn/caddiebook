@@ -20,23 +20,30 @@ type Props = {
   label: string;
   value: number | null;
   options?: OptionRowOption[];
+  // When set and the field is unset (`value == null`), this value is shown as
+  // selected with an "auto" marker — derived, not written. Tapping confirms it.
+  autoValue?: number | null;
   onChange: (next: number | null) => void;
 };
 
-export function OptionRow({ label, value, options = COUNT_OPTIONS, onChange }: Props) {
+export function OptionRow({ label, value, options = COUNT_OPTIONS, autoValue, onChange }: Props) {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  const isAuto = value == null && autoValue != null;
+  const displayValue = value ?? autoValue;
   return (
     <View style={styles.container}>
       <ThemedText style={styles.label}>{label}</ThemedText>
       <View style={styles.row}>
         {options.map((opt) => {
-          const selected = value === opt.value;
+          const selected = displayValue === opt.value;
           return (
             <Pressable
               key={opt.value}
-              onPress={() => onChange(selected ? null : opt.value)}
+              // Toggle against the real value so tapping the auto-highlighted
+              // option persists it rather than clearing.
+              onPress={() => onChange(value === opt.value ? null : opt.value)}
               style={({ pressed }) => [
                 styles.button,
                 pressed && !selected && styles.buttonPressed,
@@ -56,6 +63,17 @@ export function OptionRow({ label, value, options = COUNT_OPTIONS, onChange }: P
           );
         })}
       </View>
+      {isAuto && (
+        <View style={styles.autoRow}>
+          {options.map((opt) => (
+            <View key={opt.value} style={styles.autoCell}>
+              {opt.value === autoValue ? (
+                <ThemedText type="caption">AUTO</ThemedText>
+              ) : null}
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -73,6 +91,15 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
   row: {
     flexDirection: 'row',
     gap: spacing.sm,
+  },
+  autoRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: -spacing.xs,
+  },
+  autoCell: {
+    flex: 1,
+    alignItems: 'center',
   },
   button: {
     flex: 1,

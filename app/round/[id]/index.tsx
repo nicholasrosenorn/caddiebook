@@ -222,6 +222,19 @@ export default function RoundScreen() {
               onJump={scrollToPage}
             />
 
+            {/* Top stepper pill is sticky on every page, including stats. */}
+            <HoleStepper
+              holeNumber={holeNumber}
+              holeCount={round.holeCount}
+              holes={holes}
+              isFirstHole={isFirstHole}
+              isLastHole={isLastHole}
+              onPrev={onPrevHole}
+              onNext={onNextHole}
+              onJump={goToHole}
+              onFinish={onFinish}
+            />
+
             {isStatsPage ? (
               <StickyHoleNav
                 holeNumber={holeNumber}
@@ -235,22 +248,9 @@ export default function RoundScreen() {
                 onFinish={onFinish}
               />
             ) : (
-              <>
-                <HoleStepper
-                  holeNumber={holeNumber}
-                  holeCount={round.holeCount}
-                  holes={holes}
-                  isFirstHole={isFirstHole}
-                  isLastHole={isLastHole}
-                  onPrev={onPrevHole}
-                  onNext={onNextHole}
-                  onJump={goToHole}
-                  onFinish={onFinish}
-                />
-                <ScrollHint
-                  onPress={() => scrollToPage(Math.min(totalPages - 1, currentPage + 1))}
-                />
-              </>
+              <ScrollHint
+                onPress={() => scrollToPage(Math.min(totalPages - 1, currentPage + 1))}
+              />
             )}
           </>
         )}

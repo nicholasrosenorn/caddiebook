@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 
 import { ApproachTarget } from '@/components/approach-target';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
+import { DropdownSelect, type DropdownOption } from '@/components/dropdown-select';
 import { ModerationMenu } from '@/components/moderation-menu';
 import { Scorecard } from '@/components/scorecard';
 import { Screen } from '@/components/screen';
@@ -15,7 +16,8 @@ import {
   StatTile,
 } from '@/components/stats-figures';
 import { ThemedText } from '@/components/themed-text';
-import { IconSymbol, type IconSymbolName } from '@/components/ui/icon-symbol';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { sortByClubOrder, sortByDriveLength } from '@/constants/clubs';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import { getFriendRound, likeRound, unlikeRound } from '@/lib/api/client';
@@ -37,6 +39,9 @@ export default function FriendRoundScreen() {
   const { ownerId, roundId } = useLocalSearchParams<{ ownerId: string; roundId: string }>();
   const [detail, setDetail] = useState<FriendRoundDetail | null>(null);
   const [error, setError] = useState(false);
+  // 'all' = every club; otherwise a club name logged on this round's holes.
+  const [driveClubFilter, setDriveClubFilter] = useState<'all' | string>('all');
+  const [approachClubFilter, setApproachClubFilter] = useState<'all' | string>('all');
 
   const load = useCallback(async () => {
     if (!ownerId || !roundId) return;
@@ -94,15 +99,49 @@ export default function FriendRoundScreen() {
   const toPar = summary.holesPlayed > 0 ? summary.totalScore - parPlayed : null;
   const perPar = computePerParAverages(holes);
   const distribution = computeScoreDistribution(holes);
-  const ownerName = detail.owner.username
-    ? `@${detail.owner.username}`
-    : detail.owner.firstName ?? 'A friend';
+  const fullName = [detail.owner.firstName, detail.owner.lastName]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  const ownerName = fullName || (detail.owner.username ? `@${detail.owner.username}` : 'A friend');
+  const ownerHandle = fullName && detail.owner.username ? `@${detail.owner.username}` : null;
 
-  const drivePins: TargetPin[] = shots
-    .filter((s) => s.shotType === 'driver')
+  // Resolve each shot's club via its hole; the club lives on the hole, not the shot.
+  const holeByNumber = new Map(holes.map((h) => [h.holeNumber, h]));
+
+  // Clubs actually logged this round, ordered for each shot type's dropdown.
+  const driveClubsUsed = sortByDriveLength([
+    ...new Set(holes.map((h) => h.driveClub).filter((c): c is string => !!c)),
+  ]);
+  const approachClubsUsed = sortByClubOrder([
+    ...new Set(holes.map((h) => h.approachClub).filter((c): c is string => !!c)),
+  ]);
+
+  const driveClubOptions: DropdownOption<string>[] = [
+    { value: 'all', short: 'All clubs', label: 'All clubs' },
+    ...driveClubsUsed.map((c) => ({ value: c, label: c })),
+  ];
+  const approachClubOptions: DropdownOption<string>[] = [
+    { value: 'all', short: 'All clubs', label: 'All clubs' },
+    ...approachClubsUsed.map((c) => ({ value: c, label: c })),
+  ];
+
+  const driverShots = shots.filter((s) => s.shotType === 'driver');
+  const approachShots = shots.filter((s) => s.shotType === 'approach');
+
+  const drivePins: TargetPin[] = driverShots
+    .filter(
+      (s) =>
+        driveClubFilter === 'all' ||
+        holeByNumber.get(s.holeNumber)?.driveClub === driveClubFilter,
+    )
     .map((s) => ({ xNorm: s.xNorm, yNorm: s.yNorm, key: s.id }));
-  const approachPins: TargetPin[] = shots
-    .filter((s) => s.shotType === 'approach')
+  const approachPins: TargetPin[] = approachShots
+    .filter(
+      (s) =>
+        approachClubFilter === 'all' ||
+        holeByNumber.get(s.holeNumber)?.approachClub === approachClubFilter,
+    )
     .map((s) => ({ xNorm: s.xNorm, yNorm: s.yNorm, key: s.id }));
 
   return (
@@ -112,13 +151,16 @@ export default function FriendRoundScreen() {
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.owner}>
-            <IconSymbol
-              name={(detail.owner.avatar as IconSymbolName) ?? 'person.crop.circle'}
-              size={26}
-              color={colors.accent}
-            />
-            <ThemedText style={styles.ownerName}>{ownerName}</ThemedText>
-            <View style={{ flex: 1 }} />
+            <View style={styles.ownerText}>
+              <ThemedText style={styles.ownerName} numberOfLines={1}>
+                {ownerName}
+              </ThemedText>
+              {ownerHandle ? (
+                <ThemedText type="muted" style={styles.ownerHandle} numberOfLines={1}>
+                  {ownerHandle}
+                </ThemedText>
+              ) : null}
+            </View>
             <ModerationMenu
               user={detail.owner}
               round={{ ownerId: detail.ownerId, roundId: detail.id }}
@@ -156,7 +198,7 @@ export default function FriendRoundScreen() {
         <View style={styles.likeRow}>
           <Pressable onPress={onToggleLike} style={({ pressed }) => pressed && styles.pressed}>
             <IconSymbol
-              name={detail.likedByMe ? 'heart.fill' : 'heart'}
+              name={detail.likedByMe ? 'hand.thumbsup.fill' : 'hand.thumbsup'}
               size={22}
               color={detail.likedByMe ? colors.accent : colors.textMuted}
             />
@@ -187,18 +229,32 @@ export default function FriendRoundScreen() {
           <ScoreDistributionBars distribution={distribution} />
         </Section>
 
-        {drivePins.length > 0 ? (
+        {driverShots.length > 0 ? (
           <Section title="Drive dispersion">
+            <DropdownSelect
+              seed="friend-drive-club"
+              options={driveClubOptions}
+              value={driveClubFilter}
+              onChange={setDriveClubFilter}
+              block
+            />
             <View style={styles.targetWrap}>
-              <DriverTarget pins={drivePins} width={233} height={350} />
+              <DriverTarget pins={drivePins} width={260} height={390} />
             </View>
           </Section>
         ) : null}
 
-        {approachPins.length > 0 ? (
+        {approachShots.length > 0 ? (
           <Section title="Approach dispersion">
+            <DropdownSelect
+              seed="friend-club"
+              options={approachClubOptions}
+              value={approachClubFilter}
+              onChange={setApproachClubFilter}
+              block
+            />
             <View style={styles.targetWrap}>
-              <ApproachTarget pins={approachPins} size={240} />
+              <ApproachTarget pins={approachPins} size={290} />
             </View>
           </Section>
         ) : null}
@@ -261,10 +317,17 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       alignItems: 'center',
       gap: spacing.sm,
     },
+    ownerText: {
+      flex: 1,
+    },
     ownerName: {
-      fontFamily: fonts.serif,
-      fontSize: 15,
-      color: colors.textSecondary,
+      fontFamily: fonts.serifBold,
+      fontSize: 17,
+      lineHeight: 23,
+      color: colors.textPrimary,
+    },
+    ownerHandle: {
+      fontSize: 12,
     },
     scoreCard: {
       flexDirection: 'row',

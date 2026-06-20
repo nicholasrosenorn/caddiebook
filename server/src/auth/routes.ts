@@ -2,6 +2,7 @@ import { and, eq, gt, isNull } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { db, type Db } from '../db/client';
+import { deleteAccount } from '../data/service';
 import { refreshTokens, users } from '../db/schema';
 import { env } from '../env';
 import { containsProfanity } from '../moderation/profanity';
@@ -315,6 +316,15 @@ authRoutes.patch('/me', requireAuth, async (c) => {
     }
     throw e;
   }
+});
+
+// Permanently delete the current account and everything it owns (rounds, stats,
+// journal, settings, friendships, likes, blocks, reports, push + refresh tokens).
+// Irreversible — the client tears down its local session once this 200s.
+authRoutes.delete('/me', requireAuth, async (c) => {
+  const userId = c.get('userId');
+  await deleteAccount(userId);
+  return c.json({ ok: true });
 });
 
 // Dev-only: mint a session for a fixed local user so sync can be exercised

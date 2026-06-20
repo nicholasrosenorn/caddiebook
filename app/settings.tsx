@@ -2,7 +2,6 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, DevSettings, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
-import { Avatar } from '@/components/avatar';
 import { ListGroup, ListRow } from '@/components/list-group';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
@@ -83,10 +82,9 @@ export default function SettingsScreen() {
           <Pressable
             onPress={() => router.push('/edit-profile')}
             accessibilityRole="button"
-            accessibilityLabel="Edit profile"
+            accessibilityLabel="Manage profile"
             style={({ pressed }) => pressed && styles.cardPressed}>
             <SketchSurface seed="account-card" radius={12} style={styles.accountCard}>
-              <Avatar avatar={user?.avatar} size={56} seed="settings-avatar" />
               <View style={styles.accountText}>
                 <ThemedText style={styles.accountName}>{fullName || 'Golfer'}</ThemedText>
                 {user?.username ? (
@@ -102,7 +100,7 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.editAffordance}>
                 <IconSymbol name="pencil" size={15} color={colors.accent} />
-                <ThemedText style={styles.editLabel}>Edit</ThemedText>
+                <ThemedText style={styles.editLabel}>Manage</ThemedText>
               </View>
             </SketchSurface>
           </Pressable>

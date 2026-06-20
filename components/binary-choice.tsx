@@ -9,20 +9,22 @@ import { useColors, useFontSet } from '@/constants/theme-context';
 
 type Props = {
   label: string;
-  hint?: string;
+  // When true and a value is shown, the value is derived (not written) — an
+  // "auto" marker is rendered under the filled button.
+  auto?: boolean;
   value: boolean | null;
   onChange: (next: boolean | null) => void;
 };
 
-export function BinaryChoice({ label, hint, value, onChange }: Props) {
+export function BinaryChoice({ label, auto, value, onChange }: Props) {
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  const showAuto = auto && value != null;
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <ThemedText style={styles.label}>{label}</ThemedText>
-        {hint ? <ThemedText type="caption">{hint}</ThemedText> : null}
       </View>
       <View style={styles.row}>
         <Pressable
@@ -58,6 +60,16 @@ export function BinaryChoice({ label, hint, value, onChange }: Props) {
           </SketchSurface>
         </Pressable>
       </View>
+      {showAuto && (
+        <View style={styles.autoRow}>
+          <View style={styles.autoCell}>
+            {value === true ? <ThemedText type="caption">AUTO</ThemedText> : null}
+          </View>
+          <View style={styles.autoCell}>
+            {value === false ? <ThemedText type="caption">AUTO</ThemedText> : null}
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -78,6 +90,14 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
   row: {
     flexDirection: 'row',
     gap: spacing.sm,
+  },
+  autoRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  autoCell: {
+    flex: 1,
+    alignItems: 'center',
   },
   button: {
     flex: 1,

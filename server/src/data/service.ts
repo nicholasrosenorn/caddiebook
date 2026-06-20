@@ -238,6 +238,46 @@ export async function deleteRound(userId: string, roundId: string): Promise<void
   });
 }
 
+// Permanently erase an account: every row this user owns across the data tables
+// plus their server-owned social/auth state, finishing with the users row, all in
+// one transaction. The schema has no FK cascades (composite (user_id, id) PKs), so
+// each table is cleared explicitly. Irreversible — there is no soft-delete.
+export async function deleteAccount(userId: string): Promise<void> {
+  await withTx(async (tx) => {
+    // Per-user data tables (all keyed by user_id).
+    for (const table of [
+      'holes',
+      'shots',
+      'putts',
+      'post_round_reviews',
+      'pre_round_goals',
+      'rounds',
+      'courses',
+      'tees',
+      'journal_entries',
+      'app_settings',
+      'refresh_tokens',
+      'push_tokens',
+    ]) {
+      await tx.query(`DELETE FROM ${ident(table)} WHERE user_id = $1`, [userId]);
+    }
+    // Round-share notification ledger is keyed by round_owner_id.
+    await tx.query(`DELETE FROM round_share_notifications WHERE round_owner_id = $1`, [userId]);
+    // Social/moderation state where the user appears on either side.
+    await tx.query(`DELETE FROM friendships WHERE user_low = $1 OR user_high = $1`, [userId]);
+    await tx.query(`DELETE FROM friend_requests WHERE from_user_id = $1 OR to_user_id = $1`, [
+      userId,
+    ]);
+    await tx.query(`DELETE FROM round_likes WHERE round_owner_id = $1 OR liker_id = $1`, [userId]);
+    await tx.query(`DELETE FROM user_blocks WHERE blocker_id = $1 OR blocked_id = $1`, [userId]);
+    await tx.query(`DELETE FROM content_reports WHERE reporter_id = $1 OR target_owner_id = $1`, [
+      userId,
+    ]);
+    // Finally the account row itself.
+    await tx.query(`DELETE FROM users WHERE id = $1`, [userId]);
+  });
+}
+
 export async function upsertHole(
   userId: string,
   roundId: string,

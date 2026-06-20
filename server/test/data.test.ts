@@ -350,6 +350,107 @@ describe('/data auth & limits', () => {
   });
 });
 
+describe('account deletion (DELETE /auth/me)', () => {
+  it('erases the user row and every table the account touches', async () => {
+    // A real users row so we can assert it is gone afterward.
+    const user = randomUUID();
+    const friend = randomUUID();
+    await pool.query(`INSERT INTO users (id, email) VALUES ($1, $2)`, [user, `${user}@local`]);
+
+    // Per-user data through the API (rounds + holes, a shot, a putt, a setting).
+    const { roundId } = await createRound(user, 9);
+    expect(
+      (await authed(user, `/data/rounds/${roundId}/holes/1/shots/driver`, 'PUT', {
+        id: randomUUID(),
+        x_norm: 0.5,
+        y_norm: 0.5,
+      })).status,
+    ).toBe(200);
+    expect(
+      (await authed(user, `/data/putts/${randomUUID()}`, 'PUT', {
+        round_id: roundId,
+        hole_number: 1,
+        distance_ft: 10,
+        made: 1,
+      })).status,
+    ).toBe(200);
+    expect((await authed(user, '/data/settings/bag', 'PUT', { value: '[]' })).status).toBe(200);
+
+    // Server-owned social / auth state, inserted directly.
+    await pool.query(`INSERT INTO users (id, email) VALUES ($1, $2)`, [friend, `${friend}@local`]);
+    await pool.query(
+      `INSERT INTO refresh_tokens (id, user_id, family_id, expires_at) VALUES ($1, $2, $3, now() + interval '30 days')`,
+      [randomUUID(), user, randomUUID()],
+    );
+    await pool.query(`INSERT INTO push_tokens (token, user_id) VALUES ($1, $2)`, [
+      `ExpoToken[${user}]`,
+      user,
+    ]);
+    const [low, high] = user < friend ? [user, friend] : [friend, user];
+    await pool.query(`INSERT INTO friendships (user_low, user_high) VALUES ($1, $2)`, [low, high]);
+    await pool.query(
+      `INSERT INTO friend_requests (from_user_id, to_user_id) VALUES ($1, $2)`,
+      [user, friend],
+    );
+    await pool.query(
+      `INSERT INTO round_likes (round_owner_id, round_id, liker_id) VALUES ($1, $2, $3)`,
+      [user, roundId, friend],
+    );
+    await pool.query(`INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)`, [
+      user,
+      friend,
+    ]);
+    await pool.query(
+      `INSERT INTO content_reports (reporter_id, target_type, target_owner_id, reason) VALUES ($1, 'user', $2, 'spam')`,
+      [user, friend],
+    );
+    await pool.query(
+      `INSERT INTO round_share_notifications (round_owner_id, round_id) VALUES ($1, $2)`,
+      [user, roundId],
+    );
+
+    // Delete the account.
+    const res = await authed(user, '/auth/me', 'DELETE');
+    expect(res.status).toBe(200);
+
+    // Nothing belonging to the user remains anywhere.
+    const checks: [string, string][] = [
+      ['rounds', `user_id = $1`],
+      ['holes', `user_id = $1`],
+      ['shots', `user_id = $1`],
+      ['putts', `user_id = $1`],
+      ['app_settings', `user_id = $1`],
+      ['refresh_tokens', `user_id = $1`],
+      ['push_tokens', `user_id = $1`],
+      ['friendships', `user_low = $1 OR user_high = $1`],
+      ['friend_requests', `from_user_id = $1 OR to_user_id = $1`],
+      ['round_likes', `round_owner_id = $1 OR liker_id = $1`],
+      ['user_blocks', `blocker_id = $1 OR blocked_id = $1`],
+      ['content_reports', `reporter_id = $1 OR target_owner_id = $1`],
+      ['round_share_notifications', `round_owner_id = $1`],
+      ['users', `id = $1`],
+    ];
+    for (const [table, where] of checks) {
+      const { rows } = await pool.query(`SELECT count(*)::int AS n FROM ${table} WHERE ${where}`, [
+        user,
+      ]);
+      expect(`${table}:${rows[0].n}`).toBe(`${table}:0`);
+    }
+
+    // The friend (only referenced, not the owner) is untouched.
+    const { rows: friendRows } = await pool.query(`SELECT count(*)::int AS n FROM users WHERE id = $1`, [
+      friend,
+    ]);
+    expect(friendRows[0].n).toBe(1);
+
+    // A later authenticated request from the deleted user behaves like a fresh
+    // account (no leftover data), not an error.
+    const after = await authed(user, '/data/rounds');
+    expect(after.status).toBe(200);
+    expect(((await after.json()) as DataRoundsResponse).rounds).toHaveLength(0);
+  });
+});
+
 describe('/data input validation', () => {
   it('rejects a request body over the data size limit (413)', async () => {
     const user = randomUUID();

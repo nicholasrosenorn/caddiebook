@@ -50,6 +50,17 @@ export function sortByDriveLength(clubs: readonly string[]): string[] {
   return [...clubs].sort((a, b) => rank(a) - rank(b));
 }
 
+// Approach clubs read most naturally in canonical loft order (wedges → long
+// irons); unknown/custom clubs fall to the end.
+export function sortByClubOrder(clubs: string[]): string[] {
+  const order = CLUB_OPTIONS as readonly string[];
+  const rank = (c: string) => {
+    const i = order.indexOf(c);
+    return i === -1 ? order.length : i;
+  };
+  return [...clubs].sort((a, b) => rank(a) - rank(b));
+}
+
 // A wedge is the pitching wedge or any more-lofted (degree-labelled) club —
 // the scoring clubs that get a wedge-grid column.
 export function isWedge(club: string): boolean {

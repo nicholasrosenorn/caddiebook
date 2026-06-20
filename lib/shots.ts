@@ -30,11 +30,16 @@ export function isFairwayHit(lane: DriverLane): boolean {
   return lane === 'CF';
 }
 
+// Ring radii are deliberately kept modest (outermost = the green edge at 0.40)
+// so the approach target leaves a green "grass" band on every side — room to mark
+// short/long/left/right misses without crowding the edge of the frame. This is the
+// single source of truth: both the ApproachTarget visuals and approachResult() read
+// it, so the drawn green and the on/off-green boundary stay aligned.
 export const APPROACH_RINGS = [
-  { maxR: 0.1, ft: 5 },
-  { maxR: 0.19, ft: 10 },
-  { maxR: 0.33, ft: 20 },
-  { maxR: 0.46, ft: 30 },
+  { maxR: 0.085, ft: 5 },
+  { maxR: 0.165, ft: 10 },
+  { maxR: 0.285, ft: 20 },
+  { maxR: 0.4, ft: 30 },
 ] as const;
 
 export type ApproachResult = {

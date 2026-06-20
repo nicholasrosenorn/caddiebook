@@ -14,7 +14,7 @@ import {
 } from '@/components/stats-figures';
 import { ThemedText } from '@/components/themed-text';
 import { TrendChart } from '@/components/trend-chart';
-import { CLUB_OPTIONS, sortByDriveLength } from '@/constants/clubs';
+import { sortByClubOrder, sortByDriveLength } from '@/constants/clubs';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import type { Hole, PostRoundReview, Putt, Round, Shot } from '@/lib/data/models';
@@ -95,17 +95,6 @@ function distinctClubs(
     }
   }
   return [...seen];
-}
-
-// Approach clubs read most naturally in canonical loft order (wedges → long
-// irons); unknown/custom clubs fall to the end.
-function sortByClubOrder(clubs: string[]): string[] {
-  const order = CLUB_OPTIONS as readonly string[];
-  const rank = (c: string) => {
-    const i = order.indexOf(c);
-    return i === -1 ? order.length : i;
-  };
-  return [...clubs].sort((a, b) => rank(a) - rank(b));
 }
 
 // Tab usage: owns the bottom-tab height + the live stats query, then hands them

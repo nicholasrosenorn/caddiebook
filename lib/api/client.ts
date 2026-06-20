@@ -171,6 +171,12 @@ export async function updateProfile(patch: ProfileUpdate): Promise<AuthUser> {
   return (await res.json()) as AuthUser;
 }
 
+// Permanently delete the signed-in account and everything it owns. Needs a live
+// access token, so the caller must invoke this before clearing the session.
+export async function deleteAccount(): Promise<void> {
+  await authedRequest('/auth/me', 'DELETE');
+}
+
 // --- Legacy sync (authenticated) ---------------------------------------------
 //
 // Only the one-time upgrade flush (lib/migration/legacy-flush.ts) and the dev

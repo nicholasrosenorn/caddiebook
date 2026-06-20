@@ -11,6 +11,7 @@ import {
 import { Platform } from 'react-native';
 
 import {
+  deleteAccount as apiDeleteAccount,
   getMe,
   registerPushToken,
   unregisterPushToken,
@@ -40,6 +41,7 @@ type AuthContextValue = {
   signInApple: () => Promise<void>;
   signInGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   updateProfile: (patch: ProfileUpdate) => Promise<void>;
 };
 
@@ -156,6 +158,27 @@ export function AuthProvider({
     onSignOut?.();
   }, [onSignOut]);
 
+  // Permanently delete the account. The server wipe must succeed first (it needs
+  // a live access token and is the point of no return); only then do we tear down
+  // local state. We skip the outbox drain (the data is being erased) and the push
+  // unregister (the server delete drops this user's push tokens already).
+  const doDeleteAccount = useCallback(async () => {
+    await apiDeleteAccount(); // throws on failure → session stays intact
+    // Revoke the refresh-token family too (belt-and-suspenders; rows are gone).
+    try {
+      await signOut();
+    } catch {
+      // already gone or offline — ignore
+    }
+    await clearOutbox();
+    queryClient.clear();
+    await queryPersister.removeClient();
+    await clearSession();
+    setSession(null);
+    // Replay the intro flow, same as an explicit sign-out.
+    onSignOut?.();
+  }, [onSignOut]);
+
   // Persist a profile edit: write it server-side, then mirror into session state
   // and the keychain so it survives a relaunch.
   const updateProfile = useCallback(async (patch: ProfileUpdate) => {
@@ -170,9 +193,10 @@ export function AuthProvider({
       signInApple,
       signInGoogle,
       signOut: doSignOut,
+      deleteAccount: doDeleteAccount,
       updateProfile,
     }),
-    [session, signInApple, signInGoogle, doSignOut, updateProfile],
+    [session, signInApple, signInGoogle, doSignOut, doDeleteAccount, updateProfile],
   );
 
   return (

@@ -3,7 +3,6 @@ import { Pressable, StyleSheet, View, type GestureResponderEvent } from 'react-n
 import Svg, { Circle, G, Line, Path, Polygon } from 'react-native-svg';
 
 import type { TargetPin } from '@/components/driver-target';
-import { BunkerBlob } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
@@ -41,8 +40,12 @@ function ApproachTargetImpl({
   };
 
   const c = size / 2;
+  // Outermost grass band — the slightly darker green, mirroring the driver
+  // target's fairway → rough → roughDeep nesting. Off-green misses on every
+  // side read as tappable surface.
+  const SURROUND_GREEN = colors.roughDeep;
   // Seeded geometry is deterministic in size — compute once, not every render.
-  const { surfaceR, fringeD, greenD, grain, rings } = useMemo(() => {
+  const { surfaceR, surroundD, surroundGrain, fringeD, greenD, grain, rings } = useMemo(() => {
     // The putting surface fills all the way out to the outermost ring.
     const surfaceR = APPROACH_RINGS[APPROACH_RINGS.length - 1].maxR * size;
     const fringeR = surfaceR + size * 0.04;
@@ -51,10 +54,15 @@ function ApproachTargetImpl({
       if (r >= surfaceR) return [];
       return [{ ft: ring.ft, d: roughCirclePath(c, c, r, `approach-ring-${ring.ft}`, { jitter: 0.018 }) }];
     });
+    // The grass surround is a larger circle filling the frame behind the green,
+    // keeping the whole target circular.
+    const surroundR = size * 0.49;
     return {
       surfaceR,
-      fringeD: roughCirclePath(c, c, fringeR, 'approach-fringe', { jitter: 0.022 }),
-      greenD: roughCirclePath(c, c, surfaceR, 'approach-green', { jitter: 0.024 }),
+      surroundD: roughCirclePath(c, c, surroundR, 'approach-surround', { jitter: 0.008, points: 28 }),
+      surroundGrain: stippleInEllipse(c, c, surroundR, surroundR, 40, 'approach-surround-grain'),
+      fringeD: roughCirclePath(c, c, fringeR, 'approach-fringe', { jitter: 0.008, points: 28 }),
+      greenD: roughCirclePath(c, c, surfaceR, 'approach-green', { jitter: 0.009, points: 28 }),
       grain: stippleInEllipse(c, c, surfaceR, surfaceR, 70, 'approach-green-grain'),
       rings,
     };
@@ -70,6 +78,21 @@ function ApproachTargetImpl({
       shouldRasterizeIOS={rasterize}
       renderToHardwareTextureAndroid={rasterize}>
       <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+        {/* Grass surround — darkest green field filling the frame, so off-green
+            misses on every side read as tappable ground (not dead paper) */}
+        <Path
+          d={surroundD}
+          fill={SURROUND_GREEN}
+          stroke={colors.accent}
+          strokeWidth={1}
+          strokeOpacity={0.3}
+        />
+        <G>
+          {surroundGrain.map((dot, i) => (
+            <Circle key={`sg-${i}`} cx={dot.x} cy={dot.y} r={dot.r} fill={colors.accent} opacity={0.1} />
+          ))}
+        </G>
+
         {/* Fringe — slightly darker green band ringing the whole surface */}
         <Path
           d={fringeD}
@@ -115,9 +138,6 @@ function ApproachTargetImpl({
       <View style={styles.cornerTR} pointerEvents="none">
         <Crosshair />
       </View> */}
-      <View style={styles.bunker} pointerEvents="none">
-        <BunkerBlob width={size * 0.2} height={size * 0.13} seed="approach-bunker" rotation={-0.5} />
-      </View>
 
       {/* Ring labels */}
       {APPROACH_RINGS.map((ring) => {
@@ -214,11 +234,6 @@ const makeStyles = (colors: Palette) =>
     position: 'absolute',
     top: 0,
     right: 0,
-  },
-  bunker: {
-    position: 'absolute',
-    bottom: '5%',
-    right: '2%',
   },
   ringLabel: {
     position: 'absolute',

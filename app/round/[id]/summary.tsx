@@ -1,10 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ApproachTarget } from '@/components/approach-target';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
+import { DropdownSelect, type DropdownOption } from '@/components/dropdown-select';
 import { GlassSurface } from '@/components/glass-surface';
 import { Scorecard } from '@/components/scorecard';
 import { Screen } from '@/components/screen';
@@ -17,6 +18,7 @@ import {
 } from '@/components/stats-figures';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { sortByClubOrder, sortByDriveLength } from '@/constants/clubs';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import type { Hole, PostRoundReview, PreRoundGoals } from '@/lib/data/models';
@@ -57,9 +59,49 @@ export default function SummaryScreen() {
   const review = detail?.review ?? null;
   const goals = detail?.goals ?? null;
 
+  // 'all' = every club; otherwise a club name logged on this round's holes.
+  const [driveClubFilter, setDriveClubFilter] = useState<'all' | string>('all');
+  const [approachClubFilter, setApproachClubFilter] = useState<'all' | string>('all');
+
   const holesWithNotes = useMemo(
     () => holes.filter((h) => h.notes?.trim()),
     [holes],
+  );
+
+  // Resolve each shot's club via its hole; the club lives on the hole, not the shot.
+  const holeByNumber = useMemo(() => {
+    const map = new Map<number, Hole>();
+    for (const h of holes) map.set(h.holeNumber, h);
+    return map;
+  }, [holes]);
+
+  // Clubs actually logged this round, ordered for each shot type's dropdown.
+  const driveClubsUsed = useMemo(() => {
+    const seen = new Set<string>();
+    for (const h of holes) if (h.driveClub) seen.add(h.driveClub);
+    return sortByDriveLength([...seen]);
+  }, [holes]);
+
+  const approachClubsUsed = useMemo(() => {
+    const seen = new Set<string>();
+    for (const h of holes) if (h.approachClub) seen.add(h.approachClub);
+    return sortByClubOrder([...seen]);
+  }, [holes]);
+
+  const driveClubOptions = useMemo<DropdownOption<string>[]>(
+    () => [
+      { value: 'all', short: 'All clubs', label: 'All clubs' },
+      ...driveClubsUsed.map((c) => ({ value: c, label: c })),
+    ],
+    [driveClubsUsed],
+  );
+
+  const approachClubOptions = useMemo<DropdownOption<string>[]>(
+    () => [
+      { value: 'all', short: 'All clubs', label: 'All clubs' },
+      ...approachClubsUsed.map((c) => ({ value: c, label: c })),
+    ],
+    [approachClubsUsed],
   );
 
   // New Handicap Index after this round + how it moved from the index carried in.
@@ -93,10 +135,20 @@ export default function SummaryScreen() {
   const noApproachHoles = countGreenBlocked(holes);
 
   const drivePins: TargetPin[] = shots
-    .filter((s) => s.shotType === 'driver')
+    .filter(
+      (s) =>
+        s.shotType === 'driver' &&
+        (driveClubFilter === 'all' ||
+          holeByNumber.get(s.holeNumber)?.driveClub === driveClubFilter),
+    )
     .map((s) => ({ xNorm: s.xNorm, yNorm: s.yNorm, key: s.id }));
   const approachPins: TargetPin[] = shots
-    .filter((s) => s.shotType === 'approach')
+    .filter(
+      (s) =>
+        s.shotType === 'approach' &&
+        (approachClubFilter === 'all' ||
+          holeByNumber.get(s.holeNumber)?.approachClub === approachClubFilter),
+    )
     .map((s) => ({ xNorm: s.xNorm, yNorm: s.yNorm, key: s.id }));
 
   const onClose = () => {
@@ -203,8 +255,15 @@ export default function SummaryScreen() {
         </Section>
 
         <Section title="Drive dispersion">
+          <DropdownSelect
+            seed="summary-drive-club"
+            options={driveClubOptions}
+            value={driveClubFilter}
+            onChange={setDriveClubFilter}
+            block
+          />
           <View style={[styles.targetWrap, { marginBottom: spacing.md }]}>
-            <DriverTarget pins={drivePins} width={233} height={350} />
+            <DriverTarget pins={drivePins} width={260} height={390} />
           </View>
           {noApproachHoles > 0 ? (
             <ThemedText type="muted" style={styles.centerText}>
@@ -214,8 +273,15 @@ export default function SummaryScreen() {
         </Section>
 
         <Section title="Approach dispersion">
+          <DropdownSelect
+            seed="summary-club"
+            options={approachClubOptions}
+            value={approachClubFilter}
+            onChange={setApproachClubFilter}
+            block
+          />
           <View style={styles.targetWrap}>
-            <ApproachTarget pins={approachPins} size={240} />
+            <ApproachTarget pins={approachPins} size={290} />
           </View>
           {/* <ThemedText type="muted" style={styles.centerText}>
             {approachPins.length} approach{approachPins.length === 1 ? '' : 'es'} ·

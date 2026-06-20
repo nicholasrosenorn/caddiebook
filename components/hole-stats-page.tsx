@@ -7,7 +7,7 @@ import { ScoreGrid } from '@/components/score-grid';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { spacing, type Palette, type FontSet } from '@/constants/theme';
+import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import type { Hole } from '@/lib/data/models';
 import { useUpdateHole } from '@/lib/data/rounds';
@@ -75,6 +75,11 @@ export function HoleStatsPage({ roundId, hole }: Props) {
   const showUd = resolvedGir === false;
   const resolvedUd = resolveUpAndDown(hole);
   const udIsAuto = hole.upAndDown == null;
+  // Reaching the green in regulation means no greenside chip, no greenside
+  // bunker shot, and (a penalty would have made GIR impossible) no penalty —
+  // so those counts auto-fill to 0. Blocked greens yield resolvedGir === null,
+  // so they correctly get no autofill.
+  const autoZero = resolvedGir === true ? 0 : null;
 
   return (
     <ScrollView
@@ -84,11 +89,7 @@ export function HoleStatsPage({ roundId, hole }: Props) {
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps="handled">
       <View style={styles.headerBlock}>
-        <ThemedText type="caption">STATS</ThemedText>
-        <ThemedText type="title">
-          Hole {hole.holeNumber}
-          {hole.par != null ? ` · Par ${hole.par}` : ''}
-        </ThemedText>
+        <ThemedText type="caption">SUMMARY</ThemedText>
       </View>
 
       <ScoreGrid
@@ -128,7 +129,7 @@ export function HoleStatsPage({ roundId, hole }: Props) {
       ) : (
         <BinaryChoice
           label="Green in Regulation (GIR)"
-          hint={girIsAuto && derivedGir != null ? 'Auto from score − putts' : undefined}
+          auto={girIsAuto && derivedGir != null}
           value={resolvedGir}
           onChange={(v) => update('gir', v)}
         />
@@ -137,7 +138,7 @@ export function HoleStatsPage({ roundId, hole }: Props) {
       {showUd && (
         <BinaryChoice
           label="Up & Down"
-          hint={udIsAuto && resolvedUd != null ? 'Auto from score ≤ par' : undefined}
+          auto={udIsAuto && resolvedUd != null}
           value={resolvedUd}
           onChange={(v) => update('upAndDown', v)}
         />
@@ -146,16 +147,19 @@ export function HoleStatsPage({ roundId, hole }: Props) {
       <OptionRow
         label="Chip Shots"
         value={hole.chipShots}
+        autoValue={autoZero}
         onChange={(v) => update('chipShots', v)}
       />
       <OptionRow
         label="Greenside Sand"
         value={hole.sandShots}
+        autoValue={autoZero}
         onChange={(v) => update('sandShots', v)}
       />
       <OptionRow
         label="Penalties"
         value={hole.penalties}
+        autoValue={autoZero}
         onChange={(v) => update('penalties', v)}
       />
 
@@ -197,7 +201,8 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
   container: {
     paddingLeft: spacing.md,
     paddingRight: spacing.xl,
-    paddingTop: spacing.md,
+    // Clear the floating top stepper pill (spans ~y8–48) now sticky on this page.
+    paddingTop: 56,
     paddingBottom: 140,
     gap: spacing.lg,
   },

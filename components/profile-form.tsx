@@ -12,10 +12,9 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { Avatar, AVATAR_ICONS, DEFAULT_AVATAR } from '@/components/avatar';
+import { DEFAULT_AVATAR } from '@/components/avatar';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import { ObjectionableLanguageError, UsernameTakenError } from '@/lib/api/client';
@@ -42,12 +41,16 @@ export function ProfileForm({
   submitLabel,
   onSaved,
   header,
+  footer,
   contentStyle,
 }: {
   initial: ProfileFormValues;
   submitLabel: string;
   onSaved?: () => void;
   header?: React.ReactNode;
+  // Rendered below the submit button — the edit screen uses it for the
+  // destructive "Delete account" action; onboarding omits it.
+  footer?: React.ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
 }) {
   const colors = useColors();
@@ -59,7 +62,9 @@ export function ProfileForm({
   const [lastName, setLastName] = useState(initial.lastName);
   // Usernames are lowercased as you type so what you see is what's stored.
   const [username, setUsername] = useState(initial.username);
-  const [avatar, setAvatar] = useState(initial.avatar || DEFAULT_AVATAR);
+  // Avatar is no longer user-selectable; we carry the existing value through on
+  // save so a previously-chosen icon (or the default) is preserved.
+  const [avatar] = useState(initial.avatar || DEFAULT_AVATAR);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -113,7 +118,6 @@ export function ProfileForm({
         {header}
 
         <View style={styles.previewRow}>
-          <Avatar avatar={avatar} size={84} seed="profile-form-preview" />
           <View style={styles.previewText}>
             <ThemedText style={styles.previewName}>
               {trimmedFirst || 'Your name'} {lastName.trim()}
@@ -171,38 +175,6 @@ export function ProfileForm({
           </ThemedText>
         </View>
 
-        <View style={styles.section}>
-          <ThemedText type="caption">CHOOSE AN ICON</ThemedText>
-          <View style={styles.iconGrid}>
-            {AVATAR_ICONS.map((name) => {
-              const selected = name === avatar;
-              return (
-                <Pressable
-                  key={name}
-                  onPress={() => setAvatar(name)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Avatar ${name}`}
-                  accessibilityState={{ selected }}
-                  style={({ pressed }) => pressed && styles.pressed}>
-                  <SketchSurface
-                    seed={`icon-${name}`}
-                    radius={28}
-                    fill={selected ? colors.accent : colors.surface}
-                    stroke={selected ? colors.accent : colors.borderStrong}
-                    strokeWidth={selected ? 2 : 1.3}
-                    style={styles.iconTile}>
-                    <IconSymbol
-                      name={name}
-                      size={26}
-                      color={selected ? colors.accentOn : colors.textSecondary}
-                    />
-                  </SketchSurface>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-
         {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
 
         <Pressable
@@ -224,6 +196,8 @@ export function ProfileForm({
             )}
           </SketchSurface>
         </Pressable>
+
+        {footer}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -304,20 +278,6 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     hint: {
       fontSize: 12,
       marginTop: 2,
-    },
-    section: {
-      gap: spacing.sm,
-    },
-    iconGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: spacing.sm,
-    },
-    iconTile: {
-      width: 56,
-      height: 56,
-      alignItems: 'center',
-      justifyContent: 'center',
     },
     error: {
       color: colors.danger,
