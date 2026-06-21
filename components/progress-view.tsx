@@ -5,6 +5,7 @@ import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 import { ApproachTarget } from '@/components/approach-target';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
 import { DropdownSelect, type DropdownOption } from '@/components/dropdown-select';
+import { SgDistanceBars } from '@/components/sg-distance-bars';
 import { SketchDivider, SketchSurface } from '@/components/sketch';
 import {
   ScoreDistributionBars,
@@ -12,12 +13,14 @@ import {
   SplitDistanceBars,
   StatTile,
 } from '@/components/stats-figures';
+import { StrokesGainedCard } from '@/components/strokes-gained-card';
 import { ThemedText } from '@/components/themed-text';
 import { TrendChart } from '@/components/trend-chart';
 import { sortByClubOrder, sortByDriveLength } from '@/constants/clubs';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import type { Hole, PostRoundReview, Putt, Round, Shot } from '@/lib/data/models';
+import { useClubYardages } from '@/lib/data/settings';
 import { useStatsBundle, type StatsBundle } from '@/lib/data/stats';
 import type { HandicapHistory } from '@/lib/handicap';
 import {
@@ -25,6 +28,7 @@ import {
   aggregateDriver,
   aggregateReview,
   aggregateStats,
+  aggregateStrokesGained,
   formatHandicapIndex,
   formatToPar,
   handicapHistoryFor,
@@ -36,8 +40,11 @@ import {
   type ReviewInsights,
   type RoundDerived,
   type RoundsFilter,
+  type SGBandRow,
+  type StrokesGainedStats
 } from '@/lib/lifetime-stats';
 import { formatPct } from '@/lib/stats';
+import { bandVsBaseline, driverDistanceFor, SG_BASELINES } from '@/lib/strokes-gained';
 
 type Data = {
   rounds: Round[]; // completed only, newest first
@@ -123,6 +130,7 @@ export function ProgressViewBase({
   const [roundsFilter, setRoundsFilter] = useState<RoundsFilter>(20);
   const [clubFilter, setClubFilter] = useState<ClubFilter>('all');
   const [driveClubFilter, setDriveClubFilter] = useState<ClubFilter>('all');
+  const { yardages } = useClubYardages();
 
   // One cached server read (refetched on focus/foreground) replaces the old
   // five whole-table SQLite queries; the groupings stay client-side.
@@ -156,6 +164,25 @@ export function ProgressViewBase({
     if (!data) return null;
     return handicapHistoryFor(data.rounds, data.holesByRound);
   }, [data]);
+
+  // Driver distance for the Off-the-Tee hole-length estimate: the player's logged
+  // yardage, else a default off their current Handicap Index.
+  const driverDistance = useMemo(
+    () => driverDistanceFor(yardages['Driver'], handicap?.current ?? null),
+    [yardages, handicap],
+  );
+
+  // Strokes gained recomputes when the filtered set or driver distance changes.
+  const sg = useMemo<StrokesGainedStats | null>(() => {
+    if (!data || !filteredRounds) return null;
+    return aggregateStrokesGained(
+      filteredRounds,
+      data.holesByRound,
+      data.shotsByRound,
+      data.puttsByRound,
+      { driverDistance },
+    );
+  }, [data, filteredRounds, driverDistance]);
 
   const view = useMemo<StatsView | null>(() => {
     if (!data || !filteredRounds) return null;
@@ -276,10 +303,11 @@ export function ProgressViewBase({
           />
         </View>
 
-        {view && approach && driver && handicap ? (
+        {view && approach && driver && handicap && sg ? (
           <StatsBody
             view={view}
             handicap={handicap}
+            sg={sg}
             roundsFilter={roundsFilter}
             empty={view.stats.roundCount === 0}
             hasAny={!isEmpty}
@@ -302,6 +330,7 @@ export function ProgressViewBase({
 function StatsBody({
   view,
   handicap,
+  sg,
   roundsFilter,
   empty,
   hasAny,
@@ -317,6 +346,7 @@ function StatsBody({
 }: {
   view: StatsView;
   handicap: HandicapHistory;
+  sg: StrokesGainedStats;
   roundsFilter: RoundsFilter;
   /** No rounds matched the active filters — render the dashed skeleton. */
   empty: boolean;
@@ -336,6 +366,10 @@ function StatsBody({
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const { stats, trend, review } = view;
+  // The SG baseline dropdown lives on the card but drives the distance-band
+  // charts in the Approach/Putting sections too, so its state is lifted here.
+  const [sgBaselineKey, setSgBaselineKey] = useState('10');
+  const sgBaseline = SG_BASELINES.find((b) => b.key === sgBaselineKey) ?? SG_BASELINES[0];
   // Full-history points (true index at each round), windowed to the recency
   // dropdown only — the scoring-bar value stays the unfiltered current index.
   const windowedHandicap =
@@ -389,6 +423,18 @@ function StatsBody({
           </View>
         </View>
       </Section>
+
+      {/* Strokes gained vs the PGA Tour baseline + handicap scenarios */}
+      {!empty && sg.sg.holesWithSG > 0 ? (
+        <Section title="Strokes gained">
+          <StrokesGainedCard
+            sg={sg.sg}
+            trend={sg.trend}
+            baselineKey={sgBaselineKey}
+            onBaselineChange={setSgBaselineKey}
+          />
+        </Section>
+      ) : null}
 
       {/* Trends over time */}
       {showTrends ? (
@@ -486,6 +532,13 @@ function StatsBody({
             total: b.total,
           }))}
         />
+        {!empty && sg.sg.holesWithSG > 0 ? (
+          <SgBandBlock
+            rows={sg.approachBands}
+            values={bandVsBaseline(sg.approachBands, 'approach', sgBaseline.hcp)}
+            baselineLabel={sgBaseline.label}
+          />
+        ) : null}
       </Section>
 
       {/* Putting make rate by distance */}
@@ -501,6 +554,13 @@ function StatsBody({
             total: b.total,
           }))}
         />
+        {!empty && sg.sg.holesWithSG > 0 ? (
+          <SgBandBlock
+            rows={sg.puttingBands}
+            values={bandVsBaseline(sg.puttingBands, 'putting', sgBaseline.hcp)}
+            baselineLabel={sgBaseline.label}
+          />
+        ) : null}
       </Section>
 
       {/* Trouble */}
@@ -746,6 +806,34 @@ function FrequencyBars<T extends string>({
   );
 }
 
+// The "SG by distance band" sub-figure under the Approach / Putting sections: a
+// caption naming the active baseline + the diverging band chart. `values` are the
+// per-band SG already shifted to the selected baseline (aligned to `rows`); bands
+// with no holes are dropped so the chart only shows distances actually played.
+function SgBandBlock({
+  rows,
+  values,
+  baselineLabel,
+}: {
+  rows: SGBandRow[];
+  values: number[];
+  baselineLabel: string;
+}) {
+  const fonts = useFontSet();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  const barRows = rows
+    .map((r, i) => ({ key: r.key, label: r.label, value: values[i], holes: r.holes }))
+    .filter((r) => r.holes > 0);
+  if (barRows.length === 0) return null;
+  return (
+    <View style={styles.sgBandBlock}>
+      <ThemedText type="caption">SG BY DISTANCE BAND · VS {baselineLabel.toUpperCase()}</ThemedText>
+      <SgDistanceBars rows={barRows} />
+    </View>
+  );
+}
+
 function formatDate(iso: string): string {
   const parts = iso.split('-').map((s) => parseInt(s, 10));
   if (parts.length !== 3 || parts.some(Number.isNaN)) return iso;
@@ -845,6 +933,10 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
   },
   trendBlock: {
     gap: spacing.sm,
+  },
+  sgBandBlock: {
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
   },
   trendHeader: {
     flexDirection: 'row',

@@ -10,6 +10,7 @@ import { GlassSurface } from '@/components/glass-surface';
 import { Scorecard } from '@/components/scorecard';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
+import { StrokesGainedCard } from '@/components/strokes-gained-card';
 import {
   ScoreDistributionBars,
   Section,
@@ -23,9 +24,15 @@ import { spacing, type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import type { Hole, PostRoundReview, PreRoundGoals } from '@/lib/data/models';
 import { useRoundFull } from '@/lib/data/rounds';
+import { useClubYardages } from '@/lib/data/settings';
 import { useStatsBundle } from '@/lib/data/stats';
 import { GOAL_CATEGORIES } from '@/lib/goals';
-import { formatHandicapIndex, handicapHistoryFor } from '@/lib/lifetime-stats';
+import {
+  computeRoundSG,
+  formatHandicapIndex,
+  handicapHistoryFor,
+} from '@/lib/lifetime-stats';
+import { driverDistanceFor } from '@/lib/strokes-gained';
 import {
   labelForCommonMiss,
   labelForMostCostly,
@@ -51,6 +58,7 @@ export default function SummaryScreen() {
   const insets = useSafeAreaInsets();
   const { data: detail } = useRoundFull(id);
   const { data: statsData } = useStatsBundle();
+  const { yardages } = useClubYardages();
 
   const round = detail?.round ?? null;
   const holes = useMemo(() => detail?.holes ?? [], [detail]);
@@ -122,6 +130,31 @@ export default function SummaryScreen() {
     const delta = before == null ? null : Math.round((newHcp - before) * 10) / 10;
     return { newHcp, delta };
   }, [statsData, id]);
+
+  // Player's current Handicap Index — seeds both the Off-the-Tee driver-distance
+  // estimate and the strokes-gained card's default comparison baseline.
+  const playerHcpIndex = useMemo(() => {
+    if (!statsData) return null;
+    const holesByRound = new Map<string, Hole[]>();
+    for (const h of statsData.holes) {
+      const arr = holesByRound.get(h.roundId);
+      if (arr) arr.push(h);
+      else holesByRound.set(h.roundId, [h]);
+    }
+    return handicapHistoryFor(
+      statsData.rounds.filter((r) => r.completedAt != null),
+      holesByRound,
+    ).current;
+  }, [statsData]);
+
+  // Strokes gained for this round, vs the PGA Tour baseline. Driver distance for
+  // the Off-the-Tee hole-length estimate prefers the player's logged yardage,
+  // falling back to their current Handicap Index.
+  const roundSG = useMemo(() => {
+    if (!detail) return null;
+    const driverDistance = driverDistanceFor(yardages['Driver'], playerHcpIndex);
+    return computeRoundSG(detail.holes, detail.putts, detail.shots, { driverDistance });
+  }, [detail, yardages, playerHcpIndex]);
 
   if (!id || !round) return <Screen />;
 
@@ -241,6 +274,12 @@ export default function SummaryScreen() {
             />
           </View>
         </View>
+
+        {roundSG && roundSG.holesWithSG > 0 ? (
+          <Section title="Strokes gained">
+            <StrokesGainedCard sg={roundSG} />
+          </Section>
+        ) : null}
 
         <Section title="Scoring by par">
           <View style={styles.perParRow}>
