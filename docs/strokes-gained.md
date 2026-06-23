@@ -103,9 +103,13 @@ Hole it → `1.87 − 1 = +0.87`.
 
 Your approach is the shot into the green. Its **start** is your logged approach
 distance and lie — fairway if you hit the fairway off the tee, rough if you missed.
-Its **end** is where the ball stopped: if you found the green, the expected putts
-from your proximity to the pin (how close you tapped on the target); if you missed,
-a fixed "just off the green" value.
+Its **end** is where the ball stopped. Whether you **hit the green** is your explicit
+On green / Missed green call on the approach target — not guessed from how close you
+tapped — so a shot that finished, say, 20 feet from the pin but short of the putting
+surface is correctly counted as a *miss* (and handed off to your short game), while a
+ball safely on the front of a deep green still counts as a green hit. If you hit the
+green, the end value is the expected putts from your proximity to the pin (read from
+where you tapped); if you missed, a fixed "just off the green" value.
 
 ```
 Approach SG = (expected from approach distance + lie) − (expected at the result) − 1
@@ -125,10 +129,26 @@ Off-the-tee SG = (expected from the tee) − (expected from your approach distan
 ```
 
 Since Caddie Book doesn't ask for each hole's yardage, it estimates the hole length
-as **your driver distance + the approach distance you logged** (par 5s add a typical
-layup); your driver distance comes from your bag, or a default for your handicap.
+as **your drive distance + the approach distance you logged** (par 5s add a typical
+layup). Your drive distance is taken **per hole from the distance you log on the
+drive page** when you record it; on holes where you don't, it falls back to your bag's
+driver yardage, or a default for your handicap. Because each hole can carry its own
+drive distance, Off-the-tee now reflects how far you actually hit it that hole rather
+than one flat number for the round — a long bomb lengthens the hole estimate and earns
+more for the same approach position, a short one less.
 *Example:* a ~410-yard par 4 (4.05 from the tee), drive to 150 in the fairway
 (2.80) → `4.05 − 2.80 − 1 = +0.25`.
+
+On a **par 5**, getting to your approach normally takes *two* long shots — the drive
+and a layup — so Off-the-tee covers both of them (the `− 1` above becomes `− 2`). When
+your approach finds the green, Caddie Book knows exactly how many long shots that was
+(your score minus your putts, minus the approach), so a par 5 you **reach in two**
+correctly earns the extra credit off the tee rather than being charged for a layup you
+never hit.
+
+The Stats tab also breaks Off-the-tee down by drive-distance band (25-yard buckets),
+using these logged distances, so you can see which lengths of tee shot are gaining or
+losing you strokes.
 
 ### Short game · the balancing figure
 
@@ -147,6 +167,11 @@ appears in both Total and Off-the-tee with opposite signs, so it **cancels out o
 short game entirely** — your short-game number stays trustworthy even though it's
 derived last. *Example:* miss the green and get up-and-down in two tidy shots and
 it's about even; chunk the chip and leave a long putt and it turns negative.
+
+Because the layup is counted off the tee (not here), a green hit **in regulation**
+leaves short game at ≈ 0 on *every* par — including par 5s, which used to be charged
+about a stroke too much here. The short-game number now moves only when you actually
+play a shot around the green.
 
 ---
 
@@ -188,9 +213,14 @@ Textbook Strokes Gained needs the exact distance and lie of *every* shot — onl
 laser/GPS tracking captures that. Caddie Book derives it from the few things you tap
 in, so:
 
-- **Putting and Approach are measured** — as accurate as the distances you log.
+- **Putting and Approach are measured** — as accurate as the distances you log and
+  your On green / Missed green calls (the green call also decides which holes fall to
+  your short game).
 - **Off the tee and Short game are estimated** — they lean on the hole-length
-  estimate described above, so the app labels them as such.
+  estimate described above, so the app labels them as such. Logging your drive
+  distance sharpens the Off-the-tee estimate hole-by-hole; without it, the estimate
+  uses your bag/handicap driver number. Either way the estimate cancels out of short
+  game, so that figure stays trustworthy.
 
 The baseline expected-strokes values used throughout are a faithful reproduction of
 the PGA Tour benchmark published in Mark Broadie's *Every Shot Counts*.

@@ -14,10 +14,12 @@
 //   • Approach   — real, from approachDistanceYds (start) + on-green/proximity (end).
 //   • Off-the-tee— estimated: hole length ≈ driverDistance + approachDistanceYds.
 //   • Short game — residual (total − ott − approach − putting); absorbs chips,
-//                  sand, penalties, and the OTT length-estimate error. Crucially
-//                  the length estimate cancels out of the residual (it appears with
-//                  equal/opposite sign in `total` and `ott`), so short game stays
-//                  robust even though OTT/total carry the estimate's bias.
+//                  sand, and penalties. Crucially the length estimate cancels out of
+//                  the residual (it appears with equal/opposite sign in `total` and
+//                  `ott`), so short game stays robust even though OTT/total carry the
+//                  estimate's bias. OTT counts the strokes to the approach position
+//                  (drive + any par-5 layup), so a green hit in regulation leaves
+//                  short game ≈ 0 on every par — the layup is not leaked here.
 //
 // Everything here is pure (no React, no '@/' value imports) so it unit-tests with
 // `npx tsx lib/strokes-gained.test.ts`, exactly like lib/handicap.ts. Callers
@@ -208,7 +210,20 @@ export function holeStrokesGained(i: HoleSGInput): HoleSG | null {
   } else {
     const holeLength = estimateHoleLength(i.par, i.approachDistanceYds, i.driverDistance);
     startE = expectedTee(holeLength);
-    ott = startE - startApproachE - 1;
+    // Strokes spent getting from the tee to the approach position. When the approach
+    // found the green there were no short-game shots, so every non-putt stroke except
+    // the approach was a long shot — (score − putts − 1) counts them exactly (drive +
+    // any layup, and self-corrects a par 5 reached in two). When the green was missed
+    // we can't separate layups from chips in (score − putts), so fall back to the
+    // regulation long game: 1 shot before the approach on a par 4, 2 on a par 5. Either
+    // way the par-5 layup is counted here in OTT instead of leaking into the short-game
+    // residual. (Edge: driving a par-4 green clamps to 1 — astronomically rare.)
+    const teeToApproachStrokes = i.onGreen
+      ? Math.max(1, i.score - i.putts - 1)
+      : i.par >= 5
+        ? 2
+        : 1;
+    ott = startE - startApproachE - teeToApproachStrokes;
   }
   const total = startE - i.score;
   const aroundGreen = total - (ott ?? 0) - approach - putting;

@@ -166,6 +166,50 @@ test('a longer drive lengthens the hole estimate and raises OTT', () => {
   approx(long.putting, short.putting, 0.001);
 });
 
+// --- Par 5: the layup is counted in OTT, not leaked into short game --------
+
+const girPar5: HoleSGInput = {
+  par: 5,
+  score: 5,
+  putts: 2,
+  fir: true,
+  onGreen: true,
+  proximityFt: 10,
+  firstPuttFt: 10,
+  approachDistanceYds: 150,
+  driverDistance: 270,
+  driveDistanceYds: null,
+};
+
+test('a clean GIR par 5 leaves ~0 short game (drive + layup land in OTT)', () => {
+  const sg = holeStrokesGained(girPar5)!;
+  approx(sg.aroundGreen, 0, 0.001); // no short-game shot — was −1.0 before the fix
+  approx(sg.ott! + sg.approach + sg.aroundGreen + sg.putting, sg.total, 0.001);
+});
+
+test('GIR short game is ~0 on par 5 just like par 4 (no par-specific bias)', () => {
+  approx(holeStrokesGained(girPar5)!.aroundGreen, holeStrokesGained(girPar4)!.aroundGreen, 0.001);
+});
+
+test('a par 5 reached in two still nets ~0 short game and gains more OTT', () => {
+  // Drive + a long approach onto the green, no layup → score 4, two putts.
+  const reachedInTwo = holeStrokesGained({ ...girPar5, score: 4 })!;
+  approx(reachedInTwo.aroundGreen, 0, 0.001);
+  // One fewer long shot to the approach ⇒ more credit off the tee than laying up.
+  assert.ok(reachedInTwo.ott! > holeStrokesGained(girPar5)!.ott!);
+});
+
+test('a missed-green par 5 keeps the layup in OTT, not short game', () => {
+  // Drive, layup, missed approach, chip, two putts → bogey 6.
+  const missed: HoleSGInput = { ...girPar5, score: 6, onGreen: false, proximityFt: null, firstPuttFt: 25 };
+  const sg = holeStrokesGained(missed)!;
+  approx((sg.ott ?? 0) + sg.approach + sg.aroundGreen + sg.putting, sg.total, 0.001);
+  // OTT debits two long shots (drive + layup); a par-4-style single debit would be higher.
+  const startApproachE = expectedApproach(150, 'fairway');
+  const startE = expectedTee(estimateHoleLength(5, 150, 270));
+  approx(sg.ott!, startE - startApproachE - 2, 0.001);
+});
+
 // --- Aggregation + per-18 normalization ------------------------------------
 
 test('addHoleSG accumulates and sgPer18 scales to an 18-hole basis', () => {
