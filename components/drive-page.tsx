@@ -5,12 +5,13 @@ import { ClubChips } from '@/components/club-chips';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
 import { InfoHint } from '@/components/info-hint';
 import { ThemedText } from '@/components/themed-text';
-import { CLUB_OPTIONS, sortByDriveLength } from '@/constants/clubs';
+import { YardageChips } from '@/components/yardage-chips';
+import { CLUB_OPTIONS, driveDistanceForClub, sortByDriveLength } from '@/constants/clubs';
 import { radius, spacing, type Palette } from '@/constants/theme';
 import { useColors } from '@/constants/theme-context';
 import type { Hole, Shot } from '@/lib/data/models';
 import { useUpdateHole, useUpsertShot } from '@/lib/data/rounds';
-import { useBag } from '@/lib/data/settings';
+import { useBag, useClubYardages } from '@/lib/data/settings';
 import { driverLane, isFairwayHit } from '@/lib/shots';
 
 type Props = {
@@ -24,8 +25,10 @@ export function DrivePage({ roundId, hole, shotsForRound, onComplete }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
-  const targetWidth = Math.min(300, screenWidth - 60);
-  const targetHeight = Math.min(500, screenHeight * 0.56);
+  // Narrower + taller than a square so the fairway reads as a long oval rather
+  // than a compressed one.
+  const targetWidth = Math.min(275, screenWidth - 96);
+  const targetHeight = Math.min(430, screenHeight * 0.5);
 
   const upsertShot = useUpsertShot();
   const updateHole = useUpdateHole();
@@ -35,6 +38,11 @@ export function DrivePage({ roundId, hole, shotsForRound, onComplete }: Props) {
     () => sortByDriveLength(storedBag.length > 0 ? storedBag : CLUB_OPTIONS),
     [storedBag],
   );
+  const { yardages } = useClubYardages();
+
+  // Distance default for the chips: the selected club's stock yardage, else a
+  // coarse per-club default, else a generic driver park.
+  const yardsDefault = driveDistanceForClub(hole.driveClub, yardages);
 
   // The drive pin comes straight from the cached shots — the optimistic upsert
   // updates it on the same frame as the tap.
@@ -43,12 +51,14 @@ export function DrivePage({ roundId, hole, shotsForRound, onComplete }: Props) {
   );
   const position = drive ? { xNorm: drive.xNorm, yNorm: drive.yNorm } : null;
 
-  // Advance only on the transition into "pin + club both set" — adjusting one
-  // of them later shouldn't yank the page away.
+  // The page is fully logged once pin + club + carry distance are all set.
   const hasClub = hole.driveClub != null && hole.driveClub !== '';
+  const hasDistance = hole.driveDistanceYds != null;
 
   const handleTap = async (x: number, y: number) => {
-    const wasComplete = position != null && hasClub;
+    // Advance only on the transition into the complete trio — adjusting an
+    // already-placed pin shouldn't yank the page away.
+    const wasComplete = position != null && hasClub && hasDistance;
     try {
       // One command: the shot plus the derived fir flag, atomic server-side.
       await upsertShot({
@@ -59,18 +69,35 @@ export function DrivePage({ roundId, hole, shotsForRound, onComplete }: Props) {
         yNorm: y,
         holePatch: { fir: isFairwayHit(driverLane(x, y)) },
       });
-      if (!wasComplete && hasClub) onComplete?.();
+      if (!wasComplete && hasClub && hasDistance) onComplete?.();
     } catch (err) {
       console.error(err);
     }
   };
 
   const onClubChange = async (club: string | null) => {
-    const wasComplete = position != null && hasClub;
     try {
-      await updateHole(roundId, hole.holeNumber, { driveClub: club });
-      // Skip the empty string the "Other" chip writes while the player types.
-      if (!wasComplete && club != null && club !== '' && position != null) onComplete?.();
+      // Prefill the distance with the club's stock/default yardage so the chips
+      // land on a value immediately (skip the empty string the "Other" chip
+      // writes while typing). A club tap never auto-advances — the distance
+      // still wants an explicit confirming tap (like the approach page).
+      const prefill =
+        club != null && club !== '' ? driveDistanceForClub(club, yardages) : undefined;
+      await updateHole(roundId, hole.holeNumber, {
+        driveClub: club,
+        ...(prefill != null ? { driveDistanceYds: prefill } : {}),
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const onDistanceCommit = async (yards: number | null) => {
+    try {
+      await updateHole(roundId, hole.holeNumber, { driveDistanceYds: yards });
+      // Distance is the deliberate confirming tap: once the pin and club are in,
+      // picking a distance finishes the page.
+      if (yards != null && position != null && hasClub) onComplete?.();
     } catch (err) {
       console.error(err);
     }
@@ -89,7 +116,7 @@ export function DrivePage({ roundId, hole, shotsForRound, onComplete }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <ThemedText type="caption">DRIVE</ThemedText>
+        <ThemedText type="caption"></ThemedText>
       </View>
       <View style={styles.targetWrap}>
         <DriverTarget
@@ -122,6 +149,21 @@ export function DrivePage({ roundId, hole, shotsForRound, onComplete }: Props) {
           <ThemedText type="caption">CLUB</ThemedText>
           <ClubChips value={hole.driveClub} onChange={onClubChange} clubs={bag} />
         </View>
+        <View style={styles.formField}>
+          <ThemedText type="caption">DISTANCE</ThemedText>
+          {/* Remount on club change so the strip re-centers on the freshly
+              written stock yardage; keyed by club (not value) so picking a
+              nearby chip doesn't re-center mid-edit. */}
+          <YardageChips
+            key={`drive-yards-${hole.driveClub ?? 'none'}`}
+            value={hole.driveDistanceYds}
+            onCommit={onDistanceCommit}
+            defaultValue={yardsDefault}
+            min={100}
+            max={350}
+            step={5}
+          />
+        </View>
       </View>
     </View>
   );
@@ -139,18 +181,17 @@ const makeStyles = (colors: Palette) =>
   container: {
     flex: 1,
     paddingHorizontal: spacing.md,
-    paddingTop: 60,
+    paddingTop: 44,
     paddingBottom: 100,
   },
   header: {
     alignItems: 'center',
     gap: 2,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.xs,
   },
   targetWrap: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: spacing.xs,
   },
   badge: {
     alignSelf: 'center',
@@ -160,8 +201,7 @@ const makeStyles = (colors: Palette) =>
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.borderStrong,
-    marginTop: spacing.md,                                                          
-    marginVertical: spacing.sm, 
+    marginVertical: spacing.sm,
   },
   badgePositive: {
     backgroundColor: colors.accentMuted,

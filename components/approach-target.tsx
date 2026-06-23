@@ -157,6 +157,24 @@ function ApproachTargetImpl({
         );
       })}
 
+      {/* Directional cues — the player hits "up" the target, so the dot's
+          position relative to the pin carries the miss direction (long over the
+          top, short toward the player, left/right by side). */}
+      {(
+        [
+          { key: 'long', text: 'LONG', box: { top: c - size * 0.47, left: 0, width: size } },
+          { key: 'short', text: 'SHORT', box: { top: c + size * 0.43, left: 0, width: size } },
+          { key: 'left', text: 'L', box: { top: c - 8, left: size * 0.02, width: 22 } },
+          { key: 'right', text: 'R', box: { top: c - 8, left: size - size * 0.02 - 22, width: 22 } },
+        ] as const
+      ).map((d) => (
+        <View key={d.key} pointerEvents="none" style={[styles.dirCue, d.box]}>
+          <ThemedText type="label" style={styles.dirCueText}>
+            {d.text}
+          </ThemedText>
+        </View>
+      ))}
+
       {/* Tap surface */}
       <Pressable
         disabled={!onTap}
@@ -246,5 +264,16 @@ const makeStyles = (colors: Palette) =>
   ringLabelOver: {
     color: colors.accent,
     opacity: 0.7,
+  },
+  dirCue: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dirCueText: {
+    fontSize: 10,
+    letterSpacing: 1.5,
+    color: colors.textMuted,
+    opacity: 0.6,
   },
 });

@@ -122,6 +122,7 @@ export type HoleSeed = {
   approachDistance: number | null;
   approachClub: string | null;
   driveClub: string | null;
+  driveDistance: number | null;
   drive: { x: number; y: number } | null;
   approach: { x: number; y: number };
   puttRows: { distanceFt: number; made: number }[];
@@ -247,6 +248,7 @@ export function buildHole(rng: Rng, holeNumber: number, par: number, skill: numb
     approachDistance: randInt(rng, 70, 190),
     approachClub: pick(rng, APPROACH_CLUBS),
     driveClub: drive ? pick(rng, DRIVE_CLUBS) : null,
+    driveDistance: drive ? randInt(rng, 215, 290) : null,
     drive,
     approach,
     puttRows: buildPuttRows(rng, putts, gir),

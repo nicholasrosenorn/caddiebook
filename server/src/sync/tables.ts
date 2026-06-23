@@ -38,7 +38,7 @@ export const TABLE_SPECS = {
     idColumns: ['id'],
     columns: [
       'id', 'round_id', 'hole_number', 'par', 'fir', 'gir', 'up_and_down',
-      'approach_distance_yds', 'approach_club', 'drive_club', 'score', 'putts',
+      'approach_distance_yds', 'approach_club', 'drive_club', 'drive_distance_yds', 'score', 'putts',
       'chip_shots', 'sand_shots', 'penalties', 'green_blocked', 'notes',
       'updated_at', 'deleted_at',
     ],

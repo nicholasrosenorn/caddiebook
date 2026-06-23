@@ -57,6 +57,13 @@
       "when": 1781284304482,
       "tag": "0007_sudden_black_bird",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782172146045,
+      "tag": "0008_kind_infant_terrible",
+      "breakpoints": true
     }
   ]
 }

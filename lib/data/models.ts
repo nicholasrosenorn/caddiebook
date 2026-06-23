@@ -44,6 +44,7 @@ export type Hole = {
   approachDistanceYds: number | null;
   approachClub: string | null;
   driveClub: string | null;
+  driveDistanceYds: number | null;
   score: number | null;
   putts: number | null;
   chipShots: number | null;

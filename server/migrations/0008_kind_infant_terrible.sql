@@ -1,0 +1,1 @@
+ALTER TABLE "holes" ADD COLUMN "drive_distance_yds" integer;

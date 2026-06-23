@@ -1,11 +1,13 @@
 import { useMemo, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { sgBarColor } from '@/components/sg-bar-chart';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import type { ScoreDistribution } from '@/lib/stats';
+import { formatSG } from '@/lib/strokes-gained';
 
 // The shared editorial stats vocabulary — one source of truth for the me-tab
 // progress view, the round summary, and the community round summary so every
@@ -21,6 +23,16 @@ export function Section({ title, children }: { title: string; children: ReactNod
       <View style={styles.sectionBody}>{children}</View>
     </View>
   );
+}
+
+// Groups related sections into a "chapter" with extra air above, giving the long
+// stats scroll rest points without any chrome. Hierarchy is air, not boxes or
+// labels (see DESIGN.md).
+export function Chapter({ children }: { children: ReactNode }) {
+  const colors = useColors();
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  return <View style={styles.chapter}>{children}</View>;
 }
 
 export function StatTile({ label, value }: { label: string; value: string }) {
@@ -99,11 +111,21 @@ export function ScoreDistributionBars({
   );
 }
 
-export type SplitRow = { key: string; label: string; success: number; total: number };
+export type SplitRow = {
+  key: string;
+  label: string;
+  success: number;
+  total: number;
+  /** Optional strokes-gained for this band, shown as a signed colored chip at the
+   *  far right. Undefined → no chip (the column collapses). */
+  sg?: number;
+};
 
 // Shared by "Approach distances" (success = green hit) and "Putting by
 // distance" (success = made). Each bar fills the full track, split ink
 // (success) → muted neutral (miss); the right label reads `% (success/total)`.
+// When a row carries `sg`, a signed strokes-gained chip trails the row (gain =
+// accent ink, loss ramps amber→red via `sgBarColor`).
 export function SplitDistanceBars({
   rows,
   successLabel,
@@ -118,8 +140,19 @@ export function SplitDistanceBars({
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  // Reserve the SG column for every row once any row carries a value, so the
+  // make/hit columns stay aligned across bands (blank where a band has no SG).
+  const showSg = rows.some((r) => r.sg != null);
   return (
     <View style={styles.barList}>
+      {/* A header labels the trailing strokes-gained column once, over the chips. */}
+      {showSg ? (
+        <View style={styles.sgHeaderRow}>
+          <ThemedText type="caption" style={styles.sgCell}>
+            SG
+          </ThemedText>
+        </View>
+      ) : null}
       {rows.map((r) => {
         const missed = r.total - r.success;
         const successFrac = r.total > 0 ? r.success / r.total : 0;
@@ -166,6 +199,13 @@ export function SplitDistanceBars({
                 </ThemedText>
               )}
             </View>
+            {showSg ? (
+              <ThemedText
+                style={[styles.sgCell, r.sg != null ? { color: sgBarColor(r.sg, colors) } : null]}
+                numberOfLines={1}>
+                {r.sg != null ? formatSG(r.sg) : ''}
+              </ThemedText>
+            ) : null}
           </View>
         );
       })}
@@ -183,8 +223,57 @@ export function SplitDistanceBars({
   );
 }
 
+export type ValueRow = {
+  key: string;
+  label: string;
+  /** Magnitude that sets the bar length (relative to the row set's max). */
+  value: number;
+  /** Pre-formatted right-hand label, e.g. "258 yds". */
+  display: string;
+};
+
+// A plain magnitude bar list: one accent bar per row scaled to the largest
+// value, with a formatted value trailing. Used for "Drive distance by club".
+export function ValueBars({ rows }: { rows: ValueRow[] }) {
+  const colors = useColors();
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
+  const max = Math.max(1, ...rows.map((r) => r.value));
+  return (
+    <View style={styles.barList}>
+      {rows.map((r) => {
+        const frac = Math.min(1, r.value / max);
+        return (
+          <View key={r.key} style={styles.barRow}>
+            <ThemedText style={styles.barLabel} numberOfLines={1}>
+              {r.label}
+            </ThemedText>
+            <SketchSurface
+              seed={`stats-value-${r.key}`}
+              radius={7}
+              fill={colors.surfaceAlt}
+              style={styles.barTrack}>
+              <View
+                style={{ flex: frac, backgroundColor: colors.accent, minWidth: 6, height: '100%' }}
+              />
+              <View style={{ flex: Math.max(0, 1 - frac) }} />
+            </SketchSurface>
+            <ThemedText style={styles.valueCell} numberOfLines={1}>
+              {r.display}
+            </ThemedText>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
+    chapter: {
+      gap: spacing.lg,
+      marginTop: spacing.md,
+    },
     section: {
       gap: spacing.md,
     },
@@ -246,6 +335,25 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     },
     splitFraction: {
       fontSize: 12,
+    },
+    valueCell: {
+      width: 60,
+      textAlign: 'right',
+      fontFamily: fonts.serif,
+      fontSize: 15,
+      color: colors.textPrimary,
+    },
+    sgCell: {
+      width: 42,
+      textAlign: 'right',
+      fontFamily: fonts.serifBold,
+      fontSize: 15,
+      lineHeight: 20,
+      color: colors.textPrimary,
+    },
+    sgHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
     },
     legend: {
       flexDirection: 'row',

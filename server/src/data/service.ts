@@ -403,7 +403,7 @@ const ROUND_COLS =
 
 const HOLE_COLS =
   'id, round_id, hole_number, par, fir, gir, up_and_down, approach_distance_yds, ' +
-  'approach_club, drive_club, score, putts, chip_shots, sand_shots, penalties, ' +
+  'approach_club, drive_club, drive_distance_yds, score, putts, chip_shots, sand_shots, penalties, ' +
   'green_blocked, notes';
 
 const SHOT_COLS =

@@ -523,7 +523,7 @@ communityRoutes.post('/reports', writeLimit, async (c) => {
 
 const HOLE_COLS =
   'id, round_id, hole_number, par, fir, gir, up_and_down, approach_distance_yds, ' +
-  'approach_club, drive_club, score, putts, chip_shots, sand_shots, penalties, ' +
+  'approach_club, drive_club, drive_distance_yds, score, putts, chip_shots, sand_shots, penalties, ' +
   'green_blocked, notes';
 
 const DEFAULT_FEED_LIMIT = 20;
@@ -555,6 +555,7 @@ function wireHoleFromRow(row: Record<string, unknown>): WireHole {
     approach_distance_yds: (row.approach_distance_yds as number) ?? null,
     approach_club: (row.approach_club as string) ?? null,
     drive_club: (row.drive_club as string) ?? null,
+    drive_distance_yds: (row.drive_distance_yds as number) ?? null,
     score: (row.score as number) ?? null,
     putts: (row.putts as number) ?? null,
     chip_shots: (row.chip_shots as number) ?? null,

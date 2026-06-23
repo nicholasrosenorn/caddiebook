@@ -100,6 +100,7 @@ export function buildSampleSeason(): SampleSeason {
         approachDistanceYds: seed.approachDistance,
         approachClub: seed.approachClub,
         driveClub: seed.driveClub,
+        driveDistanceYds: seed.driveDistance,
         score: seed.score,
         putts: seed.putts,
         chipShots: seed.chipShots,

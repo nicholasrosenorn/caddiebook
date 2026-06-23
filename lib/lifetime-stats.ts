@@ -19,7 +19,8 @@ import {
   type HandicapHistory,
   type HandicapRound,
 } from '@/lib/handicap';
-import { approachResult, driverLane, type DriverLane } from '@/lib/shots';
+import { sortByDriveLength } from '@/constants/clubs';
+import { approachProximityFt, driverLane, type DriverLane } from '@/lib/shots';
 import {
   computePerParAverages,
   computeScoreDistribution,
@@ -52,6 +53,17 @@ export const APPROACH_BUCKETS = [
   { label: '150–175', max: 175 },
   { label: '175–200', max: 200 },
   { label: '200+', max: Infinity },
+] as const;
+
+/** Drive-distance bands (25-yd buckets, open-ended last) — shared by the drive
+ *  distribution histogram and the driving-distance SG band. */
+export const DRIVE_BUCKETS = [
+  { label: '<200', max: 200 },
+  { label: '200–225', max: 225 },
+  { label: '225–250', max: 250 },
+  { label: '250–275', max: 275 },
+  { label: '275–300', max: 300 },
+  { label: '300+', max: Infinity },
 ] as const;
 
 /** Per-round rollup used for both the headline averages and the trend line. */
@@ -278,6 +290,11 @@ export function aggregateStats(
     };
   });
 
+  // Resolve each hole's GIR once so the approach proximity pooling can read it by
+  // (roundId:holeNumber) — proximity is averaged only over greens actually hit.
+  const holeGir = new Map<string, boolean | null>();
+  for (const hole of holes) holeGir.set(`${hole.roundId}:${hole.holeNumber}`, resolveGir(hole));
+
   // Driver dispersion (lane split) + approach proximity, pooled.
   const driverLanes: Record<DriverLane, number> = { LF: 0, CF: 0, RF: 0 };
   let driverTotal = 0;
@@ -290,9 +307,8 @@ export function aggregateStats(
       driverTotal += 1;
     } else {
       approachTotal += 1;
-      const res = approachResult(shot.xNorm, shot.yNorm);
-      if (res.onGreen && res.proximityFt != null) {
-        proximitySum += res.proximityFt;
+      if (holeGir.get(`${shot.roundId}:${shot.holeNumber}`) === true) {
+        proximitySum += approachProximityFt(shot.xNorm, shot.yNorm);
         proximityCount += 1;
       }
     }
@@ -360,11 +376,14 @@ export function aggregateApproach(
   const holes = flatten(rounds, holesByRound);
   const shots = flatten(rounds, shotsByRound);
 
-  // (roundId:holeNumber) → that hole's approach club, for matching shots.
+  // (roundId:holeNumber) → that hole's approach club (for matching shots) and
+  // resolved GIR (so proximity is averaged only over greens actually hit).
   const holeClub = new Map<string, string | null>();
+  const holeGir = new Map<string, boolean | null>();
   for (const r of rounds) {
     for (const h of holesByRound.get(r.id) ?? []) {
       holeClub.set(`${h.roundId}:${h.holeNumber}`, h.approachClub);
+      holeGir.set(`${h.roundId}:${h.holeNumber}`, resolveGir(h));
     }
   }
   const matches = (clubValue: string | null) => club == null || clubValue === club;
@@ -397,9 +416,8 @@ export function aggregateApproach(
     if (!matches(holeClub.get(`${shot.roundId}:${shot.holeNumber}`) ?? null)) continue;
     approachTotal += 1;
     pins.push({ xNorm: shot.xNorm, yNorm: shot.yNorm, key: shot.id });
-    const res = approachResult(shot.xNorm, shot.yNorm);
-    if (res.onGreen && res.proximityFt != null) {
-      proximitySum += res.proximityFt;
+    if (holeGir.get(`${shot.roundId}:${shot.holeNumber}`) === true) {
+      proximitySum += approachProximityFt(shot.xNorm, shot.yNorm);
       proximityCount += 1;
     }
   }
@@ -456,6 +474,67 @@ export function aggregateDriver(
   return { driverLanes, driverTotal, pins };
 }
 
+export type DriveDistanceStats = {
+  /** Average logged carry across every drive in the set. */
+  avgYds: number | null;
+  /** Number of holes carrying a logged drive distance. */
+  count: number;
+  /** Average carry per drive club, longest → shortest. */
+  byClub: { club: string; avgYds: number; count: number }[];
+  /** Drive count per `DRIVE_BUCKETS` band, split by fairways found (FIR). */
+  distribution: { label: string; total: number; hit: number }[];
+};
+
+/**
+ * Drive distance rollup: overall + per-club averages and a fairway-split
+ * distribution histogram. Club-independent (it never honours the dispersion's
+ * club filter) — distance, club, and FIR all live on the hole. Only holes with
+ * a logged `driveDistanceYds` contribute.
+ */
+export function aggregateDriveDistance(
+  rounds: Round[],
+  holesByRound: Map<string, Hole[]>,
+): DriveDistanceStats {
+  const holes = flatten(rounds, holesByRound);
+
+  let sum = 0;
+  let count = 0;
+  const byClub = new Map<string, { sum: number; count: number }>();
+  const distribution = DRIVE_BUCKETS.map((b) => ({ label: b.label, total: 0, hit: 0 }));
+
+  for (const hole of holes) {
+    const yds = hole.driveDistanceYds;
+    if (yds == null) continue;
+    sum += yds;
+    count += 1;
+
+    const club = hole.driveClub;
+    if (club != null && club !== '') {
+      const entry = byClub.get(club) ?? { sum: 0, count: 0 };
+      entry.sum += yds;
+      entry.count += 1;
+      byClub.set(club, entry);
+    }
+
+    const di = DRIVE_BUCKETS.findIndex((b) => yds < b.max);
+    const band = distribution[di === -1 ? distribution.length - 1 : di];
+    band.total += 1;
+    if (hole.fir === true) band.hit += 1;
+  }
+
+  const byClubRows = sortByDriveLength([...byClub.keys()]).map((club) => {
+    const e = byClub.get(club)!;
+    return { club, avgYds: e.sum / e.count, count: e.count };
+  });
+
+  return {
+    avgYds: count > 0 ? sum / count : null,
+    count,
+    byClub: byClubRows,
+    distribution,
+  };
+}
+
 /**
  * Chronological per-round points (oldest → newest) for the trend sparklines.
  * Carries both raw and per-18 figures so the screen plots the right basis for
@@ -499,12 +578,14 @@ function holeSGInput(
     return null;
   }
 
-  // End of the approach: prefer the mapped shot's on-green + proximity ring;
-  // fall back to the resolved GIR flag (proximity unknown → holeStrokesGained
-  // assumes an average lag) when no shot was placed.
-  const ar = approachShot ? approachResult(approachShot.xNorm, approachShot.yNorm) : null;
-  const onGreen = ar ? ar.onGreen : resolveGir(hole) === true;
-  const proximityFt = ar?.proximityFt ?? null;
+  // End of the approach: on-green is the explicit, overridable GIR flag (no longer
+  // inferred from tap radius); proximity-to-pin comes from the mapped shot's
+  // position when one was placed (proximity unknown → holeStrokesGained assumes an
+  // average lag).
+  const onGreen = resolveGir(hole) === true;
+  const proximityFt = approachShot
+    ? approachProximityFt(approachShot.xNorm, approachShot.yNorm)
+    : null;
 
   // First putt distance = the longest putt logged on the hole.
   const firstPuttFt = holePutts.length
@@ -520,7 +601,10 @@ function holeSGInput(
     proximityFt,
     firstPuttFt,
     approachDistanceYds: hole.approachDistanceYds,
-    driverDistance: ctx.driverDistance,
+    // Prefer the hole's logged carry; fall back to the player's bag/handicap
+    // default so OTT still resolves on holes where distance wasn't recorded.
+    driverDistance: hole.driveDistanceYds ?? ctx.driverDistance,
+    driveDistanceYds: hole.driveDistanceYds,
   };
 }
 
@@ -588,6 +672,9 @@ export type StrokesGainedStats = {
   approachBands: SGBandRow[];
   /** Putting SG by first-putt-distance band (`PUTT_BUCKETS`), per 18 vs Tour. */
   puttingBands: SGBandRow[];
+  /** Off-the-tee SG by drive-distance band (`DRIVE_BUCKETS`), per 18 vs Tour.
+   *  Only holes with a logged drive distance (and a non-par-3 OTT) contribute. */
+  drivingBands: SGBandRow[];
 };
 
 /**
@@ -606,6 +693,7 @@ export function aggregateStrokesGained(
   // Raw SG sums + hole counts per distance band, pooled across the round set.
   const approachSum = APPROACH_BUCKETS.map(() => ({ sg: 0, holes: 0 }));
   const puttSum = PUTT_BUCKETS.map(() => ({ sg: 0, holes: 0 }));
+  const driveSum = DRIVE_BUCKETS.map(() => ({ sg: 0, holes: 0 }));
 
   for (const r of rounds) {
     eachHoleSG(
@@ -630,6 +718,15 @@ export function aggregateStrokesGained(
           pBand.sg += sg.putting;
           pBand.holes += 1;
         }
+
+        // Driving band by logged carry; only par 4/5 holes (ott != null) with a
+        // recorded distance contribute (par 3s have no tee category).
+        if (sg.ott != null && input.driveDistanceYds != null) {
+          const di = DRIVE_BUCKETS.findIndex((b) => input.driveDistanceYds! < b.max);
+          const dBand = driveSum[di === -1 ? driveSum.length - 1 : di];
+          dBand.sg += sg.ott;
+          dBand.holes += 1;
+        }
       },
     );
   }
@@ -649,6 +746,12 @@ export function aggregateStrokesGained(
     sgPer18: puttSum[i].sg * f,
     holes: puttSum[i].holes,
   }));
+  const drivingBands: SGBandRow[] = DRIVE_BUCKETS.map((b, i) => ({
+    key: b.label,
+    label: b.label,
+    sgPer18: driveSum[i].sg * f,
+    holes: driveSum[i].holes,
+  }));
 
   const trend = [...rounds]
     .sort((a, b) => {
@@ -666,7 +769,7 @@ export function aggregateStrokesGained(
     .map((s) => sgPer18(s)?.total)
     .filter((v): v is number => v != null);
 
-  return { sg: pooled, trend, approachBands, puttingBands };
+  return { sg: pooled, trend, approachBands, puttingBands, drivingBands };
 }
 
 // --- Post-round review insights -------------------------------------------

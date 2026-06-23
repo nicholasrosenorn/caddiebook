@@ -89,6 +89,7 @@ export const holes = pgTable(
     approachDistanceYds: integer('approach_distance_yds'),
     approachClub: text('approach_club'),
     driveClub: text('drive_club'),
+    driveDistanceYds: integer('drive_distance_yds'),
     score: integer('score'),
     putts: integer('putts'),
     chipShots: integer('chip_shots'),

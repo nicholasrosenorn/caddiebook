@@ -5,13 +5,14 @@ import { useBottomTabBarHeight } from 'react-native-bottom-tabs';
 import { ApproachTarget } from '@/components/approach-target';
 import { DriverTarget, type TargetPin } from '@/components/driver-target';
 import { DropdownSelect, type DropdownOption } from '@/components/dropdown-select';
-import { SgDistanceBars } from '@/components/sg-distance-bars';
 import { SketchDivider, SketchSurface } from '@/components/sketch';
 import {
+  Chapter,
   ScoreDistributionBars,
   Section,
   SplitDistanceBars,
   StatTile,
+  ValueBars,
 } from '@/components/stats-figures';
 import { StrokesGainedCard } from '@/components/strokes-gained-card';
 import { ThemedText } from '@/components/themed-text';
@@ -25,6 +26,7 @@ import { useStatsBundle, type StatsBundle } from '@/lib/data/stats';
 import type { HandicapHistory } from '@/lib/handicap';
 import {
   aggregateApproach,
+  aggregateDriveDistance,
   aggregateDriver,
   aggregateReview,
   aggregateStats,
@@ -34,17 +36,23 @@ import {
   handicapHistoryFor,
   perRoundTrend,
   type ApproachStats,
+  type DriveDistanceStats,
   type DriverStats,
   type HoleCountFilter,
   type LifetimeStats,
   type ReviewInsights,
   type RoundDerived,
   type RoundsFilter,
-  type SGBandRow,
   type StrokesGainedStats
 } from '@/lib/lifetime-stats';
 import { formatPct } from '@/lib/stats';
-import { bandVsBaseline, driverDistanceFor, SG_BASELINES } from '@/lib/strokes-gained';
+import {
+  bandVsBaseline,
+  benchmarkSG,
+  driverDistanceFor,
+  formatSG,
+  SG_BASELINES,
+} from '@/lib/strokes-gained';
 
 type Data = {
   rounds: Round[]; // completed only, newest first
@@ -209,6 +217,12 @@ export function ProgressViewBase({
     );
   }, [data, filteredRounds, driveClubFilter]);
 
+  // Drive distance (by club + distribution) is club-filter independent.
+  const driveDistance = useMemo<DriveDistanceStats | null>(() => {
+    if (!data || !filteredRounds) return null;
+    return aggregateDriveDistance(filteredRounds, data.holesByRound);
+  }, [data, filteredRounds]);
+
   // Approach sections recompute only when the club filter (or data) changes.
   const approach = useMemo<ApproachStats | null>(() => {
     if (!data || !filteredRounds) return null;
@@ -303,7 +317,7 @@ export function ProgressViewBase({
           />
         </View>
 
-        {view && approach && driver && handicap && sg ? (
+        {view && approach && driver && driveDistance && handicap && sg ? (
           <StatsBody
             view={view}
             handicap={handicap}
@@ -317,6 +331,7 @@ export function ProgressViewBase({
             clubOptions={clubOptions}
             onClubChange={setClubFilter}
             driver={driver}
+            driveDistance={driveDistance}
             driveClubFilter={driveClubFilter}
             driveClubOptions={driveClubOptions}
             onDriveClubChange={setDriveClubFilter}
@@ -340,6 +355,7 @@ function StatsBody({
   clubOptions,
   onClubChange,
   driver,
+  driveDistance,
   driveClubFilter,
   driveClubOptions,
   onDriveClubChange,
@@ -358,6 +374,7 @@ function StatsBody({
   clubOptions: DropdownOption<ClubFilter>[];
   onClubChange: (value: ClubFilter) => void;
   driver: DriverStats;
+  driveDistance: DriveDistanceStats;
   driveClubFilter: ClubFilter;
   driveClubOptions: DropdownOption<ClubFilter>[];
   onDriveClubChange: (value: ClubFilter) => void;
@@ -375,7 +392,18 @@ function StatsBody({
   const windowedHandicap =
     roundsFilter === 'all' ? handicap.points : handicap.points.slice(-roundsFilter);
   const handicapPoints = windowedHandicap.map((p) => p.index);
-  const showTrends = trend.length >= 2 || handicapPoints.length >= 2;
+  // SG trend is stored per-round vs Tour; shift it by the selected baseline so the
+  // 0-line means "even with that golfer". Lives in the Over-time section now.
+  const hasSG = sg.sg.holesWithSG > 0;
+  const sgBench = sgBaseline.hcp == null ? 0 : benchmarkSG('total', sgBaseline.hcp);
+  const sgTrend = sg.trend.map((p) => p - sgBench);
+  // Per-band SG (shifted to the selected baseline) trailing the distance bars.
+  const showSg = !empty && hasSG;
+  const approachSg = bandVsBaseline(sg.approachBands, 'approach', sgBaseline.hcp);
+  const puttingSg = bandVsBaseline(sg.puttingBands, 'putting', sgBaseline.hcp);
+  const drivingSg = bandVsBaseline(sg.drivingBands, 'ott', sgBaseline.hcp);
+  const showTrends =
+    trend.length >= 2 || handicapPoints.length >= 2 || (hasSG && sgTrend.length >= 2);
   const uniform = stats.uniformLength;
   const approachPins: TargetPin[] = approach.pins.map((p) => ({ ...p, variant: 'muted' }));
   const drivePins: TargetPin[] = driver.pins.map((p) => ({ ...p, variant: 'muted' }));
@@ -390,203 +418,263 @@ function StatsBody({
         </ThemedText>
       ) : null}
 
-      {/* Scoring headline — adapts to the hole-count filter. The caption spells
-          out the active scope so these filtered figures read distinctly from
-          the masthead's lifetime ones. */}
-      <Section title="Scoring">
-        <ScoringFigures stats={stats} holeFilter={holeFilter} />
-        {stats.bestRound ? (
-          <BestRoundCallout best={stats.bestRound} uniform={uniform} />
-        ) : null}
-        <View style={styles.statRow}>
-          <StatTile label="Par 3 avg" value={formatAvg(stats.perPar.par3)} />
-          <StatTile label="Par 4 avg" value={formatAvg(stats.perPar.par4)} />
-          <StatTile label="Par 5 avg" value={formatAvg(stats.perPar.par5)} />
-        </View>
-      </Section>
-
-      {/* The four percentages + putting trio */}
-      <Section title="The numbers">
-        <View style={styles.statGrid}>
+      {/* ── Scoring: the headline figures + the over-time narrative ─────────── */}
+      <Chapter>
+        {/* Scoring headline — adapts to the hole-count filter. The caption spells
+            out the active scope so these filtered figures read distinctly from
+            the masthead's lifetime ones. */}
+        <Section title="Scoring">
+          <ScoringFigures stats={stats} holeFilter={holeFilter} />
+          {stats.bestRound ? (
+            <BestRoundCallout best={stats.bestRound} uniform={uniform} />
+          ) : null}
           <View style={styles.statRow}>
-            <StatTile label="GIR" value={formatPct(stats.girPct)} />
-            <StatTile label="FIR" value={formatPct(stats.firPct)} />
-            <StatTile label="U&D" value={formatPct(stats.udPct)} />
+            <StatTile label="Par 3 avg" value={formatAvg(stats.perPar.par3)} />
+            <StatTile label="Par 4 avg" value={formatAvg(stats.perPar.par4)} />
+            <StatTile label="Par 5 avg" value={formatAvg(stats.perPar.par5)} />
           </View>
+        </Section>
+
+        {/* The four percentages + putting trio */}
+        <Section title="The numbers">
+          <View style={styles.statGrid}>
+            <View style={styles.statRow}>
+              <StatTile label="GIR" value={formatPct(stats.girPct)} />
+              <StatTile label="FIR" value={formatPct(stats.firPct)} />
+              <StatTile label="U&D" value={formatPct(stats.udPct)} />
+            </View>
+            <View style={styles.statRow}>
+              <StatTile
+                label="Putts/Hole"
+                value={stats.puttsPerHole != null ? stats.puttsPerHole.toFixed(2) : '—'}
+              />
+              <StatTile label="3-Putts" value={empty ? '—' : String(stats.threePuttCount)} />
+              <StatTile label="1-Putts" value={empty ? '—' : String(stats.onePuttCount)} />
+            </View>
+          </View>
+        </Section>
+
+        {/* Score distribution */}
+        <Section title="Score distribution">
+          <ScoreDistributionBars distribution={stats.distribution} empty={empty} />
+        </Section>
+
+        {/* Trends over time */}
+        {showTrends ? (
+          <Section title="Over time">
+            <TrendCard
+              title="Handicap index"
+              caption="index"
+              points={handicapPoints}
+              formatValue={formatHandicapIndex}
+            />
+            <TrendCard
+              title="Scoring"
+              caption={uniform ? 'to par' : 'to par · per 18'}
+              points={trend.map((t) => (uniform ? t.toPar : t.toPar18))}
+              baseline={0}
+              baselineLabel="par"
+              formatValue={(n) => formatToPar(n)}
+            />
+            <TrendCard
+              title="Greens in regulation"
+              caption="%"
+              points={trend
+                .map((t) => (t.girPct != null ? t.girPct * 100 : null))
+                .filter((v): v is number => v != null)}
+              formatValue={(n) => `${Math.round(n)}%`}
+            />
+            <TrendCard
+              title="Putts"
+              caption={uniform ? 'per round' : 'per 18'}
+              points={trend.map((t) => (uniform ? t.totalPutts : t.puttsPer18))}
+              formatValue={(n) => n.toFixed(n % 1 === 0 ? 0 : 1)}
+            />
+            {hasSG ? (
+              <TrendCard
+                title="Strokes gained"
+                caption={`per 18 · vs ${sgBaseline.label}`}
+                points={sgTrend}
+                baseline={0}
+                baselineLabel={sgBaseline.label}
+                formatValue={(n) => formatSG(n)}
+              />
+            ) : null}
+          </Section>
+        ) : null}
+      </Chapter>
+
+      {/* ── Strokes gained vs the PGA Tour baseline + handicap scenarios ────── */}
+      {!empty && sg.sg.holesWithSG > 0 ? (
+        <Chapter>
+          <Section title="Strokes gained">
+            <StrokesGainedCard
+              sg={sg.sg}
+              baselineKey={sgBaselineKey}
+              onBaselineChange={setSgBaselineKey}
+            />
+          </Section>
+        </Chapter>
+      ) : null}
+
+      {/* ── Shot quality: where the strokes are won and lost, by distance ───── */}
+      <Chapter>
+        {/* Drive dispersion */}
+        <Section title="Drive dispersion">
+          <DropdownSelect
+            seed="drive-club"
+            options={driveClubOptions}
+            value={driveClubFilter}
+            onChange={onDriveClubChange}
+            block
+          />
+          <View style={styles.targetWrap}>
+            <DriverTarget pins={drivePins} width={280} height={420} pinSize={6} />
+          </View>
+          <ThemedText type="muted" style={[styles.centerText, { marginTop: spacing.md }]}>
+            {driver.driverTotal} drive{driver.driverTotal === 1 ? '' : 's'} · LF{' '}
+            {driver.driverLanes.LF} · CF {driver.driverLanes.CF} · RF {driver.driverLanes.RF}
+          </ThemedText>
+          {stats.noApproachHoles > 0 ? (
+            <ThemedText type="muted" style={[styles.centerText, { marginTop: spacing.xs }]}>
+              {stats.noApproachHoles} left no shot at the green
+            </ThemedText>
+          ) : null}
+        </Section>
+
+        {/* Drive distance by club — club-independent, so it carries its own
+            caption rather than honouring the dispersion dropdown. */}
+        {driveDistance.count > 0 ? (
+          <Section title="Drive distance by club">
+            <ValueBars
+              rows={driveDistance.byClub.map((c) => ({
+                key: c.club,
+                label: c.club,
+                value: c.avgYds,
+                display: `${Math.round(c.avgYds)} yds`,
+              }))}
+            />
+            <ThemedText type="muted" style={[styles.centerText, { marginTop: spacing.sm }]}>
+              {driveDistance.count} drive{driveDistance.count === 1 ? '' : 's'}
+              {driveDistance.avgYds != null
+                ? ` · avg ${Math.round(driveDistance.avgYds)} yds`
+                : ''}
+            </ThemedText>
+          </Section>
+        ) : null}
+
+        {/* Drive distribution — 25-yd bands split by fairways found, SG trailing. */}
+        {driveDistance.count > 0 ? (
+          <Section title="Drive distribution">
+            <SplitDistanceBars
+              seedPrefix="drive"
+              successLabel="Fairway"
+              failLabel="Missed"
+              rows={driveDistance.distribution.map((b, i) => ({
+                key: b.label,
+                label: b.label,
+                success: b.hit,
+                total: b.total,
+                sg: showSg && sg.drivingBands[i]?.holes > 0 ? drivingSg[i] : undefined,
+              }))}
+            />
+            {showSg ? (
+              <ThemedText type="caption">SG = STROKES GAINED VS {sgBaseline.label.toUpperCase()}</ThemedText>
+            ) : null}
+          </Section>
+        ) : null}
+
+        {/* Approach dispersion — the club filter scopes both approach sections. */}
+        <Section title="Approach dispersion">
+          <DropdownSelect
+            seed="club"
+            options={clubOptions}
+            value={clubFilter}
+            onChange={onClubChange}
+            block
+          />
+          <View style={styles.targetWrap}>
+            <ApproachTarget pins={approachPins} size={320} pinSize={7} />
+          </View>
+          <ThemedText type="muted" style={styles.centerText}>
+            {approach.approachTotal} approach{approach.approachTotal === 1 ? '' : 'es'}
+            {approach.avgApproachProximity != null
+              ? ` · avg ${Math.round(approach.avgApproachProximity)} ft when on`
+              : ''}
+          </ThemedText>
+        </Section>
+
+        {/* Approach distances, split by green hit / missed. SG trails each band —
+            but only with "All clubs", since the SG bands aren't club-scoped. */}
+        <Section
+          title={`Approach distances · ${clubFilter === 'all' ? 'All clubs' : clubFilter}`}>
+          <SplitDistanceBars
+            seedPrefix="appr"
+            successLabel="Green hit"
+            failLabel="Missed"
+            rows={approach.approachByDistance.map((b, i) => ({
+              key: b.label,
+              label: b.label,
+              success: b.hit,
+              total: b.total,
+              sg:
+                showSg && clubFilter === 'all' && sg.approachBands[i]?.holes > 0
+                  ? approachSg[i]
+                  : undefined,
+            }))}
+          />
+          {showSg && clubFilter === 'all' ? (
+            <ThemedText type="caption">SG = STROKES GAINED VS {sgBaseline.label.toUpperCase()}</ThemedText>
+          ) : null}
+        </Section>
+
+        {/* Putting make rate by distance, with SG trailing each band */}
+        <Section title="Putting by distance">
+          <SplitDistanceBars
+            seedPrefix="putt"
+            successLabel="Made"
+            failLabel="Missed"
+            rows={stats.puttBuckets.map((b, i) => ({
+              key: String(b.ft),
+              label: b.label,
+              success: b.makes,
+              total: b.total,
+              sg: showSg && sg.puttingBands[i]?.holes > 0 ? puttingSg[i] : undefined,
+            }))}
+          />
+          {showSg ? (
+            <ThemedText type="caption">SG = STROKES GAINED VS {sgBaseline.label.toUpperCase()}</ThemedText>
+          ) : null}
+        </Section>
+      </Chapter>
+
+      {/* ── Mental & trouble: the round-management story ────────────────────── */}
+      <Chapter>
+        {/* Trouble */}
+        <Section title="Trouble & short game">
           <View style={styles.statRow}>
             <StatTile
-              label="Putts/Hole"
-              value={stats.puttsPerHole != null ? stats.puttsPerHole.toFixed(2) : '—'}
+              label="Pen/Round"
+              value={stats.penaltiesPerRound != null ? stats.penaltiesPerRound.toFixed(1) : '—'}
             />
-            <StatTile label="3-Putts" value={empty ? '—' : String(stats.threePuttCount)} />
-            <StatTile label="1-Putts" value={empty ? '—' : String(stats.onePuttCount)} />
+            <StatTile
+              label="Chips/Round"
+              value={stats.chipShotsPerRound != null ? stats.chipShotsPerRound.toFixed(1) : '—'}
+            />
+            <StatTile
+              label="Sand/Round"
+              value={stats.sandShotsPerRound != null ? stats.sandShotsPerRound.toFixed(1) : '—'}
+            />
           </View>
-        </View>
-      </Section>
-
-      {/* Strokes gained vs the PGA Tour baseline + handicap scenarios */}
-      {!empty && sg.sg.holesWithSG > 0 ? (
-        <Section title="Strokes gained">
-          <StrokesGainedCard
-            sg={sg.sg}
-            trend={sg.trend}
-            baselineKey={sgBaselineKey}
-            onBaselineChange={setSgBaselineKey}
-          />
         </Section>
-      ) : null}
 
-      {/* Trends over time */}
-      {showTrends ? (
-        <Section title="Over time">
-          <TrendCard
-            title="Handicap index"
-            caption="index"
-            points={handicapPoints}
-            formatValue={formatHandicapIndex}
-          />
-          <TrendCard
-            title="Scoring"
-            caption={uniform ? 'to par' : 'to par · per 18'}
-            points={trend.map((t) => (uniform ? t.toPar : t.toPar18))}
-            baseline={0}
-            baselineLabel="par"
-            formatValue={(n) => formatToPar(n)}
-          />
-          <TrendCard
-            title="Greens in regulation"
-            caption="%"
-            points={trend
-              .map((t) => (t.girPct != null ? t.girPct * 100 : null))
-              .filter((v): v is number => v != null)}
-            formatValue={(n) => `${Math.round(n)}%`}
-          />
-          <TrendCard
-            title="Putts"
-            caption={uniform ? 'per round' : 'per 18'}
-            points={trend.map((t) => (uniform ? t.totalPutts : t.puttsPer18))}
-            formatValue={(n) => n.toFixed(n % 1 === 0 ? 0 : 1)}
-          />
-        </Section>
-      ) : null}
-
-      {/* Score distribution */}
-      <Section title="Score distribution">
-        <ScoreDistributionBars distribution={stats.distribution} empty={empty} />
-      </Section>
-
-      {/* Drive dispersion */}
-      <Section title="Drive dispersion">
-        <DropdownSelect
-          seed="drive-club"
-          options={driveClubOptions}
-          value={driveClubFilter}
-          onChange={onDriveClubChange}
-          block
-        />
-        <View style={styles.targetWrap}>
-          <DriverTarget pins={drivePins} width={280} height={420} pinSize={6} />
-        </View>
-        <ThemedText type="muted" style={[styles.centerText, {marginTop: spacing.md}]}>
-          {driver.driverTotal} drive{driver.driverTotal === 1 ? '' : 's'} · LF{' '}
-          {driver.driverLanes.LF} · CF {driver.driverLanes.CF} · RF {driver.driverLanes.RF}
-        </ThemedText>
-        {stats.noApproachHoles > 0 ? (
-          <ThemedText type="muted" style={[styles.centerText, { marginTop: spacing.xs }]}>
-            {stats.noApproachHoles} left no shot at the green
-          </ThemedText>
+        {/* Review insights */}
+        {review.count > 0 || empty ? (
+          <Section title="Mental game">
+            <MentalGameCard review={review} empty={empty} />
+          </Section>
         ) : null}
-      </Section>
-
-      {/* Approach dispersion — the club filter scopes both approach sections. */}
-      <Section title="Approach dispersion">
-        <DropdownSelect
-          seed="club"
-          options={clubOptions}
-          value={clubFilter}
-          onChange={onClubChange}
-          block
-        />
-        <View style={styles.targetWrap}>
-          <ApproachTarget pins={approachPins} size={320} pinSize={7} />
-        </View>
-        <ThemedText type="muted" style={styles.centerText}>
-          {approach.approachTotal} approach{approach.approachTotal === 1 ? '' : 'es'}
-          {approach.avgApproachProximity != null
-            ? ` · avg ${Math.round(approach.avgApproachProximity)} ft when on`
-            : ''}
-        </ThemedText>
-      </Section>
-
-      {/* Approach distances, split by green hit / missed */}
-      <Section
-        title={`Approach distances · ${clubFilter === 'all' ? 'All clubs' : clubFilter}`}>
-        <SplitDistanceBars
-          seedPrefix="appr"
-          successLabel="Green hit"
-          failLabel="Missed"
-          rows={approach.approachByDistance.map((b) => ({
-            key: b.label,
-            label: b.label,
-            success: b.hit,
-            total: b.total,
-          }))}
-        />
-        {!empty && sg.sg.holesWithSG > 0 ? (
-          <SgBandBlock
-            rows={sg.approachBands}
-            values={bandVsBaseline(sg.approachBands, 'approach', sgBaseline.hcp)}
-            baselineLabel={sgBaseline.label}
-          />
-        ) : null}
-      </Section>
-
-      {/* Putting make rate by distance */}
-      <Section title="Putting by distance">
-        <SplitDistanceBars
-          seedPrefix="putt"
-          successLabel="Made"
-          failLabel="Missed"
-          rows={stats.puttBuckets.map((b) => ({
-            key: String(b.ft),
-            label: b.label,
-            success: b.makes,
-            total: b.total,
-          }))}
-        />
-        {!empty && sg.sg.holesWithSG > 0 ? (
-          <SgBandBlock
-            rows={sg.puttingBands}
-            values={bandVsBaseline(sg.puttingBands, 'putting', sgBaseline.hcp)}
-            baselineLabel={sgBaseline.label}
-          />
-        ) : null}
-      </Section>
-
-      {/* Trouble */}
-      <Section title="Trouble & short game">
-        <View style={styles.statRow}>
-          <StatTile
-            label="Pen/Round"
-            value={stats.penaltiesPerRound != null ? stats.penaltiesPerRound.toFixed(1) : '—'}
-          />
-          <StatTile
-            label="Chips/Round"
-            value={stats.chipShotsPerRound != null ? stats.chipShotsPerRound.toFixed(1) : '—'}
-          />
-          <StatTile
-            label="Sand/Round"
-            value={stats.sandShotsPerRound != null ? stats.sandShotsPerRound.toFixed(1) : '—'}
-          />
-        </View>
-      </Section>
-
-      {/* Review insights */}
-      {review.count > 0 || empty ? (
-        <Section title="Mental game">
-          <MentalGameCard review={review} empty={empty} />
-        </Section>
-      ) : null}
+      </Chapter>
 
       <View style={{ height: spacing.xl }} />
     </>
@@ -806,34 +894,6 @@ function FrequencyBars<T extends string>({
   );
 }
 
-// The "SG by distance band" sub-figure under the Approach / Putting sections: a
-// caption naming the active baseline + the diverging band chart. `values` are the
-// per-band SG already shifted to the selected baseline (aligned to `rows`); bands
-// with no holes are dropped so the chart only shows distances actually played.
-function SgBandBlock({
-  rows,
-  values,
-  baselineLabel,
-}: {
-  rows: SGBandRow[];
-  values: number[];
-  baselineLabel: string;
-}) {
-  const fonts = useFontSet();
-  const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  const barRows = rows
-    .map((r, i) => ({ key: r.key, label: r.label, value: values[i], holes: r.holes }))
-    .filter((r) => r.holes > 0);
-  if (barRows.length === 0) return null;
-  return (
-    <View style={styles.sgBandBlock}>
-      <ThemedText type="caption">SG BY DISTANCE BAND · VS {baselineLabel.toUpperCase()}</ThemedText>
-      <SgDistanceBars rows={barRows} />
-    </View>
-  );
-}
-
 function formatDate(iso: string): string {
   const parts = iso.split('-').map((s) => parseInt(s, 10));
   if (parts.length !== 3 || parts.some(Number.isNaN)) return iso;
@@ -933,10 +993,6 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
   },
   trendBlock: {
     gap: spacing.sm,
-  },
-  sgBandBlock: {
-    gap: spacing.sm,
-    paddingTop: spacing.sm,
   },
   trendHeader: {
     flexDirection: 'row',

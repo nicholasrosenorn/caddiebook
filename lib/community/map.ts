@@ -25,6 +25,7 @@ export function wireHoleToHole(w: WireHole): Hole {
     approachDistanceYds: w.approach_distance_yds,
     approachClub: w.approach_club,
     driveClub: w.drive_club,
+    driveDistanceYds: w.drive_distance_yds,
     score: w.score,
     putts: w.putts,
     chipShots: w.chip_shots,

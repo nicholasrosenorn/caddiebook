@@ -72,7 +72,7 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       gap: spacing.sm,
     },
     label: {
-      width: 64,
+      width: 92,
       fontFamily: fonts.serif,
       fontSize: 14,
       color: colors.textPrimary,

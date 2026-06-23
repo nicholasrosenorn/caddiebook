@@ -84,6 +84,7 @@ const girPar4: HoleSGInput = {
   firstPuttFt: 10,
   approachDistanceYds: 150,
   driverDistance: 270,
+  driveDistanceYds: null,
 };
 
 test('a clean GIR par leaves ~0 short game (categories sum to total)', () => {
@@ -113,6 +114,7 @@ test('par 3 has no OTT category; total anchors on the approach', () => {
     firstPuttFt: 20,
     approachDistanceYds: 160,
     driverDistance: 270,
+    driveDistanceYds: null,
   };
   const sg = holeStrokesGained(par3)!;
   assert.equal(sg.ott, null);
@@ -143,11 +145,25 @@ test('a missed green with a mediocre chip shows the loss in short game', () => {
     firstPuttFt: 25,
     approachDistanceYds: 150,
     driverDistance: 270,
+    driveDistanceYds: null,
   };
   const sg = holeStrokesGained(bogey)!;
   approx(sg.total, expectedTee(420) - 5); // ~ -0.94
   assert.ok(sg.aroundGreen < 0); // the chip to 25 ft underperformed the baseline
   approx((sg.ott ?? 0) + sg.approach + sg.aroundGreen + sg.putting, sg.total, 0.001);
+});
+
+test('a longer drive lengthens the hole estimate and raises OTT', () => {
+  // Same par-4 hole (150 in, scored 4) — only the driver distance differs. A
+  // longer drive implies a longer hole, so the same score off the tee gains
+  // more vs the Tour. driveDistanceYds rides alongside but the estimate keys on
+  // driverDistance (which lib/lifetime-stats sets from the logged carry).
+  const short = holeStrokesGained({ ...girPar4, driverDistance: 230 })!;
+  const long = holeStrokesGained({ ...girPar4, driverDistance: 290 })!;
+  assert.ok(long.ott! > short.ott!);
+  // Approach/putting are unaffected by the tee estimate.
+  approx(long.approach, short.approach, 0.001);
+  approx(long.putting, short.putting, 0.001);
 });
 
 // --- Aggregation + per-18 normalization ------------------------------------

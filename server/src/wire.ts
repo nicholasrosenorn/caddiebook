@@ -166,6 +166,7 @@ export type WireHole = {
   approach_distance_yds: number | null;
   approach_club: string | null;
   drive_club: string | null;
+  drive_distance_yds: number | null;
   score: number | null;
   putts: number | null;
   chip_shots: number | null;

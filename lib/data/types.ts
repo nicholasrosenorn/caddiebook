@@ -47,6 +47,7 @@ export type WireHole = {
   approach_distance_yds: number | null;
   approach_club: string | null;
   drive_club: string | null;
+  drive_distance_yds: number | null;
   score: number | null;
   putts: number | null;
   chip_shots: number | null;
@@ -176,6 +177,7 @@ export function wireToHole(row: WireHole): Hole {
     approachDistanceYds: row.approach_distance_yds,
     approachClub: row.approach_club,
     driveClub: row.drive_club,
+    driveDistanceYds: row.drive_distance_yds,
     score: row.score,
     putts: row.putts,
     chipShots: row.chip_shots,

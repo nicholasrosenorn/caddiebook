@@ -30,11 +30,12 @@ export function isFairwayHit(lane: DriverLane): boolean {
   return lane === 'CF';
 }
 
-// Ring radii are deliberately kept modest (outermost = the green edge at 0.40)
-// so the approach target leaves a green "grass" band on every side — room to mark
-// short/long/left/right misses without crowding the edge of the frame. This is the
-// single source of truth: both the ApproachTarget visuals and approachResult() read
-// it, so the drawn green and the on/off-green boundary stay aligned.
+// Ring radii are deliberately kept modest (outermost = the drawn green edge at
+// 0.40) so the approach target leaves a green "grass" band on every side — room
+// to mark short/long/left/right misses without crowding the edge of the frame.
+// This is the single source of truth: the ApproachTarget visuals, the proximity
+// readout (approachProximityFt), and the on-green pre-fill guess (isLikelyOnGreen)
+// all read it, so the drawn rings and the derived numbers stay aligned.
 export const APPROACH_RINGS = [
   { maxR: 0.085, ft: 5 },
   { maxR: 0.165, ft: 10 },
@@ -42,19 +43,58 @@ export const APPROACH_RINGS = [
   { maxR: 0.4, ft: 30 },
 ] as const;
 
-export type ApproachResult = {
-  onGreen: boolean;
-  proximityFt: number | null;
-};
+export type MissDirection = 'short' | 'long' | 'left' | 'right';
 
-export function approachResult(xNorm: number, yNorm: number): ApproachResult {
+// Distance from the pin (target center) in feet, defined everywhere — including
+// beyond the outer ring so an off-green miss still reads a real number. Feet are
+// interpolated across the ring control points (so a tap on a drawn ring matches
+// its label), then extrapolated past the outer ring using the final segment's slope.
+export function approachProximityFt(xNorm: number, yNorm: number): number {
+  const r = Math.hypot(xNorm - 0.5, yNorm - 0.5);
+  const pts = [{ r: 0, ft: 0 }, ...APPROACH_RINGS.map((g) => ({ r: g.maxR, ft: g.ft }))];
+  for (let i = 1; i < pts.length; i++) {
+    if (r <= pts[i].r) {
+      const a = pts[i - 1];
+      const b = pts[i];
+      const t = (r - a.r) / (b.r - a.r);
+      return Math.round(a.ft + t * (b.ft - a.ft));
+    }
+  }
+  const a = pts[pts.length - 2];
+  const b = pts[pts.length - 1];
+  const slope = (b.ft - a.ft) / (b.r - a.r);
+  return Math.round(b.ft + (r - b.r) * slope);
+}
+
+// Pre-fill guess only: a tap inside the outer ring usually finished on the green.
+// Never authoritative — the player confirms/flips on/off green explicitly, and
+// resolveGir() (lib/stats.ts) is the source of truth for whether it was a GIR.
+export function isLikelyOnGreen(xNorm: number, yNorm: number): boolean {
+  const outer = APPROACH_RINGS[APPROACH_RINGS.length - 1].maxR;
+  return Math.hypot(xNorm - 0.5, yNorm - 0.5) <= outer;
+}
+
+// Dominant axis of the miss relative to the pin. The player hits "up" the target,
+// so above the pin (dy < 0) is long, below is short; sides by dx.
+export function approachMissDirection(xNorm: number, yNorm: number): MissDirection {
   const dx = xNorm - 0.5;
   const dy = yNorm - 0.5;
-  const r = Math.hypot(dx, dy);
-  for (const ring of APPROACH_RINGS) {
-    if (r <= ring.maxR) return { onGreen: true, proximityFt: ring.ft };
-  }
-  return { onGreen: false, proximityFt: null };
+  if (Math.abs(dy) >= Math.abs(dx)) return dy < 0 ? 'long' : 'short';
+  return dx < 0 ? 'left' : 'right';
+}
+
+// Human-readable miss label: the dominant direction, plus the secondary axis when
+// it's meaningful (≥ 25% of the dominant offset) → e.g. "short", "short-right".
+export function approachMissLabel(xNorm: number, yNorm: number): string {
+  const dx = xNorm - 0.5;
+  const dy = yNorm - 0.5;
+  const primary = approachMissDirection(xNorm, yNorm);
+  const vertDominant = Math.abs(dy) >= Math.abs(dx);
+  const primaryMag = vertDominant ? Math.abs(dy) : Math.abs(dx);
+  const secondaryMag = vertDominant ? Math.abs(dx) : Math.abs(dy);
+  if (secondaryMag < primaryMag * 0.25) return primary;
+  const secondary = vertDominant ? (dx < 0 ? 'left' : 'right') : dy < 0 ? 'long' : 'short';
+  return `${primary}-${secondary}`;
 }
 
 export type DriverDispersionStats = {
@@ -78,35 +118,5 @@ export function driverDispersionStats(shots: Shot[]): DriverDispersionStats {
     fairwayHits,
     firPct: drives.length > 0 ? fairwayHits / drives.length : null,
     laneCounts,
-  };
-}
-
-export type ApproachDispersionStats = {
-  total: number;
-  onGreen: number;
-  girPct: number | null;
-  avgProximityFt: number | null;
-};
-
-export function approachDispersionStats(shots: Shot[]): ApproachDispersionStats {
-  const approaches = shots.filter((s) => s.shotType === 'approach');
-  let onGreen = 0;
-  let proximitySum = 0;
-  let proximityCount = 0;
-  for (const shot of approaches) {
-    const res = approachResult(shot.xNorm, shot.yNorm);
-    if (res.onGreen) {
-      onGreen += 1;
-      if (res.proximityFt != null) {
-        proximitySum += res.proximityFt;
-        proximityCount += 1;
-      }
-    }
-  }
-  return {
-    total: approaches.length,
-    onGreen,
-    girPct: approaches.length > 0 ? onGreen / approaches.length : null,
-    avgProximityFt: proximityCount > 0 ? proximitySum / proximityCount : null,
   };
 }

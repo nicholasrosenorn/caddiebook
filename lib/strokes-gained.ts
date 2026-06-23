@@ -167,7 +167,10 @@ export type HoleSGInput = {
   /** Longest logged putt distance (feet); falls back to proximity when absent. */
   firstPuttFt: number | null;
   approachDistanceYds: number;
+  /** Value fed into the hole-length estimate (logged carry, else the default). */
   driverDistance: number;
+  /** The actually-logged drive distance (yards), or null — used to band OTT. */
+  driveDistanceYds: number | null;
 };
 
 export type HoleSG = {

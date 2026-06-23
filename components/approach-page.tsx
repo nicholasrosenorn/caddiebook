@@ -15,7 +15,8 @@ import { useColors } from '@/constants/theme-context';
 import type { Hole, Shot } from '@/lib/data/models';
 import { useDeleteShot, useUpdateHole, useUpsertShot } from '@/lib/data/rounds';
 import { useBag, useClubYardages } from '@/lib/data/settings';
-import { approachResult } from '@/lib/shots';
+import { approachMissLabel, approachProximityFt, isLikelyOnGreen } from '@/lib/shots';
+import { resolveGir } from '@/lib/stats';
 
 type Props = {
   roundId: string;
@@ -61,16 +62,28 @@ export function ApproachPage({ roundId, hole, shotsForRound, onComplete }: Props
     // moving an already-placed pin shouldn't yank the page away.
     const hadPin = position != null;
     try {
-      // One command: the shot plus the derived gir flag, atomic server-side.
+      // Only the first placement pre-fills the on-green guess; moving an
+      // already-placed pin must not clobber an explicit On/Missed flip (omitting
+      // holePatch leaves hole.gir untouched — useUpsertShot guards on it).
       await upsertShot({
         roundId,
         holeNumber: hole.holeNumber,
         shotType: 'approach',
         xNorm: x,
         yNorm: y,
-        holePatch: { gir: approachResult(x, y).onGreen },
+        ...(hadPin ? {} : { holePatch: { gir: isLikelyOnGreen(x, y) } }),
       });
       if (!hadPin && hasClub && hasYards) onComplete?.();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Explicit on/off-green — the one thing the tap position can't tell us. Writes
+  // hole.gir directly; manual flips always win over the placement pre-fill.
+  const onToggleGir = async (next: boolean) => {
+    try {
+      await updateHole(roundId, hole.holeNumber, { gir: next });
     } catch (err) {
       console.error(err);
     }
@@ -135,8 +148,11 @@ export function ApproachPage({ roundId, hole, shotsForRound, onComplete }: Props
     ? [...otherApproaches, { xNorm: position.xNorm, yNorm: position.yNorm, key: 'current' }]
     : otherApproaches;
 
-  const result = position ? formatApproachLabel(position.xNorm, position.yNorm) : null;
-  const isOnGreen = position != null && approachResult(position.xNorm, position.yNorm).onGreen;
+  const resolvedGir = resolveGir(hole);
+  const isOnGreen = position != null && resolvedGir === true;
+  const result = position
+    ? formatApproachLabel(position.xNorm, position.yNorm, resolvedGir)
+    : null;
 
   return (
     <View style={styles.container}>
@@ -161,10 +177,42 @@ export function ApproachPage({ roundId, hole, shotsForRound, onComplete }: Props
           </ThemedText>
         </View>
       ) : position ? (
-        <View style={[styles.badge, isOnGreen && styles.badgePositive]}>
-          <ThemedText style={[styles.badgeText, isOnGreen && styles.badgeTextPositive]}>
-            {result}
-          </ThemedText>
+        <View style={styles.resultBlock}>
+          <View style={[styles.badge, styles.badgeInline, isOnGreen && styles.badgePositive]}>
+            <ThemedText style={[styles.badgeText, isOnGreen && styles.badgeTextPositive]}>
+              {result}
+            </ThemedText>
+          </View>
+          <View style={styles.girToggle}>
+            {(
+              [
+                { label: 'On green', value: true, seed: 'gir-on' },
+                { label: 'Missed green', value: false, seed: 'gir-off' },
+              ] as const
+            ).map((opt) => {
+              const active = resolvedGir === opt.value;
+              return (
+                <Pressable
+                  key={opt.seed}
+                  onPress={() => onToggleGir(opt.value)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  style={styles.girSegment}>
+                  <SketchSurface
+                    seed={opt.seed}
+                    fill={active ? colors.accent : colors.surface}
+                    stroke={active ? colors.accent : colors.borderStrong}
+                    grain={active}
+                    style={styles.girSegmentSurface}>
+                    <ThemedText
+                      style={[styles.girSegmentLabel, active && styles.girSegmentLabelActive]}>
+                      {opt.label}
+                    </ThemedText>
+                  </SketchSurface>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       ) : (
         <View style={styles.hintRow}>
@@ -226,10 +274,10 @@ export function ApproachPage({ roundId, hole, shotsForRound, onComplete }: Props
   );
 }
 
-function formatApproachLabel(x: number, y: number): string {
-  const r = approachResult(x, y);
-  if (!r.onGreen) return 'Off green';
-  return `${r.proximityFt} ft from pin (GIR ✓)`;
+function formatApproachLabel(x: number, y: number, gir: boolean | null): string {
+  const ft = approachProximityFt(x, y);
+  if (gir === true) return `${ft} ft · GIR ✓`;
+  return `Missed ${approachMissLabel(x, y)} · ${ft} ft`;
 }
 
 const makeStyles = (colors: Palette) =>
@@ -292,6 +340,11 @@ const makeStyles = (colors: Palette) =>
     color: colors.textMuted,
     fontSize: 13,
   },
+  resultBlock: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
   badge: {
     alignSelf: 'center',
     paddingHorizontal: spacing.md,
@@ -301,6 +354,29 @@ const makeStyles = (colors: Palette) =>
     borderWidth: 1,
     borderColor: colors.borderStrong,
     marginBottom: spacing.md,
+  },
+  badgeInline: {
+    marginBottom: 0,
+  },
+  girToggle: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  girSegment: {
+    flexShrink: 1,
+  },
+  girSegmentSurface: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  girSegmentLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  girSegmentLabelActive: {
+    color: colors.accentOn,
   },
   badgePositive: {
     backgroundColor: colors.accentMuted,
