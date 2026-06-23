@@ -14,14 +14,12 @@ import {
   StatTile,
   ValueBars,
 } from '@/components/stats-figures';
-import { StrokesGainedCard } from '@/components/strokes-gained-card';
 import { ThemedText } from '@/components/themed-text';
 import { TrendChart } from '@/components/trend-chart';
 import { sortByClubOrder, sortByDriveLength } from '@/constants/clubs';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import type { Hole, PostRoundReview, Putt, Round, Shot } from '@/lib/data/models';
-import { useClubYardages } from '@/lib/data/settings';
 import { useStatsBundle, type StatsBundle } from '@/lib/data/stats';
 import type { HandicapHistory } from '@/lib/handicap';
 import {
@@ -30,7 +28,6 @@ import {
   aggregateDriver,
   aggregateReview,
   aggregateStats,
-  aggregateStrokesGained,
   formatHandicapIndex,
   formatToPar,
   handicapHistoryFor,
@@ -43,16 +40,8 @@ import {
   type ReviewInsights,
   type RoundDerived,
   type RoundsFilter,
-  type StrokesGainedStats
 } from '@/lib/lifetime-stats';
 import { formatPct } from '@/lib/stats';
-import {
-  bandVsBaseline,
-  benchmarkSG,
-  driverDistanceFor,
-  formatSG,
-  SG_BASELINES,
-} from '@/lib/strokes-gained';
 
 type Data = {
   rounds: Round[]; // completed only, newest first
@@ -138,7 +127,6 @@ export function ProgressViewBase({
   const [roundsFilter, setRoundsFilter] = useState<RoundsFilter>(20);
   const [clubFilter, setClubFilter] = useState<ClubFilter>('all');
   const [driveClubFilter, setDriveClubFilter] = useState<ClubFilter>('all');
-  const { yardages } = useClubYardages();
 
   // One cached server read (refetched on focus/foreground) replaces the old
   // five whole-table SQLite queries; the groupings stay client-side.
@@ -172,25 +160,6 @@ export function ProgressViewBase({
     if (!data) return null;
     return handicapHistoryFor(data.rounds, data.holesByRound);
   }, [data]);
-
-  // Driver distance for the Off-the-Tee hole-length estimate: the player's logged
-  // yardage, else a default off their current Handicap Index.
-  const driverDistance = useMemo(
-    () => driverDistanceFor(yardages['Driver'], handicap?.current ?? null),
-    [yardages, handicap],
-  );
-
-  // Strokes gained recomputes when the filtered set or driver distance changes.
-  const sg = useMemo<StrokesGainedStats | null>(() => {
-    if (!data || !filteredRounds) return null;
-    return aggregateStrokesGained(
-      filteredRounds,
-      data.holesByRound,
-      data.shotsByRound,
-      data.puttsByRound,
-      { driverDistance },
-    );
-  }, [data, filteredRounds, driverDistance]);
 
   const view = useMemo<StatsView | null>(() => {
     if (!data || !filteredRounds) return null;
@@ -317,11 +286,10 @@ export function ProgressViewBase({
           />
         </View>
 
-        {view && approach && driver && driveDistance && handicap && sg ? (
+        {view && approach && driver && driveDistance && handicap ? (
           <StatsBody
             view={view}
             handicap={handicap}
-            sg={sg}
             roundsFilter={roundsFilter}
             empty={view.stats.roundCount === 0}
             hasAny={!isEmpty}
@@ -345,7 +313,6 @@ export function ProgressViewBase({
 function StatsBody({
   view,
   handicap,
-  sg,
   roundsFilter,
   empty,
   hasAny,
@@ -362,7 +329,6 @@ function StatsBody({
 }: {
   view: StatsView;
   handicap: HandicapHistory;
-  sg: StrokesGainedStats;
   roundsFilter: RoundsFilter;
   /** No rounds matched the active filters — render the dashed skeleton. */
   empty: boolean;
@@ -383,27 +349,12 @@ function StatsBody({
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const { stats, trend, review } = view;
-  // The SG baseline dropdown lives on the card but drives the distance-band
-  // charts in the Approach/Putting sections too, so its state is lifted here.
-  const [sgBaselineKey, setSgBaselineKey] = useState('10');
-  const sgBaseline = SG_BASELINES.find((b) => b.key === sgBaselineKey) ?? SG_BASELINES[0];
   // Full-history points (true index at each round), windowed to the recency
   // dropdown only — the scoring-bar value stays the unfiltered current index.
   const windowedHandicap =
     roundsFilter === 'all' ? handicap.points : handicap.points.slice(-roundsFilter);
   const handicapPoints = windowedHandicap.map((p) => p.index);
-  // SG trend is stored per-round vs Tour; shift it by the selected baseline so the
-  // 0-line means "even with that golfer". Lives in the Over-time section now.
-  const hasSG = sg.sg.holesWithSG > 0;
-  const sgBench = sgBaseline.hcp == null ? 0 : benchmarkSG('total', sgBaseline.hcp);
-  const sgTrend = sg.trend.map((p) => p - sgBench);
-  // Per-band SG (shifted to the selected baseline) trailing the distance bars.
-  const showSg = !empty && hasSG;
-  const approachSg = bandVsBaseline(sg.approachBands, 'approach', sgBaseline.hcp);
-  const puttingSg = bandVsBaseline(sg.puttingBands, 'putting', sgBaseline.hcp);
-  const drivingSg = bandVsBaseline(sg.drivingBands, 'ott', sgBaseline.hcp);
-  const showTrends =
-    trend.length >= 2 || handicapPoints.length >= 2 || (hasSG && sgTrend.length >= 2);
+  const showTrends = trend.length >= 2 || handicapPoints.length >= 2;
   const uniform = stats.uniformLength;
   const approachPins: TargetPin[] = approach.pins.map((p) => ({ ...p, variant: 'muted' }));
   const drivePins: TargetPin[] = driver.pins.map((p) => ({ ...p, variant: 'muted' }));
@@ -490,32 +441,9 @@ function StatsBody({
               points={trend.map((t) => (uniform ? t.totalPutts : t.puttsPer18))}
               formatValue={(n) => n.toFixed(n % 1 === 0 ? 0 : 1)}
             />
-            {hasSG ? (
-              <TrendCard
-                title="Strokes gained"
-                caption={`per 18 · vs ${sgBaseline.label}`}
-                points={sgTrend}
-                baseline={0}
-                baselineLabel={sgBaseline.label}
-                formatValue={(n) => formatSG(n)}
-              />
-            ) : null}
           </Section>
         ) : null}
       </Chapter>
-
-      {/* ── Strokes gained vs the PGA Tour baseline + handicap scenarios ────── */}
-      {!empty && sg.sg.holesWithSG > 0 ? (
-        <Chapter>
-          <Section title="Strokes gained">
-            <StrokesGainedCard
-              sg={sg.sg}
-              baselineKey={sgBaselineKey}
-              onBaselineChange={setSgBaselineKey}
-            />
-          </Section>
-        </Chapter>
-      ) : null}
 
       {/* ── Shot quality: where the strokes are won and lost, by distance ───── */}
       <Chapter>
@@ -563,24 +491,20 @@ function StatsBody({
           </Section>
         ) : null}
 
-        {/* Drive distribution — 25-yd bands split by fairways found, SG trailing. */}
+        {/* Drive distribution — 25-yd bands split by fairways found. */}
         {driveDistance.count > 0 ? (
           <Section title="Drive distribution">
             <SplitDistanceBars
               seedPrefix="drive"
               successLabel="Fairway"
               failLabel="Missed"
-              rows={driveDistance.distribution.map((b, i) => ({
+              rows={driveDistance.distribution.map((b) => ({
                 key: b.label,
                 label: b.label,
                 success: b.hit,
                 total: b.total,
-                sg: showSg && sg.drivingBands[i]?.holes > 0 ? drivingSg[i] : undefined,
               }))}
             />
-            {showSg ? (
-              <ThemedText type="caption">SG = STROKES GAINED VS {sgBaseline.label.toUpperCase()}</ThemedText>
-            ) : null}
           </Section>
         ) : null}
 
@@ -604,47 +528,35 @@ function StatsBody({
           </ThemedText>
         </Section>
 
-        {/* Approach distances, split by green hit / missed. SG trails each band —
-            but only with "All clubs", since the SG bands aren't club-scoped. */}
+        {/* Approach distances, split by green hit / missed. */}
         <Section
           title={`Approach distances · ${clubFilter === 'all' ? 'All clubs' : clubFilter}`}>
           <SplitDistanceBars
             seedPrefix="appr"
             successLabel="Green hit"
             failLabel="Missed"
-            rows={approach.approachByDistance.map((b, i) => ({
+            rows={approach.approachByDistance.map((b) => ({
               key: b.label,
               label: b.label,
               success: b.hit,
               total: b.total,
-              sg:
-                showSg && clubFilter === 'all' && sg.approachBands[i]?.holes > 0
-                  ? approachSg[i]
-                  : undefined,
             }))}
           />
-          {showSg && clubFilter === 'all' ? (
-            <ThemedText type="caption">SG = STROKES GAINED VS {sgBaseline.label.toUpperCase()}</ThemedText>
-          ) : null}
         </Section>
 
-        {/* Putting make rate by distance, with SG trailing each band */}
+        {/* Putting make rate by distance */}
         <Section title="Putting by distance">
           <SplitDistanceBars
             seedPrefix="putt"
             successLabel="Made"
             failLabel="Missed"
-            rows={stats.puttBuckets.map((b, i) => ({
+            rows={stats.puttBuckets.map((b) => ({
               key: String(b.ft),
               label: b.label,
               success: b.makes,
               total: b.total,
-              sg: showSg && sg.puttingBands[i]?.holes > 0 ? puttingSg[i] : undefined,
             }))}
           />
-          {showSg ? (
-            <ThemedText type="caption">SG = STROKES GAINED VS {sgBaseline.label.toUpperCase()}</ThemedText>
-          ) : null}
         </Section>
       </Chapter>
 

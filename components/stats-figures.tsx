@@ -1,13 +1,11 @@
 import { useMemo, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { sgBarColor } from '@/components/sg-bar-chart';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import type { ScoreDistribution } from '@/lib/stats';
-import { formatSG } from '@/lib/strokes-gained';
 
 // The shared editorial stats vocabulary — one source of truth for the me-tab
 // progress view, the round summary, and the community round summary so every
@@ -116,16 +114,11 @@ export type SplitRow = {
   label: string;
   success: number;
   total: number;
-  /** Optional strokes-gained for this band, shown as a signed colored chip at the
-   *  far right. Undefined → no chip (the column collapses). */
-  sg?: number;
 };
 
 // Shared by "Approach distances" (success = green hit) and "Putting by
 // distance" (success = made). Each bar fills the full track, split ink
 // (success) → muted neutral (miss); the right label reads `% (success/total)`.
-// When a row carries `sg`, a signed strokes-gained chip trails the row (gain =
-// accent ink, loss ramps amber→red via `sgBarColor`).
 export function SplitDistanceBars({
   rows,
   successLabel,
@@ -140,19 +133,8 @@ export function SplitDistanceBars({
   const colors = useColors();
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
-  // Reserve the SG column for every row once any row carries a value, so the
-  // make/hit columns stay aligned across bands (blank where a band has no SG).
-  const showSg = rows.some((r) => r.sg != null);
   return (
     <View style={styles.barList}>
-      {/* A header labels the trailing strokes-gained column once, over the chips. */}
-      {showSg ? (
-        <View style={styles.sgHeaderRow}>
-          <ThemedText type="caption" style={styles.sgCell}>
-            SG
-          </ThemedText>
-        </View>
-      ) : null}
       {rows.map((r) => {
         const missed = r.total - r.success;
         const successFrac = r.total > 0 ? r.success / r.total : 0;
@@ -199,13 +181,6 @@ export function SplitDistanceBars({
                 </ThemedText>
               )}
             </View>
-            {showSg ? (
-              <ThemedText
-                style={[styles.sgCell, r.sg != null ? { color: sgBarColor(r.sg, colors) } : null]}
-                numberOfLines={1}>
-                {r.sg != null ? formatSG(r.sg) : ''}
-              </ThemedText>
-            ) : null}
           </View>
         );
       })}
@@ -342,18 +317,6 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       fontFamily: fonts.serif,
       fontSize: 15,
       color: colors.textPrimary,
-    },
-    sgCell: {
-      width: 42,
-      textAlign: 'right',
-      fontFamily: fonts.serifBold,
-      fontSize: 15,
-      lineHeight: 20,
-      color: colors.textPrimary,
-    },
-    sgHeaderRow: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
     },
     legend: {
       flexDirection: 'row',

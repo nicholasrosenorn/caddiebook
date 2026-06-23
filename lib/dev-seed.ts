@@ -109,6 +109,10 @@ export async function seedSampleRounds(count = 70): Promise<void> {
           hole_number: hole.holeNumber,
           par: hole.par,
           fir: hole.fir,
+          // Persist the on-green call buildHole derived so seeded rounds mirror what
+          // the live app records (its approach-page pre-fill writes gir); otherwise
+          // gir stays null and every consumer has to fall back to derivation.
+          gir: hole.gir ? 1 : 0,
           approach_distance_yds: hole.approachDistance,
           approach_club: hole.approachClub,
           drive_club: hole.driveClub,
