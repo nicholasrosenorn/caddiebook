@@ -30,6 +30,32 @@ export function isFairwayHit(lane: DriverLane): boolean {
   return lane === 'CF';
 }
 
+// Yardage marks drawn down the driver target's height (top = farther). This is
+// the single source of truth: the DriverTarget visuals and the distance readout
+// (driveDistanceFromY) both read it, so the drawn marks and the derived number
+// stay aligned — mirroring APPROACH_RINGS for the approach target.
+export const DRIVE_YARDAGE_MARKS = [
+  { yNorm: 0.78, yds: 100 },
+  { yNorm: 0.5, yds: 200 },
+  { yNorm: 0.22, yds: 300 },
+] as const;
+
+const DRIVE_DISTANCE_MIN = 50;
+const DRIVE_DISTANCE_MAX = 360;
+
+// Drive distance down the fairway from the ball's vertical position. Lane
+// (x, left/right) does not add yards — distance is purely how far up the ball
+// sits, interpolated/extrapolated linearly through the yardage marks, then
+// clamped to a realistic range and snapped to 5 (as the old chips did).
+export function driveDistanceFromY(yNorm: number): number {
+  const a = DRIVE_YARDAGE_MARKS[0];
+  const b = DRIVE_YARDAGE_MARKS[DRIVE_YARDAGE_MARKS.length - 1];
+  const slope = (b.yds - a.yds) / (b.yNorm - a.yNorm);
+  const yds = a.yds + (yNorm - a.yNorm) * slope;
+  const clamped = Math.max(DRIVE_DISTANCE_MIN, Math.min(DRIVE_DISTANCE_MAX, yds));
+  return Math.round(clamped / 5) * 5;
+}
+
 // Ring radii are deliberately kept modest (outermost = the drawn green edge at
 // 0.40) so the approach target leaves a green "grass" band on every side — room
 // to mark short/long/left/right misses without crowding the edge of the frame.

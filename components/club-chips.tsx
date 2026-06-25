@@ -81,7 +81,7 @@ function Chip({
     <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
       <SketchSurface
         seed={`club-${label}`}
-        radius={radius.pill}
+        radius={radius.md}
         fill={selected ? colors.accent : colors.surface}
         stroke={selected ? colors.accent : colors.borderStrong}
         grain={selected}

@@ -1,6 +1,15 @@
 import * as Location from 'expo-location';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import MapView, { Marker, Polyline, type Region } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, Path, RadialGradient, Stop } from 'react-native-svg';
@@ -8,6 +17,7 @@ import Svg, { Defs, Path, RadialGradient, Stop } from 'react-native-svg';
 import { GlassSurface } from '@/components/glass-surface';
 import { ThemedText } from '@/components/themed-text';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { sortByClubOrder } from '@/constants/clubs';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import { useStatsBundle } from '@/lib/data/stats';
@@ -40,7 +50,7 @@ const ZOOM_EXIT_SPAN_YDS = 120;
 const DISPERSION_WINDOW_YDS = 15;
 // Cap the overlay to the most recent shots (by round date played) — keeps the
 // map cheap to render and weights the picture toward recent form.
-const MAX_DISPERSION_SHOTS = 100;
+const MAX_DISPERSION_SHOTS = 200;
 // Approach shots store (xNorm, yNorm) with the pin at (0.5, 0.5); the outer
 // ring's normalized radius ↔ feet pair sets the physical scale.
 const OUTER_RING = APPROACH_RINGS[APPROACH_RINGS.length - 1];
@@ -71,6 +81,9 @@ const CONE_PATH = (() => {
 })();
 // Ignore sub-2° magnetometer jitter so the cone doesn't re-render constantly.
 const HEADING_MIN_DELTA_DEG = 2;
+// Height of one club-menu row; the menu's open height is (clubs + 1) of these
+// (the "All" row plus each club). Shared by the style and the expand math.
+const CLUB_SEGMENT_H = 34;
 
 type ApproachSample = {
   key: string;
@@ -79,6 +92,7 @@ type ApproachSample = {
   distanceYds: number;
   playedAt: string;
   holeNumber: number;
+  approachClub: string | null;
 };
 
 type PermissionState = 'pending' | 'granted' | 'denied';
@@ -99,6 +113,8 @@ export function MapPage() {
   // crosshair axes for reading long/short and left/right misses.
   const [zoomedIn, setZoomedIn] = useState(false);
   const [dispersionOn, setDispersionOn] = useState(false);
+  // Club filter for the dispersion overlay; null = all clubs.
+  const [selectedClub, setSelectedClub] = useState<string | null>(null);
   // Live device heading in degrees [0, 360); null until the first reading.
   const [heading, setHeading] = useState<number | null>(null);
   const headingSubRef = useRef<Location.LocationSubscription | null>(null);
@@ -108,6 +124,34 @@ export function MapPage() {
   // keep the screen-space cone pointing at the true bearing. 0 = north-up.
   const [cameraHeading, setCameraHeading] = useState(0);
   const { data: statsData } = useStatsBundle();
+  // A small "settle" spin played on the dispersion X once the club menu has
+  // finished expanding (see effect below). Rest angle is 0deg.
+  const xSpin = useSharedValue(0);
+  const xSpinStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${xSpin.value}deg` }] }));
+  // Club-menu open progress (0 = collapsed into the toggle, 1 = fully expanded).
+  // Drives the menu's animated height + opacity in both directions.
+  const menuOpen = useSharedValue(0);
+
+  // Toggle the menu open/closed, and on open give the X a quick springy nudge
+  // once the expand has settled. Off: snap the spin back to rest (the icon is
+  // the aqi glyph then anyway).
+  useEffect(() => {
+    menuOpen.value = withTiming(dispersionOn ? 1 : 0, {
+      duration: 200,
+      easing: Easing.out(Easing.cubic),
+    });
+    if (dispersionOn) {
+      xSpin.value = withDelay(
+        120,
+        withSequence(
+          withTiming(16, { duration: 90, easing: Easing.out(Easing.cubic) }),
+          withSpring(0, { damping: 9, stiffness: 240 }),
+        ),
+      );
+    } else {
+      xSpin.value = 0;
+    }
+  }, [dispersionOn, xSpin, menuOpen]);
 
   const requestLocation = useCallback(async () => {
     setPermission('pending');
@@ -193,6 +237,7 @@ export function MapPage() {
         distanceYds: hole.approachDistanceYds,
         playedAt: round.datePlayed,
         holeNumber: shot.holeNumber,
+        approachClub: hole.approachClub,
       });
     }
     // Newest round first, so windowing + slicing below keeps the most recent.
@@ -226,6 +271,8 @@ export function MapPage() {
 
   const placeTarget = (coord: LatLng) => {
     setTarget(coord);
+    // Available clubs differ per distance — drop any stale club filter.
+    setSelectedClub(null);
     if (!userLoc) return;
     if (zoomedIn) {
       // Stay zoomed: re-center on the new target at the current pinch level.
@@ -327,17 +374,20 @@ export function MapPage() {
     if (!zoomedIn || !dispersionOn || !userLoc || !target || distanceYds == null) {
       return null;
     }
-    // history is pre-sorted newest-first, so the filtered slice is too — cap to
-    // the most recent shots within the window.
-    const inWindow = history
-      .filter((s) => Math.abs(s.distanceYds - distanceYds) <= DISPERSION_WINDOW_YDS)
+    // history is pre-sorted newest-first, so every slice below stays newest-first.
+    const inWindow = history.filter(
+      (s) => Math.abs(s.distanceYds - distanceYds) <= DISPERSION_WINDOW_YDS,
+    );
+    // Apply the club filter, then cap to the most recent shots.
+    const shown = inWindow
+      .filter((s) => selectedClub == null || s.approachClub === selectedClub)
       .slice(0, MAX_DISPERSION_SHOTS);
     const bearing = bearingDeg(userLoc, target);
     return {
-      count: inWindow.length,
+      count: shown.length,
       lo: Math.max(0, distanceYds - DISPERSION_WINDOW_YDS),
       hi: distanceYds + DISPERSION_WINDOW_YDS,
-      points: inWindow.map((s) => {
+      points: shown.map((s) => {
         const dxM = (s.xNorm - 0.5) * FT_PER_NORM * METERS_PER_FOOT;
         const dyM = (0.5 - s.yNorm) * FT_PER_NORM * METERS_PER_FOOT;
         return {
@@ -346,12 +396,73 @@ export function MapPage() {
         };
       }),
     };
-  }, [zoomedIn, dispersionOn, userLoc, target, distanceYds, history]);
+  }, [zoomedIn, dispersionOn, userLoc, target, distanceYds, history, selectedClub]);
+
+  // The club-menu list: every club hit within the live distance window, ordered
+  // canonically (wedges → long irons). Deliberately NOT gated on dispersionOn,
+  // so the menu stays mounted while it collapses shut (the close animation runs
+  // on a 0-height clip, not an unmount).
+  const menuClubs = useMemo(() => {
+    if (!zoomedIn || !userLoc || !target || distanceYds == null) return [];
+    const used = new Set<string>();
+    for (const s of history) {
+      if (Math.abs(s.distanceYds - distanceYds) <= DISPERSION_WINDOW_YDS && s.approachClub != null) {
+        used.add(s.approachClub);
+      }
+    }
+    return sortByClubOrder([...used]);
+  }, [zoomedIn, userLoc, target, distanceYds, history]);
+
+  // Menu expand: height grows from the toggle icon, segments fade with it. The
+  // bottom-anchored container reflows to this height each frame, so it animates
+  // symmetrically open and shut.
+  const menuStyle = useAnimatedStyle(() => ({
+    height: menuOpen.value * (menuClubs.length + 1) * CLUB_SEGMENT_H,
+    opacity: menuOpen.value,
+  }));
+
+  // Dispersion overlay markers. Memoized so the up-to-200-marker set isn't
+  // reconciled on every GPS-driven re-render. The Fragment key flips whenever
+  // the club filter changes (dispersion is a dep, so it changes with it),
+  // forcing React to unmount the old set and remount the new one in a single
+  // pass — react-native-maps otherwise fails to mount markers added to a live
+  // map (the "tap All shows no new shots" bug). tracksViewChanges is off: the
+  // dot view never changes after mount, so the native snapshot is taken once.
+  const dispersionMarkers = useMemo(() => {
+    if (!dispersion) return null;
+    return (
+      <Fragment key={selectedClub ?? '__all__'}>
+        {dispersion.points.map((p) => (
+          <Marker
+            key={p.key}
+            coordinate={p.point}
+            anchor={{ x: 0.5, y: 0.5 }}
+            tracksViewChanges={false}>
+            <View style={styles.dispersionDot} pointerEvents="none" />
+          </Marker>
+        ))}
+      </Fragment>
+    );
+  }, [dispersion, selectedClub, styles]);
 
   // On-screen rotation for the heading cone: the real-world bearing minus the
   // camera's heading, so the wedge points the right way whatever's "up".
   const coneRotation =
     heading == null ? null : (((heading - cameraHeading) % 360) + 360) % 360;
+
+  // GPS fires many times a second; userLoc only feeds distance/bearing/cone/
+  // polyline math (the blue dot is drawn natively by showsUserLocation), so we
+  // drop sub-yard jitter. Returning the previous value short-circuits the state
+  // update, sparing a whole-component re-render (and the marker reconcile).
+  const onUserLocationChange = useCallback(
+    (e: { nativeEvent: { coordinate?: LatLng | null } }) => {
+      const c = e.nativeEvent.coordinate;
+      if (!c) return;
+      const next = { latitude: c.latitude, longitude: c.longitude };
+      setUserLoc((prev) => (prev && haversineYards(prev, next) < 0.5 ? prev : next));
+    },
+    [],
+  );
 
   // Zooming out even a little past the entry framing dismisses zoom mode
   // back to the standard dot → target framing.
@@ -413,10 +524,7 @@ export function MapPage() {
           right: 0,
           bottom: overlayBottom + CHIP_AREA_HEIGHT,
         }}
-        onUserLocationChange={(e) => {
-          const c = e.nativeEvent.coordinate;
-          if (c) setUserLoc({ latitude: c.latitude, longitude: c.longitude });
-        }}
+        onUserLocationChange={onUserLocationChange}
         onRegionChangeComplete={onRegionChangeComplete}
         onPress={(e) => {
           // Marker taps (e.g. tick pills) also fire the map's onPress —
@@ -462,6 +570,7 @@ export function MapPage() {
             coordinate={target}
             anchor={{ x: 0.5, y: 0.5 }}
             draggable
+            tracksViewChanges={false}
             onDrag={(e) => setTarget(e.nativeEvent.coordinate)}
             onDragEnd={(e) => placeTarget(e.nativeEvent.coordinate)}>
             <View style={styles.crosshair} pointerEvents="none">
@@ -493,7 +602,8 @@ export function MapPage() {
                 key={t.key}
                 coordinate={t.point}
                 anchor={{ x: 0.5, y: 0.5 }}
-                centerOffset={t.labelOffset}>
+                centerOffset={t.labelOffset}
+                tracksViewChanges={false}>
                 <ThemedText style={styles.tickText} pointerEvents="none">
                   {t.label}
                 </ThemedText>
@@ -501,11 +611,7 @@ export function MapPage() {
             ))}
           </>
         )}
-        {dispersion?.points.map((p) => (
-          <Marker key={p.key} coordinate={p.point} anchor={{ x: 0.5, y: 0.5 }}>
-            <View style={styles.dispersionDot} pointerEvents="none" />
-          </Marker>
-        ))}
+        {dispersionMarkers}
       </MapView>
 
       <View style={[styles.chip, { bottom: overlayBottom }]} pointerEvents="none">
@@ -551,25 +657,52 @@ export function MapPage() {
       </Pressable>
 
       {zoomedIn && (
-        <Pressable
-          onPress={() => setDispersionOn((v) => !v)}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel={dispersionOn ? 'Hide shot dispersion' : 'Show shot dispersion'}
-          style={[styles.dispersionButton, { bottom: overlayBottom + 48 }]}>
-          {({ pressed }) => (
-            <>
-              <GlassSurface borderRadius={20} />
-              {dispersionOn && <View style={styles.activeFill} pointerEvents="none" />}
-              {pressed && <View style={styles.pressedOverlay} pointerEvents="none" />}
-              <IconSymbol
-                name="aqi.medium"
-                size={18}
-                color={dispersionOn ? colors.accentOn : colors.textPrimary}
+        <View style={[styles.clubMenu, { bottom: overlayBottom + 48 }]}>
+          <GlassSurface borderRadius={20} />
+          {menuClubs.length > 0 && (
+            <Animated.View style={[styles.clubGroup, menuStyle]}>
+              <ClubSegment
+                label="All"
+                active={selectedClub == null}
+                onPress={() => setSelectedClub(null)}
+                styles={styles}
               />
-            </>
+              {menuClubs.map((club) => (
+                <ClubSegment
+                  key={club}
+                  label={club}
+                  active={selectedClub === club}
+                  onPress={() => setSelectedClub(club)}
+                  styles={styles}
+                />
+              ))}
+            </Animated.View>
           )}
-        </Pressable>
+          <Pressable
+            onPress={() =>
+              setDispersionOn((v) => {
+                if (v) setSelectedClub(null);
+                return !v;
+              })
+            }
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel={dispersionOn ? 'Hide shot dispersion' : 'Show shot dispersion'}
+            style={styles.dispersionToggle}>
+            {({ pressed }) => (
+              <>
+                {pressed && <View style={styles.clubSegmentPressed} pointerEvents="none" />}
+                <Animated.View style={xSpinStyle}>
+                  <IconSymbol
+                    name={dispersionOn ? 'xmark' : 'aqi.medium'}
+                    size={dispersionOn ? 16 : 18}
+                    color={dispersionOn ? colors.accent : colors.textPrimary}
+                  />
+                </Animated.View>
+              </>
+            )}
+          </Pressable>
+        </View>
       )}
 
       {target != null && (
@@ -594,6 +727,42 @@ export function MapPage() {
         </Pressable>
       )}
     </View>
+  );
+}
+
+function ClubSegment({
+  label,
+  active,
+  onPress,
+  styles,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  styles: ReturnType<typeof makeStyles>;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={4}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={`Show ${label} dispersion`}
+      style={styles.clubSegment}>
+      {({ pressed }) => (
+        <>
+          {active && <View style={styles.clubSegmentActive} pointerEvents="none" />}
+          {pressed && !active && (
+            <View style={styles.clubSegmentPressed} pointerEvents="none" />
+          )}
+          <ThemedText
+            style={[styles.clubSegmentText, active && styles.clubSegmentTextActive]}
+            pointerEvents="none">
+            {label}
+          </ThemedText>
+        </>
+      )}
+    </Pressable>
   );
 }
 
@@ -698,15 +867,47 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    dispersionButton: {
+    clubMenu: {
       position: 'absolute',
       right: spacing.md,
       width: 40,
-      height: 40,
       borderRadius: 20,
       overflow: 'hidden',
       alignItems: 'center',
+    },
+    clubGroup: {
+      width: '100%',
+      alignItems: 'center',
+      overflow: 'hidden',
+    },
+    dispersionToggle: {
+      width: '100%',
+      height: 40,
+      alignItems: 'center',
       justifyContent: 'center',
+    },
+    clubSegment: {
+      width: '100%',
+      height: CLUB_SEGMENT_H,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    clubSegmentActive: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: colors.accent,
+    },
+    clubSegmentPressed: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: colors.accentMuted,
+    },
+    clubSegmentText: {
+      fontFamily: fonts.serif,
+      fontSize: 13,
+      lineHeight: 16,
+      color: colors.accent,
+    },
+    clubSegmentTextActive: {
+      color: colors.accentOn,
     },
     dispersionDot: {
       width: 8,

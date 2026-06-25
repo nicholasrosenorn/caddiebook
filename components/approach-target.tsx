@@ -4,9 +4,9 @@ import Svg, { Circle, G, Line, Path, Polygon } from 'react-native-svg';
 
 import type { TargetPin } from '@/components/driver-target';
 import { ThemedText } from '@/components/themed-text';
-import { type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
-import { APPROACH_RINGS } from '@/lib/shots';
+import { type FontSet, type Palette } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
+import { APPROACH_RINGS, approachProximityFt } from '@/lib/shots';
 import { roughCirclePath, stippleInEllipse } from '@/lib/sketch';
 
 const DEFAULT_SIZE = 280;
@@ -18,6 +18,12 @@ type ApproachTargetProps = {
   size?: number;
   /** Pin diameter in px. Shrink for dense multi-round dispersion overlays. */
   pinSize?: number;
+  /**
+   * The current shot to measure: draws a dashed line from this pin to the pin at
+   * center, labeled with the proximity in feet. Only the active shot — muted
+   * dispersion pins get no line.
+   */
+  measurePin?: { xNorm: number; yNorm: number } | null;
 };
 
 function ApproachTargetImpl({
@@ -25,9 +31,11 @@ function ApproachTargetImpl({
   onTap,
   size = DEFAULT_SIZE,
   pinSize = PIN_SIZE,
+  measurePin = null,
 }: ApproachTargetProps) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   // Same palette as the driver target: light beige-green putting surface with a
   // slightly darker fringe band around it.
   const GREEN_FILL = colors.fairway;
@@ -168,10 +176,22 @@ function ApproachTargetImpl({
           a dense dispersion overlay stays a single native view. Kept on top of
           the chrome to preserve the previous z-order. The View wrapper carries
           pointerEvents="none" (react-native-svg's <Svg> doesn't reliably honor
-          it) so taps fall through to the Pressable below. */}
-      {pins.length > 0 ? (
+          it) so taps fall through to the Pressable below. The measure line is
+          drawn first so the pin sits on top of it. */}
+      {pins.length > 0 || measurePin ? (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+            {measurePin ? (
+              <Line
+                x1={c}
+                y1={c}
+                x2={measurePin.xNorm * size}
+                y2={measurePin.yNorm * size}
+                stroke={colors.accent}
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+              />
+            ) : null}
             {pins.map((pin, i) => (
               <PinCircle
                 key={pin.key ?? i}
@@ -182,6 +202,23 @@ function ApproachTargetImpl({
               />
             ))}
           </Svg>
+        </View>
+      ) : null}
+
+      {/* Distance readout — a small serif chip at the line's midpoint */}
+      {measurePin ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.distanceChip,
+            {
+              left: ((c + measurePin.xNorm * size) / 2) - 26,
+              top: ((c + measurePin.yNorm * size) / 2) - 12,
+            },
+          ]}>
+          <ThemedText style={styles.distanceText}>
+            {approachProximityFt(measurePin.xNorm, measurePin.yNorm)} ft
+          </ThemedText>
         </View>
       ) : null}
     </View>
@@ -219,11 +256,27 @@ function clamp(v: number): number {
   return Math.max(0, Math.min(1, v));
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   wrap: {
     alignSelf: 'center',
     position: 'relative',
+  },
+  distanceChip: {
+    position: 'absolute',
+    width: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 1,
+    borderRadius: 6,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+  },
+  distanceText: {
+    fontFamily: fonts.serif,
+    fontSize: 13,
+    color: colors.accent,
   },
   cornerTL: {
     position: 'absolute',

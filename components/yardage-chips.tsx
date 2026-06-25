@@ -73,7 +73,7 @@ export function YardageChips({
             style={({ pressed }) => pressed && styles.pressed}>
             <SketchSurface
               seed={`yds-${v}`}
-              radius={radius.pill}
+              radius={radius.md}
               fill={selected ? colors.accent : colors.surface}
               stroke={selected ? colors.accent : colors.borderStrong}
               grain={selected}

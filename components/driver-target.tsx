@@ -1,12 +1,18 @@
 import { memo, useMemo } from 'react';
 import { Pressable, StyleSheet, View, type GestureResponderEvent } from 'react-native';
-import Svg, { Circle, ClipPath, Defs, G, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, ClipPath, Defs, G, Line, Path, Rect } from 'react-native-svg';
 
 import { BunkerBlob } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
-import { spacing, type Palette } from '@/constants/theme';
-import { useColors } from '@/constants/theme-context';
-import { CF_LEFT_EDGE, CF_RIGHT_EDGE, FAIRWAY_INSET } from '@/lib/shots';
+import { spacing, type FontSet, type Palette } from '@/constants/theme';
+import { useColors, useFontSet } from '@/constants/theme-context';
+import {
+  CF_LEFT_EDGE,
+  CF_RIGHT_EDGE,
+  DRIVE_YARDAGE_MARKS,
+  driveDistanceFromY,
+  FAIRWAY_INSET,
+} from '@/lib/shots';
 import { fairwayPath, stippleInEllipse, wavyLines } from '@/lib/sketch';
 
 const DEFAULT_WIDTH = 220;
@@ -30,6 +36,12 @@ type DriverTargetProps = {
   /** Pin diameter in px. Defaults to the interactive size; shrink for dense
    *  multi-round dispersion overlays. */
   pinSize?: number;
+  /**
+   * The current drive to measure: draws a dashed line from the tee to this pin,
+   * labeled with the distance in yards. Only the active shot — muted dispersion
+   * pins get no line.
+   */
+  measurePin?: { xNorm: number; yNorm: number } | null;
 };
 
 function DriverTargetImpl({
@@ -38,9 +50,11 @@ function DriverTargetImpl({
   width = DEFAULT_WIDTH,
   height = DEFAULT_HEIGHT,
   pinSize = PIN_SIZE,
+  measurePin = null,
 }: DriverTargetProps) {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const fonts = useFontSet();
+  const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   // Three nested tones, beige (fairway) → dark green (outer shading).
   const FAIRWAY_GREEN = colors.fairway;
   const ROUGH_GREEN = colors.rough;
@@ -161,16 +175,15 @@ function DriverTargetImpl({
         <CornerDots />
       </View> */}
 
-      {/* Yardage marks */}
-      <View style={[styles.yardage, { top: height * 0.22 }]} pointerEvents="none">
-        <ThemedText type="label" style={styles.yardageText}>300</ThemedText>
-      </View>
-      <View style={[styles.yardage, { top: height * 0.50 }]} pointerEvents="none">
-        <ThemedText type="label" style={styles.yardageText}>200</ThemedText>
-      </View>
-      <View style={[styles.yardage, { top: height * 0.78 }]} pointerEvents="none">
-        <ThemedText type="label" style={styles.yardageText}>100</ThemedText>
-      </View>
+      {/* Yardage marks — shared with the distance math (DRIVE_YARDAGE_MARKS) */}
+      {DRIVE_YARDAGE_MARKS.map((mark) => (
+        <View
+          key={mark.yds}
+          style={[styles.yardage, { top: height * mark.yNorm }]}
+          pointerEvents="none">
+          <ThemedText type="label" style={styles.yardageText}>{mark.yds}</ThemedText>
+        </View>
+      ))}
 
       {/* Lane labels — small paper chips marking the LF / CF / RF scoring zones */}
       <View style={styles.laneLabels} pointerEvents="none">
@@ -199,9 +212,20 @@ function DriverTargetImpl({
           the chrome to preserve the previous z-order. The View wrapper carries
           pointerEvents="none" (react-native-svg's <Svg> doesn't reliably honor
           it) so taps fall through to the Pressable below. */}
-      {pins.length > 0 ? (
+      {pins.length > 0 || measurePin ? (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
+            {measurePin ? (
+              <Line
+                x1={width / 2}
+                y1={teeY}
+                x2={measurePin.xNorm * width}
+                y2={measurePin.yNorm * height}
+                stroke={colors.accent}
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+              />
+            ) : null}
             {pins.map((pin, i) => (
               <PinCircle
                 key={pin.key ?? i}
@@ -212,6 +236,23 @@ function DriverTargetImpl({
               />
             ))}
           </Svg>
+        </View>
+      ) : null}
+
+      {/* Distance readout — a small serif chip at the tee→ball line's midpoint */}
+      {measurePin ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.distanceChip,
+            {
+              left: (width / 2 + measurePin.xNorm * width) / 2 - 30,
+              top: (teeY + measurePin.yNorm * height) / 2 - 12,
+            },
+          ]}>
+          <ThemedText style={styles.distanceText}>
+            {driveDistanceFromY(measurePin.yNorm)} yds
+          </ThemedText>
         </View>
       ) : null}
     </View>
@@ -249,7 +290,7 @@ function clamp(v: number): number {
   return Math.max(0, Math.min(1, v));
 }
 
-const makeStyles = (colors: Palette) =>
+const makeStyles = (colors: Palette, fonts: FontSet) =>
   StyleSheet.create({
   wrap: {
     alignSelf: 'center',
@@ -259,6 +300,22 @@ const makeStyles = (colors: Palette) =>
     // Reserve room for the LF/CF/RF lane chips, which sit just below the frame
     // (laneLabels bottom: -25) so siblings don't overlap them.
     marginBottom: spacing.xl,
+  },
+  distanceChip: {
+    position: 'absolute',
+    width: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 1,
+    borderRadius: 6,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+  },
+  distanceText: {
+    fontFamily: fonts.serif,
+    fontSize: 13,
+    color: colors.accent,
   },
   cornerTL: {
     position: 'absolute',
