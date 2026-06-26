@@ -21,6 +21,7 @@ import { onAuthFailure } from '@/lib/auth/events';
 import { signInWithApple, signInWithGoogle, signOut } from '@/lib/auth/providers';
 import { clearSession, setSessionUser, type Session } from '@/lib/auth/tokens';
 import { clearOutbox, drainWithTimeout, initOutbox } from '@/lib/data/outbox';
+import { clearInviteCache } from '@/lib/invite';
 import { ensureLegacyFlush } from '@/lib/migration/legacy-flush';
 import {
   QUERY_PERSIST_MAX_AGE_MS,
@@ -152,6 +153,7 @@ export function AuthProvider({
     await signOut();
     await clearOutbox();
     queryClient.clear();
+    clearInviteCache();
     await queryPersister.removeClient();
     setSession(null);
     // Replay the intro flow so the next experience reintroduces Caddie Book.
@@ -172,6 +174,7 @@ export function AuthProvider({
     }
     await clearOutbox();
     queryClient.clear();
+    clearInviteCache();
     await queryPersister.removeClient();
     await clearSession();
     setSession(null);

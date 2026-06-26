@@ -201,6 +201,10 @@ export const users = pgTable('users', {
   lastName: text('last_name'),
   username: text('username').unique(),
   avatar: text('avatar'),
+  // Stable, unguessable per-account invite code. Lazily generated the first time
+  // the account fetches its invite link; opening the link auto-friends both users
+  // (see /community/invite in community/routes.ts). Nullable until first use.
+  inviteCode: text('invite_code').unique(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   // Set when an admin bans the account for an objectionable-content report.
   // requireAuth rejects any request from a banned user (403), so a ban ejects

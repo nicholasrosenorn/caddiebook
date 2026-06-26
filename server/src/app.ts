@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 
 import { adminRoutes } from './admin/routes';
 import { authRoutes } from './auth/routes';
+import { inviteWebRoutes } from './community/invite-web';
 import { communityRoutes } from './community/routes';
 import { dataRoutes } from './data/routes';
 import { notificationsRoutes } from './notifications/routes';
@@ -12,6 +13,8 @@ import { syncRoutes } from './sync/routes';
 export function createApp() {
   const app = new Hono();
   app.get('/health', (c) => c.json({ ok: true }));
+  // Public invite landing page + universal-link association files (unauthed).
+  app.route('/', inviteWebRoutes);
   app.route('/auth', authRoutes);
   app.route('/data', dataRoutes);
   // Legacy sync pipe: kept this release for old app versions and the one-time

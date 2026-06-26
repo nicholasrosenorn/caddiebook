@@ -32,6 +32,15 @@ services:
       APPLE_BUNDLE_ID: ${APPLE_BUNDLE_ID:-com.caddiebook.app}
       GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
       DEV_AUTH: ${DEV_AUTH:-0}
+      # Invite links: public origin the links are served from + universal-link
+      # association values (iOS appID, Android signing fingerprint) and the
+      # landing page's store links. Empty values fall back to env.ts defaults.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://api.caddiebook.app}
+      APPLE_APP_ID: ${APPLE_APP_ID:-}
+      ANDROID_SHA256_FINGERPRINT: ${ANDROID_SHA256_FINGERPRINT:-}
+      APP_STORE_ID: ${APP_STORE_ID:-}
+      APP_STORE_URL: ${APP_STORE_URL:-}
+      PLAY_STORE_URL: ${PLAY_STORE_URL:-}
     # Bound to loopback: on a VPS the API is reached only via the Cloudflare
     # Tunnel (cloudflared → api:8080 over the compose network), never the public
     # interface. Locally, localhost:8080 still works for the simulator.

@@ -10,6 +10,7 @@ import {
 import { Newsreader_500Medium, Newsreader_600SemiBold } from '@expo-google-fonts/newsreader';
 import { Spectral_500Medium, Spectral_600SemiBold } from '@expo-google-fonts/spectral';
 import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import * as Linking from 'expo-linking';
 import * as Notifications from 'expo-notifications';
 import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -32,11 +33,21 @@ import {
 } from '@/constants/theme-context';
 import { AuthProvider, useAuth } from '@/lib/auth/provider';
 import { loadSession, type Session } from '@/lib/auth/tokens';
-import { getPref, setPref } from '@/lib/local/prefs';
+import { getPref, removePref, setPref } from '@/lib/local/prefs';
 import { migrateLegacyPrefs } from '@/lib/migration/legacy-flush';
 import { TOUR_SEEN_KEY } from '@/lib/tour';
 
 const INTRO_SEEN_KEY = 'intro_seen';
+// A captured invite code awaiting sign-in (the redeem route needs a session).
+const PENDING_INVITE_KEY = 'pending_invite';
+
+// Pull the invite code out of a deep link (universal `https://…/i/<code>` or the
+// `caddiebook://i/<code>` scheme form). Returns null for any non-invite URL.
+function parseInviteCode(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const m = url.match(/\/i\/([A-Za-z0-9]+)/);
+  return m ? m[1]! : null;
+}
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -142,6 +153,7 @@ function Navigation() {
         <Stack.Screen name="journal/index" options={{ title: 'Journal', headerBackTitle: 'Back' }} />
         <Stack.Screen name="journal/[id]" options={{ title: 'Note', headerBackTitle: 'Journal' }} />
         <Stack.Screen name="round/new" options={{ title: 'New Round', presentation: 'modal' }} />
+        <Stack.Screen name="i/[code]" options={{ headerShown: false }} />
         <Stack.Screen name="tour" options={{ headerShown: false }} />
         <Stack.Screen name="round/[id]/index" options={{ headerShown: false }} />
         <Stack.Screen name="round/[id]/goals" options={{ headerShown: false }} />
@@ -187,6 +199,32 @@ function AppRoot({
   onAuthBack: () => void;
 }) {
   const { session } = useAuth();
+
+  // When signed out, the root Stack (and the /i/[code] route) isn't mounted, so
+  // an opened invite link has nowhere to land. Capture its code and stash it;
+  // the effect below redeems it once a session exists. When signed in, expo-
+  // router's own linking navigates to /i/[code] directly, so we stay out of it.
+  useEffect(() => {
+    if (session) return;
+    const stash = (url: string | null | undefined) => {
+      const code = parseInviteCode(url);
+      if (code) void setPref(PENDING_INVITE_KEY, code);
+    };
+    void Linking.getInitialURL().then(stash);
+    const sub = Linking.addEventListener('url', (e) => stash(e.url));
+    return () => sub.remove();
+  }, [session]);
+
+  // Redeem a stashed invite once the user is fully signed in (has a profile).
+  useEffect(() => {
+    if (!session?.user.username) return;
+    void getPref(PENDING_INVITE_KEY).then((code) => {
+      if (!code) return;
+      void removePref(PENDING_INVITE_KEY);
+      router.navigate(`/i/${code}` as Parameters<typeof router.navigate>[0]);
+    });
+  }, [session]);
+
   if (session) {
     if (!session.user.username) return <Onboarding />;
     return <Navigation />;

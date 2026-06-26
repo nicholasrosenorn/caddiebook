@@ -68,6 +68,7 @@ const MAPPING = {
   'bell': 'notifications-none',
   'bell.fill': 'notifications',
   'person.badge.plus': 'person-add',
+  'square.and.arrow.up': 'ios-share',
   'heart': 'favorite-border',
   'heart.fill': 'favorite',
   'hand.thumbsup': 'thumb-up-off-alt',

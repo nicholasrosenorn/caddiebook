@@ -104,6 +104,17 @@ export type RequestCountResponse = { count: number };
 export type AcceptResponse = { ok: true; friend: PublicProfile };
 export type FriendsResponse = { friends: PublicProfile[] };
 
+// --- Invite links ----------------------------------------------------------
+//
+// Each account owns one stable, unguessable invite code. GET returns it (minting
+// one on first use); redeeming someone else's code auto-friends both users.
+export type InviteLinkResponse = { code: string; url: string };
+export type RedeemInviteRequest = { code: string };
+export type RedeemInviteResponse =
+  | { status: 'friended'; friend: PublicProfile }
+  | { status: 'already'; friend: PublicProfile }
+  | { status: 'self' };
+
 // --- Moderation ------------------------------------------------------------
 
 export type BlockedUsersResponse = { blocked: PublicProfile[] };

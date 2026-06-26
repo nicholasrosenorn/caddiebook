@@ -8,7 +8,10 @@ import {
   View,
 } from 'react-native';
 
+import { Stack } from 'expo-router';
+
 import { Avatar } from '@/components/avatar';
+import { HeaderIconButton } from '@/components/header-icon-button';
 import { ModerationMenu } from '@/components/moderation-menu';
 import { PressableScale } from '@/components/pressable-scale';
 import { Screen } from '@/components/screen';
@@ -24,6 +27,7 @@ import {
   UserNotFoundError,
 } from '@/lib/api/client';
 import type { Relation, UserSearchResult } from '@/lib/api/types';
+import { shareInviteLink } from '@/lib/invite';
 
 export default function AddFriendScreen() {
   const colors = useColors();
@@ -78,6 +82,18 @@ export default function AddFriendScreen() {
 
   return (
     <Screen padded={false}>
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <HeaderIconButton
+              name="square.and.arrow.up"
+              accessibilityLabel="Share your invite link"
+              color={colors.textPrimary}
+              onPress={shareInviteLink}
+            />
+          ),
+        }}
+      />
       <View style={styles.searchWrap}>
         <SketchSurface seed="add-friend-search" radius={8} style={styles.searchSurface}>
           <View style={styles.searchRow}>

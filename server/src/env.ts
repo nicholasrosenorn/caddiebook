@@ -24,6 +24,24 @@ export const env = {
     .map((s) => s.trim())
     .filter((s) => s.length > 0),
   port: Number(optional('PORT', '8080')),
+  // Public origin the apps + invite links are served from. Used to build
+  // shareable invite URLs (`${publicBaseUrl}/i/<code>`).
+  publicBaseUrl: optional('PUBLIC_BASE_URL', 'https://api.caddiebook.app').replace(/\/$/, ''),
+  // Universal-link association: the iOS app's `<TeamID>.<bundleId>` appID and the
+  // Android release signing SHA-256 fingerprint (colon-separated hex). Served in
+  // the AASA / assetlinks files so the OS verifies the domain claim. Empty values
+  // mean the association files advertise no app (links still work as web pages).
+  appleAppId: optional('APPLE_APP_ID', ''),
+  androidSha256: optional('ANDROID_SHA256_FINGERPRINT', ''),
+  // The numeric App Store id (e.g. '6444412345'), used only for the invite
+  // landing page's iOS smart-app banner. Empty → no banner is emitted.
+  appStoreId: optional('APP_STORE_ID', ''),
+  // Store URLs the invite landing page links to when the app isn't installed.
+  appStoreUrl: optional('APP_STORE_URL', 'https://apps.apple.com/app/caddiebook'),
+  playStoreUrl: optional(
+    'PLAY_STORE_URL',
+    'https://play.google.com/store/apps/details?id=com.caddiebook.app',
+  ),
   // POST /auth/dev is only mounted when this is exactly '1'.
   devAuth: optional('DEV_AUTH', '0') === '1',
   // Comma-separated user ids allowed to call the /admin moderation endpoints.

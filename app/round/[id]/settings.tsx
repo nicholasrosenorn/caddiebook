@@ -195,13 +195,13 @@ export default function RoundSettingsScreen() {
         onPress={onClose}
         hitSlop={10}
         accessibilityRole="button"
-        accessibilityLabel="Close settings"
+        accessibilityLabel="Go back"
         style={({ pressed }) => [
           styles.closeButton,
           { top: insets.top + 8 },
           pressed && styles.closeButtonPressed,
         ]}>
-        <IconSymbol name="xmark" size={18} color={colors.textPrimary} />
+        <IconSymbol name="chevron.left" size={18} color={colors.textPrimary} />
       </Pressable>
     </Screen>
   );
@@ -356,7 +356,7 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     },
     closeButton: {
       position: 'absolute',
-      right: 12,
+      left: 12,
       width: 36,
       height: 36,
       borderRadius: 18,

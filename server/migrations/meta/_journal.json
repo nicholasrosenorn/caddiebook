@@ -64,6 +64,13 @@
       "when": 1782172146045,
       "tag": "0008_kind_infant_terrible",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1782483213317,
+      "tag": "0009_invite_code",
+      "breakpoints": true
     }
   ]
 }

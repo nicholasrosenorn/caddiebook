@@ -30,6 +30,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { spacing, type FontSet, type Palette } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
 import { getFeed, getIncomingRequestCount, likeRound, unlikeRound } from '@/lib/api/client';
+import { shareInviteLink } from '@/lib/invite';
 import { wireHoleToHole } from '@/lib/community/map';
 import { formatToPar } from '@/lib/lifetime-stats';
 import { listItemIn } from '@/lib/motion';
@@ -210,6 +211,19 @@ export default function CommunityScreen() {
                   radius={10}
                   style={styles.emptyCta}>
                   <ThemedText style={styles.emptyCtaLabel}>Find friends</ThemedText>
+                </SketchSurface>
+              </PressableScale>
+              <PressableScale
+                onPress={shareInviteLink}
+                accessibilityRole="button"
+                style={styles.emptyCtaSecondaryWrap}>
+                <SketchSurface
+                  seed="feed-empty-invite"
+                  fill={colors.surface}
+                  stroke={colors.accent}
+                  radius={10}
+                  style={styles.emptyCta}>
+                  <ThemedText style={styles.emptyCtaSecondaryLabel}>Invite a friend</ThemedText>
                 </SketchSurface>
               </PressableScale>
             </View>
@@ -451,6 +465,17 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
       fontSize: 16,
       lineHeight: 22,
       color: colors.accentOn,
+    },
+    emptyCtaSecondaryWrap: {
+      marginTop: spacing.sm,
+      minHeight: 48,
+      alignSelf: 'stretch',
+    },
+    emptyCtaSecondaryLabel: {
+      fontFamily: fonts.serif,
+      fontSize: 16,
+      lineHeight: 22,
+      color: colors.accent,
     },
     card: {
       padding: spacing.md,

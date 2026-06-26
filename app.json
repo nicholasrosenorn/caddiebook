@@ -13,6 +13,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.caddiebook.app",
       "usesAppleSignIn": true,
+      "associatedDomains": ["applinks:api.caddiebook.app"],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -26,7 +27,21 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "api.caddiebook.app",
+              "pathPrefix": "/i"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "output": "static",

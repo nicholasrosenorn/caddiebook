@@ -1,8 +1,11 @@
-import { and, desc, eq, ilike, inArray, ne, or, sql } from 'drizzle-orm';
+import { randomBytes } from 'node:crypto';
+
+import { and, desc, eq, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 
 import { db } from '../db/client';
 import { pool } from '../db/client';
+import { env } from '../env';
 import {
   contentReports,
   friendRequests,
@@ -21,10 +24,12 @@ import type {
   FriendRoundDetail,
   FriendsResponse,
   IncomingRequestsResponse,
+  InviteLinkResponse,
   LikeResponse,
   NotificationItem,
   NotificationsResponse,
   PublicProfile,
+  RedeemInviteResponse,
   Relation,
   ReportReason,
   ReportRequest,
@@ -48,6 +53,47 @@ function toPublicProfile(u: Pick<UserRow, 'id' | 'username' | 'firstName' | 'las
     lastName: u.lastName,
     avatar: u.avatar,
   };
+}
+
+// A short, URL-safe, unguessable invite code. base62 over 10 chars from CSPRNG
+// bytes (~59 bits of entropy) — collisions are astronomically unlikely but the
+// caller still retries on the unique constraint to be safe.
+const CODE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+function generateInviteCode(): string {
+  const bytes = randomBytes(10);
+  let out = '';
+  for (let i = 0; i < bytes.length; i++) out += CODE_ALPHABET[bytes[i]! % CODE_ALPHABET.length];
+  return out;
+}
+
+// Return the account's invite code, minting + persisting one on first use. The
+// UPDATE only fires when invite_code IS NULL, so concurrent calls converge on a
+// single code; a unique-violation (collision with another account) just retries.
+async function getOrCreateInviteCode(userId: string): Promise<string> {
+  const existing = (
+    await db.select({ code: users.inviteCode }).from(users).where(eq(users.id, userId)).limit(1)
+  )[0];
+  if (existing?.code) return existing.code;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = generateInviteCode();
+    try {
+      const updated = await db
+        .update(users)
+        .set({ inviteCode: code })
+        .where(and(eq(users.id, userId), isNull(users.inviteCode)))
+        .returning({ code: users.inviteCode });
+      if (updated[0]?.code) return updated[0].code;
+      // Lost the race to a concurrent call for the same user — re-read its code.
+      const now = (
+        await db.select({ code: users.inviteCode }).from(users).where(eq(users.id, userId)).limit(1)
+      )[0];
+      if (now?.code) return now.code;
+    } catch {
+      // Unique collision with another account's code — try a fresh one.
+    }
+  }
+  throw new Error('could not allocate invite code');
 }
 
 // Friendships are stored once with user_low < user_high (string compare on the
@@ -439,6 +485,48 @@ communityRoutes.delete('/friends/:friendUserId', async (c) => {
   const other = c.req.param('friendUserId');
   await db.transaction((tx) => cleanupRelationship(tx, me, other));
   return c.json({ ok: true });
+});
+
+// --- Invite links ----------------------------------------------------------
+
+// GET /community/invite — my stable invite link (minted on first use).
+communityRoutes.get('/invite', async (c) => {
+  const me = c.get('userId');
+  const code = await getOrCreateInviteCode(me);
+  return c.json<InviteLinkResponse>({ code, url: `${env.publicBaseUrl}/i/${code}` });
+});
+
+// POST /community/invite/redeem { code } — opening someone's invite link
+// auto-friends both users (sharing the link is the inviter's consent).
+communityRoutes.post('/invite/redeem', writeLimit, async (c) => {
+  const me = c.get('userId');
+  const body = (await c.req.json().catch(() => null)) as { code?: string } | null;
+  const code = typeof body?.code === 'string' ? body.code.trim() : '';
+  if (!code) return c.json({ error: 'code required' }, 400);
+
+  const owner = (await db.select().from(users).where(eq(users.inviteCode, code)).limit(1))[0];
+  if (!owner) return c.json({ error: 'invite not found' }, 404);
+  if (owner.id === me) return c.json<RedeemInviteResponse>({ status: 'self' });
+  // A block in either direction makes the link unredeemable; mirror "not found".
+  if (await blockedPairExists(me, owner.id)) return c.json({ error: 'invite not found' }, 404);
+  if (await areFriends(me, owner.id)) {
+    return c.json<RedeemInviteResponse>({ status: 'already', friend: toPublicProfile(owner) });
+  }
+
+  const { low, high } = orderPair(me, owner.id);
+  await db.transaction(async (tx) => {
+    await tx.insert(friendships).values({ userLow: low, userHigh: high }).onConflictDoNothing();
+    // Clear any pending request in either direction so it doesn't linger.
+    await tx
+      .delete(friendRequests)
+      .where(
+        or(
+          and(eq(friendRequests.fromUserId, me), eq(friendRequests.toUserId, owner.id)),
+          and(eq(friendRequests.fromUserId, owner.id), eq(friendRequests.toUserId, me)),
+        ),
+      );
+  });
+  return c.json<RedeemInviteResponse>({ status: 'friended', friend: toPublicProfile(owner) });
 });
 
 // --- Moderation: block / report -------------------------------------------

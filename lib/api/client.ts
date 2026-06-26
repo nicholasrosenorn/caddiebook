@@ -14,6 +14,7 @@ import type {
   FriendRoundDetail,
   FriendsResponse,
   IncomingRequestsResponse,
+  InviteLinkResponse,
   LikeResponse,
   NotificationItem,
   NotificationsResponse,
@@ -21,6 +22,7 @@ import type {
   ProviderName,
   PublicProfile,
   PushResponse,
+  RedeemInviteResponse,
   RefreshResponse,
   ReportRequest,
   RequestCountResponse,
@@ -237,6 +239,16 @@ export async function listFriends(): Promise<FriendsResponse['friends']> {
 
 export async function unfriend(friendUserId: string): Promise<void> {
   await authedRequest(`/community/friends/${friendUserId}`, 'DELETE');
+}
+
+// My stable invite link (the server mints one on first fetch).
+export function getInviteLink(): Promise<InviteLinkResponse> {
+  return authedRequest<InviteLinkResponse>('/community/invite', 'GET');
+}
+
+// Redeem someone's invite code — auto-friends us both (see /community/invite).
+export function redeemInvite(code: string): Promise<RedeemInviteResponse> {
+  return authedRequest<RedeemInviteResponse>('/community/invite/redeem', 'POST', { code });
 }
 
 export function getFeed(cursor?: string, limit?: number): Promise<FeedResponse> {
