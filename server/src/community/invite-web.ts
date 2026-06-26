@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { db } from '../db/client';
 import { users } from '../db/schema';
 import { env } from '../env';
+import { INVITE_ICON_DATA_URI } from './invite-icon';
 
 // Public, unauthenticated routes that make the HTTPS invite link work:
 //  - the universal-link association files (so an installed app intercepts /i/*)
@@ -80,23 +81,24 @@ ${smartBanner}
   body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
     background:#FAF9F5; color:#1A1A1A; display:flex; min-height:100vh; align-items:center; justify-content:center; padding:24px; }
   .card { max-width:380px; width:100%; text-align:center; }
+  .icon { width:72px; height:72px; border-radius:16px; margin:0 auto 18px;
+    display:block; box-shadow:0 1px 3px rgba(0,0,0,.12); }
   h1 { font-size:24px; line-height:1.25; margin:0 0 12px; }
   p { color:#5A5346; margin:0 0 28px; }
   .btns { display:flex; flex-direction:column; gap:12px; }
   a.btn { display:block; padding:14px 18px; border-radius:12px; text-decoration:none; font-weight:600;
     background:#00563B; color:#FAF9F5; }
-  a.btn.secondary { background:transparent; color:#00563B; border:1px solid #00563B; }
-  .mark { font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:#8C8676; margin-bottom:20px; }
+  .mark { font-size:13px; letter-spacing:.12em; text-transform:uppercase; color:#8C8676; margin-bottom:12px; }
 </style>
 </head>
 <body>
   <div class="card">
+    <img class="icon" src="${INVITE_ICON_DATA_URI}" alt="Caddie Book" width="72" height="72">
     <div class="mark">Caddie Book</div>
     <h1>${heading}</h1>
     <p>Open this invite in the Caddie Book app to connect. Don't have it yet? Install it, then tap your invite link again.</p>
     <div class="btns">
       <a class="btn" href="${escapeHtml(env.appStoreUrl)}">Download on the App Store</a>
-      <a class="btn secondary" href="${escapeHtml(env.playStoreUrl)}">Get it on Google Play</a>
     </div>
   </div>
 </body>
