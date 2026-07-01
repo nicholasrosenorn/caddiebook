@@ -20,7 +20,8 @@ import { scheduleOnRN } from 'react-native-worklets';
 import { Image } from 'expo-image';
 
 import { GlassSurface } from '@/components/glass-surface';
-import { MentalGameCard, ProgressViewBase } from '@/components/progress-view';
+import { MeSummaryViewBase } from '@/components/me-summary-view';
+import { MentalGameCard } from '@/components/stats-sections';
 import { Screen } from '@/components/screen';
 import { SketchSurface } from '@/components/sketch';
 import { ThemedText } from '@/components/themed-text';
@@ -360,8 +361,9 @@ function DeepDivePage({
 
 // ── Pages ───────────────────────────────────────────────────────────────────
 
-// Page 1 — the payoff. The real ProgressView (ProgressViewBase), fed the sample
+// Page 1 — the payoff. The real Me summary (MeSummaryViewBase), fed the sample
 // season, so the tour opens on the exact screen the player is working toward.
+// Navigation is disabled so the cards stay inert preview surfaces.
 function ExampleSeasonPage({
   width,
   height,
@@ -399,7 +401,12 @@ function ExampleSeasonPage({
   return (
     <View style={{ width, height }}>
       <View style={styles.flex}>
-        <ProgressViewBase header={header} bundle={season.bundle} bottomInset={spacing.lg} />
+        <MeSummaryViewBase
+          header={header}
+          bundle={season.bundle}
+          bottomInset={spacing.lg}
+          disableNavigation
+        />
       </View>
       <View style={styles.exampleFooter}>
         <PrimaryButton label="Next" onPress={onContinue} />

@@ -1,10 +1,19 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import Svg, { Circle, Line, Path } from 'react-native-svg';
+import Animated, {
+  Easing,
+  useAnimatedProps,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
+import Svg, { Defs, Line, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
 import { type Palette, type FontSet } from '@/constants/theme';
 import { useColors, useFontSet } from '@/constants/theme-context';
+
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 type TrendChartProps = {
   /** Chronological values, oldest → newest. */
@@ -34,6 +43,7 @@ export function TrendChart({
   const fonts = useFontSet();
   const styles = useMemo(() => makeStyles(colors, fonts), [colors, fonts]);
   const tint = color ?? colors.accent;
+  const gradientId = `trend-grad-${useId().replace(/:/g, '')}`;
   const [width, setWidth] = useState(0);
   const onLayout = (e: LayoutChangeEvent) => {
     const w = e.nativeEvent.layout.width;
@@ -59,14 +69,39 @@ export function TrendChart({
     const linePath = coords
       .map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)} ${c.y.toFixed(1)}`)
       .join(' ');
+    let length = 0;
+    for (let i = 1; i < coords.length; i++) {
+      length += Math.hypot(coords[i].x - coords[i - 1].x, coords[i].y - coords[i - 1].y);
+    }
     const areaPath =
       coords.length > 1
         ? `${linePath} L${coords[coords.length - 1].x.toFixed(1)} ${(height - PAD_Y).toFixed(
             1,
           )} L${coords[0].x.toFixed(1)} ${(height - PAD_Y).toFixed(1)} Z`
         : '';
-    return { coords, linePath, areaPath, min, max, baselineY: baseline != null ? y(baseline) : null };
+    return { coords, linePath, areaPath, length, min, max, baselineY: baseline != null ? y(baseline) : null };
   }, [width, height, points, baseline]);
+
+  // Draw-on: the line traces itself (strokeDashoffset → 0) while the fill fades in,
+  // replaying whenever the geometry (re)appears — e.g. a section is shown.
+  const drawLength = geom?.length ?? 0;
+  const progress = useSharedValue(0);
+  const reduced = useReducedMotion();
+  useEffect(() => {
+    if (!geom || geom.coords.length < 2) return;
+    if (reduced) {
+      progress.value = 1;
+      return;
+    }
+    progress.value = 0;
+    progress.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.cubic) });
+  }, [geom?.linePath, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
+  const lineProps = useAnimatedProps(() => ({
+    strokeDashoffset: drawLength * (1 - progress.value),
+  }));
+  const areaProps = useAnimatedProps(() => ({
+    fillOpacity: progress.value,
+  }));
 
   return (
     <View onLayout={onLayout} style={[styles.wrap, { height }]}>
@@ -86,25 +121,27 @@ export function TrendChart({
               />
             )}
             {geom.areaPath ? (
-              <Path d={geom.areaPath} fill={tint} opacity={0.07} />
+              <>
+                <Defs>
+                  <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                    <Stop offset="0" stopColor={tint} stopOpacity={0.2} />
+                    <Stop offset="1" stopColor={tint} stopOpacity={0} />
+                  </LinearGradient>
+                </Defs>
+                <AnimatedPath d={geom.areaPath} fill={`url(#${gradientId})`} animatedProps={areaProps} />
+              </>
             ) : null}
             {geom.coords.length > 1 && (
-              <Path d={geom.linePath} stroke={tint} strokeWidth={2} fill="none" />
+              <AnimatedPath
+                d={geom.linePath}
+                stroke={tint}
+                strokeWidth={2}
+                fill="none"
+                strokeLinejoin="round"
+                strokeDasharray={geom.length}
+                animatedProps={lineProps}
+              />
             )}
-            {geom.coords.map((c, i) => {
-              const last = i === geom.coords.length - 1;
-              return (
-                <Circle
-                  key={i}
-                  cx={c.x}
-                  cy={c.y}
-                  r={last ? 4 : 2.2}
-                  fill={last ? tint : colors.surface}
-                  stroke={tint}
-                  strokeWidth={last ? 0 : 1.4}
-                />
-              );
-            })}
           </Svg>
           {/* y-axis range hints */}
           <ThemedText style={[styles.axis, styles.axisTop]}>{formatValue(geom.max)}</ThemedText>

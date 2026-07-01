@@ -32,6 +32,7 @@ export default function ProfileStackLayout() {
           ),
         }}
       />
+      <Stack.Screen name="rounds" options={{ title: 'My Rounds', headerBackTitle: 'Me' }} />
     </Stack>
   );
 }

@@ -20,7 +20,13 @@ import {
   type HandicapRound,
 } from '@/lib/handicap';
 import { sortByDriveLength } from '@/constants/clubs';
-import { approachProximityFt, driverLane, type DriverLane } from '@/lib/shots';
+import {
+  approachMissDirection,
+  approachProximityFt,
+  driverLane,
+  type DriverLane,
+  type MissDirection,
+} from '@/lib/shots';
 import {
   computePerParAverages,
   computeScoreDistribution,
@@ -69,6 +75,7 @@ export type RoundDerived = {
   puttsPer18: number;
   girPct: number | null;
   firPct: number | null;
+  udPct: number | null;
 };
 
 export function deriveRound(round: Round, holes: Hole[]): RoundDerived | null {
@@ -80,6 +87,8 @@ export function deriveRound(round: Round, holes: Hole[]): RoundDerived | null {
   let girMade = 0;
   let firEligible = 0;
   let firMade = 0;
+  let udEligible = 0;
+  let udMade = 0;
 
   for (const hole of holes) {
     if (hole.score != null && hole.par != null) {
@@ -98,6 +107,11 @@ export function deriveRound(round: Round, holes: Hole[]): RoundDerived | null {
       firEligible += 1;
       if (hole.fir) firMade += 1;
     }
+    const ud = resolveUpAndDown(hole);
+    if (ud != null) {
+      udEligible += 1;
+      if (ud) udMade += 1;
+    }
   }
 
   if (holesPlayed === 0) return null;
@@ -113,6 +127,7 @@ export function deriveRound(round: Round, holes: Hole[]): RoundDerived | null {
     puttsPer18: (totalPutts / holesPlayed) * 18,
     girPct: girEligible > 0 ? girMade / girEligible : null,
     firPct: firEligible > 0 ? firMade / firEligible : null,
+    udPct: udEligible > 0 ? udMade / udEligible : null,
   };
 }
 
@@ -345,9 +360,25 @@ export type ApproachStats = {
   approachByDistance: { label: string; hit: number; missed: number; total: number }[];
   approachTotal: number;
   avgApproachProximity: number | null;
+  /** Dominant miss direction among approaches that missed the green; null when
+   *  there's no clear bias (or no missed-green approaches logged). */
+  missBias: MissDirection | null;
   /** Normalized pin positions for the approach dispersion target. */
   pins: { xNorm: number; yNorm: number; key: string }[];
 };
+
+/** Pick the most-frequent key from a tally, or null when the tally is empty. */
+function dominant<T extends string>(counts: Record<T, number>): T | null {
+  let best: T | null = null;
+  let bestN = 0;
+  for (const key of Object.keys(counts) as T[]) {
+    if (counts[key] > bestN) {
+      bestN = counts[key];
+      best = key;
+    }
+  }
+  return bestN > 0 ? best : null;
+}
 
 /**
  * Approach dispersion + distance histogram, optionally narrowed to a single
@@ -401,14 +432,18 @@ export function aggregateApproach(
   let approachTotal = 0;
   let proximitySum = 0;
   let proximityCount = 0;
+  const missCounts: Record<MissDirection, number> = { short: 0, long: 0, left: 0, right: 0 };
   for (const shot of shots) {
     if (shot.shotType !== 'approach') continue;
     if (!matches(holeClub.get(`${shot.roundId}:${shot.holeNumber}`) ?? null)) continue;
     approachTotal += 1;
     pins.push({ xNorm: shot.xNorm, yNorm: shot.yNorm, key: shot.id });
-    if (holeGir.get(`${shot.roundId}:${shot.holeNumber}`) === true) {
+    const gir = holeGir.get(`${shot.roundId}:${shot.holeNumber}`);
+    if (gir === true) {
       proximitySum += approachProximityFt(shot.xNorm, shot.yNorm);
       proximityCount += 1;
+    } else if (gir === false) {
+      missCounts[approachMissDirection(shot.xNorm, shot.yNorm)] += 1;
     }
   }
 
@@ -416,6 +451,7 @@ export function aggregateApproach(
     approachByDistance,
     approachTotal,
     avgApproachProximity: proximityCount > 0 ? proximitySum / proximityCount : null,
+    missBias: dominant(missCounts),
     pins,
   };
 }
@@ -425,6 +461,9 @@ export function aggregateApproach(
 export type DriverStats = {
   driverLanes: Record<DriverLane, number>;
   driverTotal: number;
+  /** Dominant miss side (the larger of the two off-fairway lanes); null when the
+   *  misses are even or there are none. */
+  missBias: 'Left' | 'Right' | null;
   /** Normalized pin positions for the driver dispersion target. */
   pins: { xNorm: number; yNorm: number; key: string }[];
 };
@@ -461,7 +500,10 @@ export function aggregateDriver(
     pins.push({ xNorm: shot.xNorm, yNorm: shot.yNorm, key: shot.id });
   }
 
-  return { driverLanes, driverTotal, pins };
+  const missBias =
+    driverLanes.LF === driverLanes.RF ? null : driverLanes.LF > driverLanes.RF ? 'Left' : 'Right';
+
+  return { driverLanes, driverTotal, missBias, pins };
 }
 
 export type DriveDistanceStats = {
@@ -541,6 +583,76 @@ export function perRoundTrend(
       const byDate = a.round.datePlayed.localeCompare(b.round.datePlayed);
       return byDate !== 0 ? byDate : a.round.createdAt.localeCompare(b.round.createdAt);
     });
+}
+
+// --- Personal bests --------------------------------------------------------
+
+export type PersonalBests = {
+  /** Longest single logged drive (yds), across rounds of any length. */
+  longestDrive: number | null;
+  /** Fewest putts in a single complete 18-hole round (the canonical record). */
+  fewestPutts: number | null;
+  /** Most birdies-or-better in a single round. */
+  mostBirdies: number | null;
+};
+
+/**
+ * Career-high records. Computed over the full completed-round set (never the
+ * stats-screen filter) — a personal best is a personal best. `fewestPutts` is
+ * restricted to 18-hole rounds so 9s don't trivially win it.
+ */
+export function aggregatePersonalBests(
+  rounds: Round[],
+  holesByRound: Map<string, Hole[]>,
+): PersonalBests {
+  let longestDrive: number | null = null;
+  let fewestPutts: number | null = null;
+  let mostBirdies: number | null = null;
+
+  for (const round of rounds) {
+    const holes = holesByRound.get(round.id) ?? [];
+    let roundPutts = 0;
+    let holesPlayed = 0;
+    let holesWithPutts = 0;
+    let birdies = 0;
+
+    for (const hole of holes) {
+      if (hole.driveDistanceYds != null) {
+        if (longestDrive == null || hole.driveDistanceYds > longestDrive) {
+          longestDrive = hole.driveDistanceYds;
+        }
+      }
+      if (hole.score != null && hole.par != null) {
+        holesPlayed += 1;
+        if (hole.score <= hole.par - 1) birdies += 1;
+      }
+      if (hole.putts != null) {
+        roundPutts += hole.putts;
+        holesWithPutts += 1;
+      }
+    }
+
+    if (holesPlayed > 0 && (mostBirdies == null || birdies > mostBirdies)) {
+      mostBirdies = birdies;
+    }
+    // Only a fully-putted 18 counts toward the fewest-putts record.
+    if (
+      round.holeCount === 18 &&
+      holesPlayed === 18 &&
+      holesWithPutts === holesPlayed &&
+      (fewestPutts == null || roundPutts < fewestPutts)
+    ) {
+      fewestPutts = roundPutts;
+    }
+  }
+
+  return { longestDrive, fewestPutts, mostBirdies };
+}
+
+/** Title-case a miss-direction for display (e.g. `short` → `Short`). */
+export function formatMissDirection(dir: MissDirection | null): string {
+  if (dir == null) return '—';
+  return dir.charAt(0).toUpperCase() + dir.slice(1);
 }
 
 // --- Post-round review insights -------------------------------------------
@@ -675,4 +787,26 @@ export function formatToPar(toPar: number, decimals = 0): string {
   const n = Number(v);
   if (n === 0) return 'E';
   return n > 0 ? `+${v}` : `${v}`;
+}
+
+// --- Trend deltas ----------------------------------------------------------
+
+/**
+ * The recent-vs-prior shift in a chronological series (oldest→newest):
+ * `mean(recent half) − mean(prior half)`. A negative result means the metric
+ * fell over the window (for scoring/handicap, an improvement). Returns `null`
+ * below four points so the badge stays hidden until there's enough signal.
+ */
+export function windowDelta(values: number[]): number | null {
+  if (values.length < 4) return null;
+  const mid = Math.floor(values.length / 2);
+  const prior = values.slice(0, values.length - mid);
+  const recent = values.slice(values.length - mid);
+  const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / xs.length;
+  return mean(recent) - mean(prior);
+}
+
+/** Unsigned magnitude of a delta; the arrow + tint are applied by the badge. */
+export function formatDelta(n: number, decimals = 1): string {
+  return Math.abs(n).toFixed(decimals);
 }

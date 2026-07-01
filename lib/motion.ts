@@ -1,4 +1,4 @@
-import { Easing, FadeInUp, Keyframe } from 'react-native-reanimated';
+import { Easing, FadeInDown, FadeInUp, Keyframe } from 'react-native-reanimated';
 
 /**
  * The app's motion vocabulary. Two registers:
@@ -39,3 +39,15 @@ export const listItemIn = (index: number) =>
     .delay(Math.min(index, 6) * 40)
     .easing(Easing.out(Easing.cubic))
     .withInitialValues({ transform: [{ translateY: 10 }] });
+
+const SECTION_STAGGER_MS = 60;
+
+/**
+ * Section swap: blocks fade in drifting down (top → bottom) in a short cascade.
+ * `order` is the block's position; the delay caps so long sections never crawl.
+ */
+export const sectionIn = (order: number) =>
+  FadeInDown.duration(240)
+    .delay(Math.min(order, 8) * SECTION_STAGGER_MS)
+    .easing(Easing.out(Easing.cubic))
+    .withInitialValues({ transform: [{ translateY: -10 }] });

@@ -27,6 +27,10 @@ export type Palette = {
   danger: string;
   warning: string;
   info: string;
+  // Soft red for a worsening change value (the down-delta counterpart to the
+  // accent-green "improving" tint). Confined to tiny directional numerals — never
+  // chrome. See `DeltaBadge`.
+  negative: string;
 };
 
 // Deep green on warm paper — the original editorial look.
@@ -50,6 +54,7 @@ const pinehurst: Palette = {
   danger: '#9B3B2E',
   warning: '#B58A2A',
   info: '#4A6B7A',
+  negative: '#C4674F',
 };
 
 // Navy ink on cool sand.
@@ -73,6 +78,7 @@ const links: Palette = {
   danger: '#9B3B2E',
   warning: '#B58A2A',
   info: '#3E6076',
+  negative: '#C4674F',
 };
 
 // Rust / terracotta ink on bone.
@@ -96,6 +102,7 @@ const clay: Palette = {
   danger: '#9B3B2E',
   warning: '#B58A2A',
   info: '#4A6B7A',
+  negative: '#C4674F',
 };
 
 // Black ink on warm white — a press / broadsheet editorial set.
@@ -119,6 +126,7 @@ const charcoal: Palette = {
   danger: '#9B3B2E',
   warning: '#B58A2A',
   info: '#4A6B7A',
+  negative: '#C4674F',
 };
 
 // Inverted: light sage ink, text, and outlines on a deep warm-charcoal ground.
@@ -142,6 +150,7 @@ const midnight: Palette = {
   danger: '#C76B5B',
   warning: '#D6A94E',
   info: '#6FA0B8',
+  negative: '#D08471',
 };
 
 // Pine green on a cool near-white page — the crisp editorial default (Augusta).
@@ -165,6 +174,7 @@ const augusta: Palette = {
   danger: '#9B3B2E',
   warning: '#B58A2A',
   info: '#4A6B7A',
+  negative: '#C4674F',
 };
 
 export const fontFamily = {

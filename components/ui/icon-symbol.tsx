@@ -19,6 +19,7 @@ const MAPPING = {
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
   'chevron.down': 'keyboard-arrow-down',
+  'chevron.up': 'keyboard-arrow-up',
   'arrowtriangle.down.fill': 'arrow-drop-down',
   'list.bullet': 'format-list-bulleted',
   'line.3.horizontal': 'menu',

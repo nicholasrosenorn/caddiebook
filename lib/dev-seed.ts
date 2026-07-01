@@ -114,6 +114,7 @@ export async function seedSampleRounds(count = 70): Promise<void> {
           // gir stays null and every consumer has to fall back to derivation.
           gir: hole.gir ? 1 : 0,
           approach_distance_yds: hole.approachDistance,
+          drive_distance_yds: hole.driveDistance,
           approach_club: hole.approachClub,
           drive_club: hole.driveClub,
           score: hole.score,

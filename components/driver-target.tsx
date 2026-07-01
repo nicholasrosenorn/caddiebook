@@ -36,6 +36,12 @@ type DriverTargetProps = {
   /** Pin diameter in px. Defaults to the interactive size; shrink for dense
    *  multi-round dispersion overlays. */
   pinSize?: number;
+  /** Show the 100/200/300-yd marks down the left edge. Off for small thumbnails. */
+  showYardages?: boolean;
+  /** Show the LF / CF / RF lane chips below the frame. Off for small thumbnails. */
+  showLanes?: boolean;
+  /** Draw the faint rectangular frame around the target. Off for thumbnails. */
+  bordered?: boolean;
   /**
    * The current drive to measure: draws a dashed line from the tee to this pin,
    * labeled with the distance in yards. Only the active shot — muted dispersion
@@ -50,6 +56,9 @@ function DriverTargetImpl({
   width = DEFAULT_WIDTH,
   height = DEFAULT_HEIGHT,
   pinSize = PIN_SIZE,
+  showYardages = true,
+  showLanes = true,
+  bordered = true,
   measurePin = null,
 }: DriverTargetProps) {
   const colors = useColors();
@@ -98,6 +107,8 @@ function DriverTargetImpl({
   const cfL = width * CF_LEFT_EDGE;
   const cfR = width * CF_RIGHT_EDGE;
   const teeY = height * 0.96;
+  const teeW = width * 0.05;
+  const teeH = teeW * 1.5;
 
   // Dispersion overlays (no onTap) are fully static — rasterize so scrolling
   // blits a cached bitmap instead of recompositing the SVG + pins every frame.
@@ -105,7 +116,12 @@ function DriverTargetImpl({
 
   return (
     <View
-      style={[styles.wrap, { width, height }]}
+      style={[
+        styles.wrap,
+        { width, height },
+        !showLanes && styles.wrapFlush,
+        !bordered && styles.wrapBorderless,
+      ]}
       shouldRasterizeIOS={rasterize}
       renderToHardwareTextureAndroid={rasterize}>
       <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
@@ -147,12 +163,12 @@ function DriverTargetImpl({
         {/* Inner beige line just inside the fairway edge */}
         <Path d={path} transform={tf(FAIRWAY_INSET - 0.03)} fill="none" stroke={colors.surface} strokeWidth={1.4} />
 
-        {/* Tee box */}
+        {/* Tee box — proportional to width so it shrinks on small thumbnails */}
         <Rect
-          x={width / 2 - 6}
-          y={teeY - 9}
-          width={12}
-          height={18}
+          x={width / 2 - teeW / 2}
+          y={teeY - teeH / 2}
+          width={teeW}
+          height={teeH}
           rx={2}
           fill={colors.accent}
           fillOpacity={0.16}
@@ -176,33 +192,37 @@ function DriverTargetImpl({
       </View> */}
 
       {/* Yardage marks — shared with the distance math (DRIVE_YARDAGE_MARKS) */}
-      {DRIVE_YARDAGE_MARKS.map((mark) => (
-        <View
-          key={mark.yds}
-          style={[styles.yardage, { top: height * mark.yNorm }]}
-          pointerEvents="none">
-          <ThemedText type="label" style={styles.yardageText}>{mark.yds}</ThemedText>
-        </View>
-      ))}
+      {showYardages
+        ? DRIVE_YARDAGE_MARKS.map((mark) => (
+            <View
+              key={mark.yds}
+              style={[styles.yardage, { top: height * mark.yNorm }]}
+              pointerEvents="none">
+              <ThemedText type="label" style={styles.yardageText}>{mark.yds}</ThemedText>
+            </View>
+          ))
+        : null}
 
       {/* Lane labels — small paper chips marking the LF / CF / RF scoring zones */}
-      <View style={styles.laneLabels} pointerEvents="none">
-        <View style={[styles.laneLabel, { width: cfL }]}>
-          <View style={styles.laneChip}>
-            <ThemedText type="label" style={styles.laneText}>LF</ThemedText>
+      {showLanes ? (
+        <View style={styles.laneLabels} pointerEvents="none">
+          <View style={[styles.laneLabel, { width: cfL }]}>
+            <View style={styles.laneChip}>
+              <ThemedText type="label" style={styles.laneText}>LF</ThemedText>
+            </View>
+          </View>
+          <View style={[styles.laneLabel, { width: cfR - cfL }]}>
+            <View style={styles.laneChip}>
+              <ThemedText type="label" style={styles.laneText}>CF</ThemedText>
+            </View>
+          </View>
+          <View style={[styles.laneLabel, { width: width - cfR }]}>
+            <View style={styles.laneChip}>
+              <ThemedText type="label" style={styles.laneText}>RF</ThemedText>
+            </View>
           </View>
         </View>
-        <View style={[styles.laneLabel, { width: cfR - cfL }]}>
-          <View style={styles.laneChip}>
-            <ThemedText type="label" style={styles.laneText}>CF</ThemedText>
-          </View>
-        </View>
-        <View style={[styles.laneLabel, { width: width - cfR }]}>
-          <View style={styles.laneChip}>
-            <ThemedText type="label" style={styles.laneText}>RF</ThemedText>
-          </View>
-        </View>
-      </View>
+      ) : null}
 
       {/* Tap surface */}
       <Pressable disabled={!onTap} onPress={handlePress} style={StyleSheet.absoluteFill} />
@@ -300,6 +320,14 @@ const makeStyles = (colors: Palette, fonts: FontSet) =>
     // Reserve room for the LF/CF/RF lane chips, which sit just below the frame
     // (laneLabels bottom: -25) so siblings don't overlap them.
     marginBottom: spacing.xl,
+  },
+  // No lane chips → no reserved space below the frame (small thumbnails).
+  wrapFlush: {
+    marginBottom: 0,
+  },
+  // Drop the faint frame box (small thumbnails on borderless cards).
+  wrapBorderless: {
+    borderWidth: 0,
   },
   distanceChip: {
     position: 'absolute',
